@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { SEQUENCER_LIMITS } from "./limits";
-import { addTrack, createProject, removeTrack, setStepValue, setTrackEnabled, toggleStep } from "./project";
+import {
+  addTrack,
+  clearTrack,
+  createProject,
+  randomizeTrack,
+  removeTrack,
+  rotateTrackSteps,
+  setStepValue,
+  setTrackEnabled,
+  toggleStep,
+} from "./project";
 import { normalizeProject, validateProject } from "./validation";
 
 describe("project utilities", () => {
@@ -32,6 +42,83 @@ describe("project utilities", () => {
 
     expect(on.tracks[0].steps[2]).toBe(1);
     expect(off.tracks[0].steps[2]).toBe(0);
+  });
+
+  it("clears a track without changing track metadata", () => {
+    let project = createProject({ trackCount: 1, trackNames: ["Gate"] });
+    const trackId = project.tracks[0].id;
+    project = setTrackEnabled(setStepValue(setStepValue(project, trackId, 0, 1), trackId, 1, 0.5), trackId, false);
+
+    const next = clearTrack(project, trackId);
+
+    expect(next).not.toBe(project);
+    expect(next.tracks[0]).toMatchObject({
+      id: trackId,
+      name: "Gate",
+      enabled: false,
+    });
+    expect(next.tracks[0].steps).toEqual(Array.from({ length: project.stepCount }, () => 0));
+  });
+
+  it("returns the same project when clearing a missing track", () => {
+    const project = createProject();
+
+    expect(clearTrack(project, "missing")).toBe(project);
+  });
+
+  it("rotates track steps right for positive offsets and left for negative offsets", () => {
+    let project = createProject({ stepCount: 4, trackCount: 1 });
+    const trackId = project.tracks[0].id;
+    project = setStepValue(project, trackId, 0, 1);
+    project = setStepValue(project, trackId, 1, 0.5);
+
+    const rotatedRight = rotateTrackSteps(project, trackId, 1);
+    const rotatedLeft = rotateTrackSteps(project, trackId, -1);
+
+    expect(rotatedRight.tracks[0].steps).toEqual([0, 1, 0.5, 0]);
+    expect(rotatedLeft.tracks[0].steps).toEqual([0.5, 0, 0, 1]);
+  });
+
+  it("returns the same project when rotating by a full cycle or a missing track", () => {
+    const project = createProject({ stepCount: 4, trackCount: 1 });
+    const trackId = project.tracks[0].id;
+
+    expect(rotateTrackSteps(project, trackId, 4)).toBe(project);
+    expect(rotateTrackSteps(project, "missing", 1)).toBe(project);
+  });
+
+  it("randomizes track values with deterministic random input", () => {
+    const project = createProject({ stepCount: 4, trackCount: 1 });
+    const trackId = project.tracks[0].id;
+    const values = [0.2, 0.5, 0.7, 0.1, 0.9, 0.8];
+    const next = randomizeTrack(project, trackId, {
+      probability: 0.6,
+      min: 0.25,
+      max: 0.75,
+      random: () => values.shift() ?? 0,
+    });
+
+    expect(next.tracks[0].steps).toEqual([0.5, 0, 0.7, 0]);
+  });
+
+  it("clamps randomize options and swaps inverted ranges", () => {
+    const project = createProject({ stepCount: 2, trackCount: 1 });
+    const trackId = project.tracks[0].id;
+    const values = [0, 0.5, 0, 0.5];
+    const next = randomizeTrack(project, trackId, {
+      probability: 2,
+      min: 0.8,
+      max: 0.2,
+      random: () => values.shift() ?? 0,
+    });
+
+    expect(next.tracks[0].steps).toEqual([0.5, 0.5]);
+  });
+
+  it("returns the same project when randomizing a missing track", () => {
+    const project = createProject();
+
+    expect(randomizeTrack(project, "missing")).toBe(project);
   });
 
   it("adds, removes, and disables tracks", () => {

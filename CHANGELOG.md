@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0 - 2026-06-19
+
+### Added
+
+- Added core track transform helpers: `clearTrack`, `rotateTrackSteps`, and `randomizeTrack`.
+- Added `examples/vanilla-core` for framework-free `@viseq/core` usage.
+- Added `examples/react-player` for controlled `SequencePlayer` usage with external controls.
+- Expanded package README usage guidance for adoption-focused examples.
+
 ## 0.1.0 - 2026-06-19
 
 Initial release.

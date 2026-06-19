@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@viseq/core": ["../../packages/core/src/index.ts"],
+      "@viseq/react": ["../../packages/react/src/index.ts"],
+      "@viseq/player-react": ["../../packages/player-react/src/index.tsx"]
+    },
+    "types": ["vite/client"],
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"]
+}

@@ -8,6 +8,13 @@ export type CreateProjectOptions = {
   trackNames?: string[];
 };
 
+export type RandomizeTrackOptions = {
+  probability?: number;
+  min?: number;
+  max?: number;
+  random?: () => number;
+};
+
 let idCounter = 0;
 
 export const clamp = (value: number, min: number, max: number): number => {
@@ -102,6 +109,67 @@ export const toggleStep = (project: SequenceProject, trackId: string, stepIndex:
   }
 
   return setStepValue(project, trackId, stepIndex, track.steps[stepIndex] > 0 ? 0 : 1);
+};
+
+export const clearTrack = (project: SequenceProject, trackId: string): SequenceProject => {
+  if (!project.tracks.some((track) => track.id === trackId)) {
+    return project;
+  }
+
+  return updateTrack(project, trackId, (track) => ({
+    ...track,
+    steps: track.steps.map(() => 0),
+  }));
+};
+
+export const rotateTrackSteps = (project: SequenceProject, trackId: string, offset: number): SequenceProject => {
+  const track = project.tracks.find((candidate) => candidate.id === trackId);
+  if (!track) {
+    return project;
+  }
+
+  const stepCount = track.steps.length;
+  if (stepCount <= 1) {
+    return project;
+  }
+
+  const normalizedOffset = ((Math.trunc(offset) % stepCount) + stepCount) % stepCount;
+  if (normalizedOffset === 0) {
+    return project;
+  }
+
+  return updateTrack(project, trackId, (currentTrack) => ({
+    ...currentTrack,
+    steps: currentTrack.steps.map((_, index) => currentTrack.steps[(index - normalizedOffset + stepCount) % stepCount]),
+  }));
+};
+
+export const randomizeTrack = (
+  project: SequenceProject,
+  trackId: string,
+  options: RandomizeTrackOptions = {},
+): SequenceProject => {
+  if (!project.tracks.some((track) => track.id === trackId)) {
+    return project;
+  }
+
+  const probability = clamp(options.probability ?? 0.5, 0, 1);
+  const random = options.random ?? Math.random;
+  const first = clampStepValue(options.min ?? 0);
+  const second = clampStepValue(options.max ?? 1);
+  const min = Math.min(first, second);
+  const max = Math.max(first, second);
+
+  return updateTrack(project, trackId, (track) => ({
+    ...track,
+    steps: track.steps.map(() => {
+      if (random() >= probability) {
+        return 0;
+      }
+
+      return clampStepValue(min + random() * (max - min));
+    }),
+  }));
 };
 
 export const addTrack = (project: SequenceProject, name?: string): SequenceProject => {

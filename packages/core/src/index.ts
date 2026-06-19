@@ -5,10 +5,13 @@ export {
   addTrack,
   clamp,
   clampStepValue,
+  clearTrack,
   createProject,
   createTrack,
+  randomizeTrack,
   removeTrack,
   renameTrack,
+  rotateTrackSteps,
   setProjectBpm,
   setStepValue,
   setTrackEnabled,
@@ -36,3 +39,4 @@ export type {
   ValidationIssue,
   ValidationResult,
 } from "./types";
+export type { CreateProjectOptions, RandomizeTrackOptions } from "./project";

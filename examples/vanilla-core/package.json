@@ -1,0 +1,16 @@
+{
+  "name": "viseq-example-vanilla-core",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@viseq/core": "workspace:*",
+    "vite": "^7.0.0"
+  }
+}
