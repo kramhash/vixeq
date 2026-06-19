@@ -1,0 +1,55 @@
+{
+  "name": "@viseq/react",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "React hooks for the Viseq step sequencer engine.",
+  "license": "MIT",
+  "homepage": "https://github.com/kramhash/viseq#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kramhash/viseq.git",
+    "directory": "packages/react"
+  },
+  "bugs": {
+    "url": "https://github.com/kramhash/viseq/issues"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "sequencer",
+    "step-sequencer",
+    "react",
+    "hooks"
+  ],
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "dependencies": {
+    "@viseq/core": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --sourcemap",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.8",
+    "tsup": "^8.5.0"
+  }
+}

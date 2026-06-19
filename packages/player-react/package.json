@@ -1,0 +1,58 @@
+{
+  "name": "@viseq/player-react",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Embeddable React sequence player GUI for Viseq projects.",
+  "license": "MIT",
+  "homepage": "https://github.com/kramhash/viseq#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kramhash/viseq.git",
+    "directory": "packages/player-react"
+  },
+  "bugs": {
+    "url": "https://github.com/kramhash/viseq/issues"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "sequencer",
+    "step-sequencer",
+    "react",
+    "player",
+    "daw"
+  ],
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "dependencies": {
+    "@viseq/core": "workspace:*",
+    "@viseq/react": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup src/index.tsx --format esm,cjs --dts --sourcemap && cp src/styles.css dist/styles.css",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.8",
+    "tsup": "^8.5.0"
+  }
+}
