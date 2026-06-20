@@ -11,8 +11,8 @@ import {
   type SequenceProject,
   type StepEvent,
   type TransportEvent,
-} from "@viseq/core";
-import { useSequencePlayer } from "@viseq/react";
+} from "@vixeq/core";
+import { useSequencePlayer } from "@vixeq/react";
 import {
   forwardRef,
   useCallback,
@@ -137,23 +137,23 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
 
   const selectedTrack = selected ? project.tracks.find((track) => track.id === selected.trackId) : undefined;
   const selectedValue = selectedTrack && selected ? selectedTrack.steps[selected.stepIndex] : undefined;
-  const rootClassName = ["viseq-player", className].filter(Boolean).join(" ");
+  const rootClassName = ["vixeq-player", className].filter(Boolean).join(" ");
 
   return (
     <section
       className={rootClassName}
-      style={{ ...style, "--viseq-step-count": project.stepCount } as CSSProperties}
+      style={{ ...style, "--vixeq-step-count": project.stepCount } as CSSProperties}
       data-playing={player.isPlaying ? "true" : "false"}
     >
-      <header className="viseq-player__transport">
-        <div className="viseq-player__transport-main">
-          <button className="viseq-player__play" type="button" onClick={player.toggle}>
+      <header className="vixeq-player__transport">
+        <div className="vixeq-player__transport-main">
+          <button className="vixeq-player__play" type="button" onClick={player.toggle}>
             {player.isPlaying ? "Stop" : "Play"}
           </button>
           <button type="button" onClick={() => player.reset(0)}>
             Reset
           </button>
-          <label className="viseq-player__number-field">
+          <label className="vixeq-player__number-field">
             BPM
             <input
               min={SEQUENCER_LIMITS.minBpm}
@@ -170,17 +170,17 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
             />
           </label>
         </div>
-        <div className="viseq-player__readout">
+        <div className="vixeq-player__readout">
           <span>Step {player.currentStep + 1}</span>
           <span>{project.stepCount} Steps</span>
           <span>{project.tracks.length} Lanes</span>
         </div>
       </header>
 
-      <div className="viseq-player__body">
-        <div className="viseq-player__grid-shell">
-          <div className="viseq-player__grid-header">
-            <div className="viseq-player__track-heading">
+      <div className="vixeq-player__body">
+        <div className="vixeq-player__grid-shell">
+          <div className="vixeq-player__grid-header">
+            <div className="vixeq-player__track-heading">
               <button
                 type="button"
                 onClick={() =>
@@ -194,7 +194,7 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
                 Add Lane
               </button>
             </div>
-            <div className="viseq-player__step-heading">
+            <div className="vixeq-player__step-heading">
               {Array.from({ length: project.stepCount }, (_, index) => (
                 <span key={index} className={index === player.currentStep ? "is-active" : ""}>
                   {index + 1}
@@ -203,10 +203,10 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
             </div>
           </div>
 
-          <div className="viseq-player__track-list">
+          <div className="vixeq-player__track-list">
             {project.tracks.map((track) => (
-              <div className="viseq-player__track-row" key={track.id}>
-                <div className="viseq-player__track-meta">
+              <div className="vixeq-player__track-row" key={track.id}>
+                <div className="vixeq-player__track-meta">
                   <input
                     aria-label={`${track.name} name`}
                     value={track.name}
@@ -218,7 +218,7 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
                       })
                     }
                   />
-                  <label className="viseq-player__enable-toggle">
+                  <label className="vixeq-player__enable-toggle">
                     <input
                       checked={track.enabled}
                       type="checkbox"
@@ -246,7 +246,7 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
                     Remove
                   </button>
                 </div>
-                <div className="viseq-player__step-grid">
+                <div className="vixeq-player__step-grid">
                   {track.steps.map((value, stepIndex) => {
                     const isSelected = selected?.trackId === track.id && selected?.stepIndex === stepIndex;
                     const isCurrent = player.currentStep === stepIndex;
@@ -254,12 +254,12 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
                     return (
                       <button
                         className={[
-                          "viseq-player__step-cell",
+                          "vixeq-player__step-cell",
                           isSelected ? "is-selected" : "",
                           isCurrent ? "is-current" : "",
                         ].join(" ")}
                         key={`${track.id}-${stepIndex}`}
-                        style={{ "--viseq-step-value": value } as CSSProperties}
+                        style={{ "--vixeq-step-value": value } as CSSProperties}
                         type="button"
                         title={`${track.name} step ${stepIndex + 1}: ${formatValue(value)}`}
                         onClick={() => {
@@ -310,7 +310,7 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
                           }, 0);
                         }}
                       >
-                        <span className="viseq-player__value-bar" />
+                        <span className="vixeq-player__value-bar" />
                       </button>
                     );
                   })}
@@ -320,10 +320,10 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
           </div>
         </div>
 
-        <aside className="viseq-player__inspector">
+        <aside className="vixeq-player__inspector">
           <h2>Step</h2>
           {selected && selectedTrack && selectedValue !== undefined ? (
-            <div className="viseq-player__inspector-fields">
+            <div className="vixeq-player__inspector-fields">
               <span>{selectedTrack.name}</span>
               <span>Step {selected.stepIndex + 1}</span>
               <label>

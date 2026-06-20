@@ -1,17 +1,17 @@
 {
-  "name": "@viseq/core",
+  "name": "@vixeq/core",
   "version": "0.2.0",
   "type": "module",
   "description": "A UI-agnostic step sequencer engine for 0-1 control values.",
   "license": "MIT",
-  "homepage": "https://github.com/kramhash/viseq#readme",
+  "homepage": "https://github.com/kramhash/vixeq#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kramhash/viseq.git",
+    "url": "git+https://github.com/kramhash/vixeq.git",
     "directory": "packages/core"
   },
   "bugs": {
-    "url": "https://github.com/kramhash/viseq/issues"
+    "url": "https://github.com/kramhash/vixeq/issues"
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

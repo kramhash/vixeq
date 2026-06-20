@@ -8,7 +8,7 @@ import {
   toggleStep,
   type SequenceProject,
   type StepEvent,
-} from "@viseq/core";
+} from "@vixeq/core";
 import "./styles.css";
 
 let project: SequenceProject = createProject({ bpm: 120, stepCount: 16, trackCount: 1, trackNames: ["Gate"] });
@@ -41,7 +41,7 @@ const render = () => {
       <header class="toolbar">
         <div>
           <h1>Vanilla Core</h1>
-          <p>@viseq/core without a UI framework</p>
+          <p>@vixeq/core without a UI framework</p>
         </div>
         <div class="transport">
           <button data-action="toggle">${engine.isPlaying() ? "Stop" : "Start"}</button>

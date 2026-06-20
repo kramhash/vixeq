@@ -5,7 +5,7 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: "@viseq/core",
+        find: "@vixeq/core",
         replacement: fileURLToPath(new URL("../../packages/core/src/index.ts", import.meta.url)),
       },
     ],

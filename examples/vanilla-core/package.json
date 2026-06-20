@@ -1,5 +1,5 @@
 {
-  "name": "viseq-example-vanilla-core",
+  "name": "vixeq-example-vanilla-core",
   "version": "0.2.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@viseq/core": "workspace:*",
+    "@vixeq/core": "workspace:*",
     "vite": "^7.0.0"
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createProject, setProjectBpm } from "@viseq/core";
+import { createProject, setProjectBpm } from "@vixeq/core";
 import { loadStoredProject, PROJECT_STORAGE_KEY, saveStoredProject } from "./projectStorage";
 
 class MemoryStorage {

@@ -4,9 +4,9 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@viseq/core": ["../../packages/core/src/index.ts"],
-      "@viseq/react": ["../../packages/react/src/index.ts"],
-      "@viseq/player-react": ["../../packages/player-react/src/index.tsx"]
+      "@vixeq/core": ["../../packages/core/src/index.ts"],
+      "@vixeq/react": ["../../packages/react/src/index.ts"],
+      "@vixeq/player-react": ["../../packages/player-react/src/index.tsx"]
     },
     "types": ["vite/client"],
     "noEmit": true

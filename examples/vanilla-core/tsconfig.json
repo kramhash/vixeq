@@ -3,7 +3,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@viseq/core": ["../../packages/core/src/index.ts"]
+      "@vixeq/core": ["../../packages/core/src/index.ts"]
     },
     "types": ["vite/client"],
     "noEmit": true

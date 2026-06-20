@@ -7,19 +7,19 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: "@viseq/core",
+        find: "@vixeq/core",
         replacement: fileURLToPath(new URL("../../packages/core/src/index.ts", import.meta.url)),
       },
       {
-        find: "@viseq/react",
+        find: "@vixeq/react",
         replacement: fileURLToPath(new URL("../../packages/react/src/index.ts", import.meta.url)),
       },
       {
-        find: "@viseq/player-react/styles.css",
+        find: "@vixeq/player-react/styles.css",
         replacement: fileURLToPath(new URL("../../packages/player-react/src/styles.css", import.meta.url)),
       },
       {
-        find: "@viseq/player-react",
+        find: "@vixeq/player-react",
         replacement: fileURLToPath(new URL("../../packages/player-react/src/index.tsx", import.meta.url)),
       },
     ],

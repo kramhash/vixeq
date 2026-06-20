@@ -1,5 +1,5 @@
-import { SequencePlayer, type SequencePlayerRef } from "@viseq/player-react";
-import { clearTrack, createProject, randomizeTrack, rotateTrackSteps, type SequenceProject, type StepEvent } from "@viseq/core";
+import { SequencePlayer, type SequencePlayerRef } from "@vixeq/player-react";
+import { clearTrack, createProject, randomizeTrack, rotateTrackSteps, type SequenceProject, type StepEvent } from "@vixeq/core";
 import { useRef, useState } from "react";
 
 const initialProject = (): SequenceProject =>

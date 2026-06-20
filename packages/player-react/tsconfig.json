@@ -5,8 +5,8 @@
     "outDir": "dist",
     "baseUrl": ".",
     "paths": {
-      "@viseq/core": ["../core/src/index.ts"],
-      "@viseq/react": ["../react/src/index.ts"]
+      "@vixeq/core": ["../core/src/index.ts"],
+      "@vixeq/react": ["../react/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.test.ts", "src/**/*.test.tsx"]

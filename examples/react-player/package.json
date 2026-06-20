@@ -1,5 +1,5 @@
 {
-  "name": "viseq-example-react-player",
+  "name": "vixeq-example-react-player",
   "version": "0.2.0",
   "private": true,
   "type": "module",
@@ -11,9 +11,9 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",
-    "@viseq/core": "workspace:*",
-    "@viseq/player-react": "workspace:*",
-    "@viseq/react": "workspace:*",
+    "@vixeq/core": "workspace:*",
+    "@vixeq/player-react": "workspace:*",
+    "@vixeq/react": "workspace:*",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "vite": "^7.0.0"

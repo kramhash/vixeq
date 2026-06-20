@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createProject, setStepValue } from "@viseq/core";
+import { createProject, setStepValue } from "@vixeq/core";
 import { getPatternComplexity } from "./visualizerState";
 
 describe("getPatternComplexity", () => {

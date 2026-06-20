@@ -1,4 +1,4 @@
-import type { SequenceProject, StepEvent } from "@viseq/core";
+import type { SequenceProject, StepEvent } from "@vixeq/core";
 
 export type SelectedStep = {
   trackId: string;

@@ -1,5 +1,5 @@
-import { SequencePlayer, type SelectedStep } from "@viseq/player-react";
-import { createProject, normalizeProject, presets, validateProject, type SequenceProject, type StepEvent } from "@viseq/core";
+import { SequencePlayer, type SelectedStep } from "@vixeq/player-react";
+import { createProject, normalizeProject, presets, validateProject, type SequenceProject, type StepEvent } from "@vixeq/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Visualizer } from "./Visualizer";
 import { loadStoredProject, saveStoredProject, type ProjectStorageLoadResult } from "./projectStorage";
@@ -124,7 +124,7 @@ export function App() {
         <div className="brand">
           <span className="brand-mark" />
           <div>
-            <h1>Viseq</h1>
+            <h1>Vixeq</h1>
             <p>0-1 control sequencer</p>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { SequencerEngine, type SequenceProject, type StepEvent, type TransportEvent } from "@viseq/core";
+import { SequencerEngine, type SequenceProject, type StepEvent, type TransportEvent } from "@vixeq/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type SequencerEngineHookOptions = {

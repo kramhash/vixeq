@@ -1,6 +1,6 @@
-import { normalizeProject, validateProject, type SequenceProject } from "@viseq/core";
+import { normalizeProject, validateProject, type SequenceProject } from "@vixeq/core";
 
-export const PROJECT_STORAGE_KEY = "viseq.playground.project.v1";
+export const PROJECT_STORAGE_KEY = "vixeq.playground.project.v1";
 
 const PROJECT_STORAGE_VERSION = 1;
 
