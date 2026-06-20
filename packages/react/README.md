@@ -1,9 +1,9 @@
-# @viseq/react
+# @vixeq/react
 
-React hooks for `@viseq/core`.
+React hooks for `@vixeq/core`.
 
 ```tsx
-import { useSequencerEngine } from "@viseq/react";
+import { useSequencerEngine } from "@vixeq/react";
 
 const player = useSequencerEngine({ project, onStep });
 player.play();
@@ -12,8 +12,8 @@ player.play();
 ## Controlled Project Usage
 
 ```tsx
-import { createProject, toggleStep, type SequenceProject } from "@viseq/core";
-import { useSequencerEngine } from "@viseq/react";
+import { createProject, toggleStep, type SequenceProject } from "@vixeq/core";
+import { useSequencerEngine } from "@vixeq/react";
 import { useState } from "react";
 
 function Sequencer() {

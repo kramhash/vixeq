@@ -1,19 +1,19 @@
-# Viseq
+# Vixeq
 
-Viseq is a UI-agnostic step sequencer engine for `0.0` to `1.0` control values.
+Vixeq is a UI-agnostic step sequencer engine for `0.0` to `1.0` control values.
 
 It is designed to run independently from any UI framework and can be used as the timing core for browser tools, control-signal editors, automation grids, audio experiments, or visual sequencers.
 
 ## Install
 
 ```sh
-npm install @viseq/core
+npm install @vixeq/core
 ```
 
 ## Usage
 
 ```ts
-import { SequencerEngine, createProject, rotateTrackSteps, setStepValue } from "@viseq/core";
+import { SequencerEngine, createProject, rotateTrackSteps, setStepValue } from "@vixeq/core";
 
 let project = createProject({ bpm: 120, stepCount: 16, trackCount: 4 });
 project = setStepValue(project, project.tracks[0].id, 0, 1);
@@ -44,7 +44,7 @@ Use `setProject(nextProject)` when your app edits the immutable project while th
 ## Project Helpers
 
 ```ts
-import { addTrack, clearTrack, randomizeTrack, rotateTrackSteps, toggleStep } from "@viseq/core";
+import { addTrack, clearTrack, randomizeTrack, rotateTrackSteps, toggleStep } from "@vixeq/core";
 
 let next = toggleStep(project, trackId, 0);
 next = addTrack(next, "Accent");
@@ -58,7 +58,7 @@ All project helpers return a new `SequenceProject`. If the target track or step 
 ## Validation
 
 ```ts
-import { normalizeProject, validateProject } from "@viseq/core";
+import { normalizeProject, validateProject } from "@vixeq/core";
 
 const result = validateProject(input);
 const project = normalizeProject(input);

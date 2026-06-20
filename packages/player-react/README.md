@@ -1,10 +1,10 @@
-# @viseq/player-react
+# @vixeq/player-react
 
-Embeddable React sequence player GUI for `@viseq/core` projects.
+Embeddable React sequence player GUI for `@vixeq/core` projects.
 
 ```tsx
-import { SequencePlayer } from "@viseq/player-react";
-import "@viseq/player-react/styles.css";
+import { SequencePlayer } from "@vixeq/player-react";
+import "@vixeq/player-react/styles.css";
 
 <SequencePlayer project={project} onProjectChange={({ project }) => setProject(project)} />;
 ```
@@ -12,9 +12,9 @@ import "@viseq/player-react/styles.css";
 ## Controlled Usage
 
 ```tsx
-import { createProject, randomizeTrack, type SequenceProject } from "@viseq/core";
-import { SequencePlayer, type SequencePlayerRef } from "@viseq/player-react";
-import "@viseq/player-react/styles.css";
+import { createProject, randomizeTrack, type SequenceProject } from "@vixeq/core";
+import { SequencePlayer, type SequencePlayerRef } from "@vixeq/player-react";
+import "@vixeq/player-react/styles.css";
 import { useRef, useState } from "react";
 
 function App() {
