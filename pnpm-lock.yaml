@@ -26,18 +26,18 @@ importers:
       '@frapx/shader-noise':
         specifier: ^0.1.0
         version: 0.1.0
-      '@viseq/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@viseq/player-react':
-        specifier: workspace:*
-        version: link:../../packages/player-react
-      '@viseq/react':
-        specifier: workspace:*
-        version: link:../../packages/react
       '@vitejs/plugin-react':
         specifier: ^5.0.0
         version: 5.2.0(vite@7.3.5(@types/node@20.19.43))
+      '@vixeq/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@vixeq/player-react':
+        specifier: workspace:*
+        version: link:../../packages/player-react
+      '@vixeq/react':
+        specifier: workspace:*
+        version: link:../../packages/react
       react:
         specifier: ^19.1.0
         version: 19.2.7
@@ -57,18 +57,18 @@ importers:
 
   examples/react-player:
     dependencies:
-      '@viseq/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@viseq/player-react':
-        specifier: workspace:*
-        version: link:../../packages/player-react
-      '@viseq/react':
-        specifier: workspace:*
-        version: link:../../packages/react
       '@vitejs/plugin-react':
         specifier: ^5.0.0
         version: 5.2.0(vite@7.3.5(@types/node@20.19.43))
+      '@vixeq/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@vixeq/player-react':
+        specifier: workspace:*
+        version: link:../../packages/player-react
+      '@vixeq/react':
+        specifier: workspace:*
+        version: link:../../packages/react
       react:
         specifier: ^19.1.0
         version: 19.2.7
@@ -88,12 +88,74 @@ importers:
 
   examples/vanilla-core:
     dependencies:
-      '@viseq/core':
+      '@vixeq/core':
         specifier: workspace:*
         version: link:../../packages/core
       vite:
         specifier: ^7.0.0
         version: 7.3.5(@types/node@20.19.43)
+
+  examples/website-pulse:
+    dependencies:
+      '@vitejs/plugin-react':
+        specifier: ^5.0.0
+        version: 5.2.0(vite@7.3.5(@types/node@20.19.43))
+      '@vixeq/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@vixeq/player-react':
+        specifier: workspace:*
+        version: link:../../packages/player-react
+      '@vixeq/react':
+        specifier: workspace:*
+        version: link:../../packages/react
+      react:
+        specifier: ^19.1.0
+        version: 19.2.7
+      react-dom:
+        specifier: ^19.1.0
+        version: 19.2.7(react@19.2.7)
+      vite:
+        specifier: ^7.0.0
+        version: 7.3.5(@types/node@20.19.43)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.1.8
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: ^19.1.6
+        version: 19.2.3(@types/react@19.2.17)
+
+  examples/website-svg:
+    dependencies:
+      '@vitejs/plugin-react':
+        specifier: ^5.0.0
+        version: 5.2.0(vite@7.3.5(@types/node@20.19.43))
+      '@vixeq/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@vixeq/player-react':
+        specifier: workspace:*
+        version: link:../../packages/player-react
+      '@vixeq/react':
+        specifier: workspace:*
+        version: link:../../packages/react
+      react:
+        specifier: ^19.1.0
+        version: 19.2.7
+      react-dom:
+        specifier: ^19.1.0
+        version: 19.2.7(react@19.2.7)
+      vite:
+        specifier: ^7.0.0
+        version: 7.3.5(@types/node@20.19.43)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.1.8
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: ^19.1.6
+        version: 19.2.3(@types/react@19.2.17)
 
   packages/core:
     devDependencies:
@@ -103,10 +165,10 @@ importers:
 
   packages/player-react:
     dependencies:
-      '@viseq/core':
+      '@vixeq/core':
         specifier: workspace:*
         version: link:../core
-      '@viseq/react':
+      '@vixeq/react':
         specifier: workspace:*
         version: link:../react
       react:
@@ -122,7 +184,7 @@ importers:
 
   packages/react:
     dependencies:
-      '@viseq/core':
+      '@vixeq/core':
         specifier: workspace:*
         version: link:../core
       react:

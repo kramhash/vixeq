@@ -1,6 +1,6 @@
 {
   "name": "@vixeq/player-react",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Embeddable React sequence player GUI for Vixeq projects.",
   "license": "MIT",
