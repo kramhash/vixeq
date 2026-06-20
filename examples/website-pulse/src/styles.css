@@ -1,0 +1,391 @@
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    /* brand palette */
+    --c-bg: #06060a;
+    --c-surface: #0d0d16;
+    --c-border: #1c1c2e;
+    --c-text: #f0f0f6;
+    --c-muted: #6a6a90;
+
+    /* pulse accent colors */
+    --c-beat: #b06fff; /* purple – Kick ring */
+    --c-cta: #00e5ff; /* electric cyan – Get tickets */
+    --c-eq: #ff2d78; /* hot pink – EQ bars */
+    --c-mood: #ffaa00; /* amber – mood overlay */
+
+    /* pulse variables (driven by rAF loop via JS) */
+    --pulse-beat: 0;
+    --pulse-cta: 0;
+    --pulse-eq: 0;
+    --pulse-mood: 0;
+}
+
+body {
+    background: var(--c-bg);
+    color: var(--c-text);
+    font-family:
+        system-ui,
+        -apple-system,
+        sans-serif;
+    min-height: 100dvh;
+}
+
+.app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+    background: var(--c-bg);
+    position: relative;
+    isolation: isolate;
+}
+
+/* Mood: full-page amber warm-wash overlay */
+.app::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: radial-gradient(
+        ellipse 120% 80% at 50% 50%,
+        color-mix(in srgb, var(--c-mood) calc(var(--pulse-mood) * 28%), transparent) 0%,
+        transparent 70%
+    );
+    opacity: 1;
+    transition: none;
+}
+
+/* Lift all page content above the overlay */
+.site-nav,
+.hero,
+.reduced-motion-notice,
+.editor-panel {
+    position: relative;
+    z-index: 1;
+}
+
+/* ─── nav ──────────────────────────────────────────── */
+.site-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.5rem 2.5rem;
+    border-bottom: 1px solid var(--c-border);
+}
+
+.nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    /* shifts from beat-purple toward mood-amber */
+    color: color-mix(in oklch, var(--c-beat) calc((1 - var(--pulse-mood)) * 100%), var(--c-mood) calc(var(--pulse-mood) * 100%));
+    transition: none;
+}
+
+.nav-links {
+    display: flex;
+    gap: 2rem;
+}
+.nav-links a {
+    color: var(--c-muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.nav-links a:hover {
+    color: var(--c-text);
+}
+
+/* ─── hero ──────────────────────────────────────────── */
+.hero {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 4rem;
+    padding: 5rem 2.5rem 4rem;
+    max-width: 1100px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+/* ─── event content ─────────────────────────────────── */
+.hero-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    max-width: 540px;
+}
+
+.event-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.8rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    /* mood: shifts from muted toward warm amber */
+    color: color-mix(in oklch, var(--c-muted) calc((1 - var(--pulse-mood)) * 100%), var(--c-mood) calc(var(--pulse-mood) * 100%));
+    font-variant-numeric: tabular-nums;
+    transition: none;
+}
+
+.meta-sep {
+    color: var(--c-border);
+}
+
+.event-title {
+    font-size: clamp(3.2rem, 7vw, 5.5rem);
+    font-weight: 900;
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    /* Kick: title scales + brightness on downbeat */
+    transform: scale(calc(1 + var(--pulse-beat) * 0.025));
+    transform-origin: center;
+    filter: brightness(calc(1 + var(--pulse-beat) * 0.35));
+    transition: none;
+}
+
+.title-accent {
+    color: var(--c-beat);
+    /* glow on kick */
+    text-shadow:
+        0 0 calc(var(--pulse-beat) * 40px)
+            color-mix(in srgb, var(--c-beat) 80%, transparent),
+        0 0 calc(var(--pulse-beat) * 80px)
+            color-mix(in srgb, var(--c-beat) 40%, transparent);
+}
+
+.event-sub {
+    color: var(--c-muted);
+    line-height: 1.65;
+    font-size: 0.95rem;
+    max-width: 46ch;
+}
+
+.event-sub code {
+    background: color-mix(in srgb, var(--c-beat) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-beat) 25%, transparent);
+    border-radius: 4px;
+    padding: 0.1em 0.35em;
+    font-size: 0.9em;
+    color: var(--c-beat);
+}
+
+/* ─── action buttons ────────────────────────────────── */
+.hero-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.btn-primary {
+    padding: 0.8rem 2rem;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: var(--c-cta);
+    color: #060608;
+    /* CTA pulses on bass hits */
+    box-shadow: 0 0 calc(var(--pulse-cta) * 36px) calc(var(--pulse-cta) * 10px)
+        color-mix(in srgb, var(--c-cta) 55%, transparent);
+    transform: scale(calc(1 + var(--pulse-cta) * 0.06));
+    transition: none;
+}
+
+.btn-secondary {
+    padding: 0.8rem 2rem;
+    border-radius: 8px;
+    border: 1px solid var(--c-border);
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 500;
+    background: transparent;
+    color: var(--c-text);
+}
+.btn-secondary:hover {
+    border-color: var(--c-muted);
+}
+
+/* ─── hero visual (right column) ────────────────────── */
+.hero-visual {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.75rem;
+}
+
+/* ─── beat disk ──────────────────────────────────────── */
+.beat-disk {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.beat-ring {
+    position: absolute;
+    border-radius: 50%;
+    border-style: solid;
+    border-color: var(--c-beat);
+    transition: none;
+}
+
+/* Outer ring: big scale punch */
+.beat-ring--outer {
+    inset: 0;
+    border-width: 2px;
+    opacity: calc(0.15 + var(--pulse-beat) * 0.75);
+    transform: scale(calc(1 + var(--pulse-beat) * 0.35));
+    box-shadow:
+        0 0 calc(var(--pulse-beat) * 50px) calc(var(--pulse-beat) * 12px)
+            color-mix(in srgb, var(--c-beat) 45%, transparent),
+        inset 0 0 calc(var(--pulse-beat) * 20px)
+            color-mix(in srgb, var(--c-beat) 15%, transparent);
+}
+
+/* Mid ring: moderate punch with slight delay feel */
+.beat-ring--mid {
+    inset: 28px;
+    border-width: 3px;
+    opacity: calc(0.25 + var(--pulse-beat) * 0.65);
+    transform: scale(calc(1 + var(--pulse-beat) * 0.18));
+    border-color: color-mix(in srgb, var(--c-beat) 70%, var(--c-cta));
+}
+
+/* Inner ring: subtle, tied to CTA track */
+.beat-ring--inner {
+    inset: 56px;
+    border-width: 2px;
+    opacity: calc(0.3 + var(--pulse-cta) * 0.55);
+    transform: scale(calc(1 + var(--pulse-cta) * 0.12));
+    border-color: var(--c-cta);
+}
+
+/* Core dot: max punch */
+.beat-core {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--c-beat);
+    opacity: calc(0.5 + var(--pulse-beat) * 0.5);
+    transform: scale(calc(0.7 + var(--pulse-beat) * 0.8));
+    box-shadow: 0 0 calc(var(--pulse-beat) * 30px) calc(var(--pulse-beat) * 8px)
+        color-mix(in srgb, var(--c-beat) 70%, transparent);
+}
+
+/* ─── EQ visualizer ─────────────────────────────────── */
+.eq-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 5px;
+    height: 64px;
+}
+
+.eq-bar {
+    width: 7px;
+    border-radius: 3px 3px 1px 1px;
+    background: var(--c-eq);
+    /* Each bar uses its own amplitude factor (set via inline style --bar-amp) */
+    height: calc(8px + var(--pulse-eq) * var(--bar-amp, 0.7) * 56px);
+    opacity: calc(0.4 + var(--pulse-eq) * var(--bar-amp, 0.7) * 0.6);
+    box-shadow: 0 0 calc(var(--pulse-eq) * 12px)
+        color-mix(in srgb, var(--c-eq) 60%, transparent);
+    transition: none;
+}
+
+/* ─── reduced motion notice ─────────────────────────── */
+.reduced-motion-notice {
+    margin: 0 2.5rem 1rem;
+    padding: 0.75rem 1.25rem;
+    background: color-mix(in srgb, var(--c-beat) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-beat) 30%, transparent);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    color: var(--c-beat);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+.reduced-motion-notice button {
+    padding: 0.3rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid currentColor;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-size: inherit;
+}
+
+/* ─── editor panel ──────────────────────────────────── */
+.editor-panel {
+    border-top: 1px solid var(--c-border);
+    background: var(--c-surface);
+    padding: 1.5rem 2.5rem;
+}
+
+.editor-panel__header {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+.editor-panel__header small {
+    color: var(--c-muted);
+    font-weight: 400;
+    font-size: 0.8rem;
+}
+
+.track-legend {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--c-border);
+    font-size: 0.8rem;
+    color: var(--c-muted);
+}
+.track-legend span {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.track-legend span::before {
+    content: "";
+    display: block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--legend-color, var(--c-muted));
+}
+
+/* ─── responsive ─────────────────────────────────────── */
+@media (max-width: 700px) {
+    .hero {
+        grid-template-columns: 1fr;
+    }
+    .hero-visual {
+        display: none;
+    }
+}
