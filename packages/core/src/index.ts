@@ -1,5 +1,15 @@
 export { SequencerEngine } from "./SequencerEngine";
 export { browserClock } from "./clock";
+export {
+  easeInCubic,
+  easeInOutCubic,
+  easeInOutQuad,
+  easeInQuad,
+  easeOutCubic,
+  easeOutQuad,
+  lerp,
+  linear,
+} from "./easing";
 export { SEQUENCER_LIMITS } from "./limits";
 export {
   addTrack,
@@ -40,3 +50,4 @@ export type {
   ValidationResult,
 } from "./types";
 export type { CreateProjectOptions, RandomizeTrackOptions } from "./project";
+export type { EasingFunction } from "./easing";

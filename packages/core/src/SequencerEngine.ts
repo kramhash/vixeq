@@ -184,22 +184,26 @@ export class SequencerEngine {
   }
 
   private emitStep(timestamp: number): void {
+    const nextIndex = this.normalizeStepIndex(this.currentStepIndex + 1);
+    const durationMs = this.getStepDurationMs();
     const event: StepEvent = {
       stepIndex: this.currentStepIndex,
       bpm: this.project.bpm,
       timestamp,
+      durationMs,
       tracks: this.project.tracks.map((track) => ({
         id: track.id,
         name: track.name,
         enabled: track.enabled,
         value: track.enabled ? track.steps[this.currentStepIndex] ?? 0 : 0,
+        nextValue: track.enabled ? track.steps[nextIndex] ?? 0 : 0,
       })),
     };
     this.emit("step", event);
   }
 
   private getStepDurationMs(): number {
-    return 60_000 / this.project.bpm / 4;
+    return 60_000 / this.project.bpm / this.project.stepsPerBeat;
   }
 
   private normalizeStepIndex(stepIndex: number): number {

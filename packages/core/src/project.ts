@@ -4,6 +4,7 @@ import type { SequenceProject, StepValue, Track } from "./types";
 export type CreateProjectOptions = {
   bpm?: number;
   stepCount?: number;
+  stepsPerBeat?: number;
   trackCount?: number;
   trackNames?: string[];
 };
@@ -58,6 +59,11 @@ export const createProject = (options: CreateProjectOptions = {}): SequenceProje
     SEQUENCER_LIMITS.minStepCount,
     SEQUENCER_LIMITS.maxStepCount,
   );
+  const stepsPerBeat = clamp(
+    Math.trunc(options.stepsPerBeat ?? SEQUENCER_LIMITS.defaultStepsPerBeat),
+    SEQUENCER_LIMITS.minStepsPerBeat,
+    SEQUENCER_LIMITS.maxStepsPerBeat,
+  );
   const trackCount = clamp(
     Math.trunc(options.trackCount ?? SEQUENCER_LIMITS.defaultTrackCount),
     SEQUENCER_LIMITS.minTracks,
@@ -68,6 +74,7 @@ export const createProject = (options: CreateProjectOptions = {}): SequenceProje
     version: 1,
     bpm: clamp(options.bpm ?? SEQUENCER_LIMITS.defaultBpm, SEQUENCER_LIMITS.minBpm, SEQUENCER_LIMITS.maxBpm),
     stepCount,
+    stepsPerBeat,
     tracks: Array.from({ length: trackCount }, (_, index) =>
       createTrack({
         name: options.trackNames?.[index] ?? `Track ${index + 1}`,

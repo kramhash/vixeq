@@ -8,6 +8,7 @@ export const presets: Record<string, SequenceProject> = {
     version: 1,
     bpm: 120,
     stepCount: 16,
+    stepsPerBeat: 4,
     tracks: [
       { id: "kick-energy", name: "Kick / Energy", enabled: true, steps: makeSteps([0, 4, 8, 12]) },
       { id: "flow-motion", name: "Flow / Motion", enabled: true, steps: makeSteps([2, 6, 10, 14], { 2: 0.5, 10: 0.5 }) },
@@ -19,6 +20,7 @@ export const presets: Record<string, SequenceProject> = {
     version: 1,
     bpm: 100,
     stepCount: 16,
+    stepsPerBeat: 4,
     tracks: [
       { id: "kick-energy", name: "Kick / Energy", enabled: true, steps: Array.from({ length: 16 }, (_, index) => (index % 2 ? 0 : 1)) },
       { id: "flow-motion", name: "Flow / Motion", enabled: true, steps: Array.from({ length: 16 }, (_, index) => (index % 2 ? 1 : 0)) },

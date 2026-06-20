@@ -27,6 +27,10 @@ export const validateProject = (input: unknown): ValidationResult => {
     errors.push({ path: "stepCount", message: "Step count must be an integer." });
   }
 
+  if (input.stepsPerBeat !== undefined && !Number.isInteger(input.stepsPerBeat)) {
+    errors.push({ path: "stepsPerBeat", message: "Steps per beat must be an integer." });
+  }
+
   if (!Array.isArray(input.tracks)) {
     errors.push({ path: "tracks", message: "Tracks must be an array." });
   } else {
@@ -77,6 +81,12 @@ export const normalizeProject = (input: unknown): SequenceProject => {
     SEQUENCER_LIMITS.maxStepCount,
   );
 
+  const stepsPerBeat = clamp(
+    Math.trunc(typeof input.stepsPerBeat === "number" ? input.stepsPerBeat : SEQUENCER_LIMITS.defaultStepsPerBeat),
+    SEQUENCER_LIMITS.minStepsPerBeat,
+    SEQUENCER_LIMITS.maxStepsPerBeat,
+  );
+
   const rawTracks = Array.isArray(input.tracks) ? input.tracks : [];
   const tracks = rawTracks
     .filter(isRecord)
@@ -105,6 +115,7 @@ export const normalizeProject = (input: unknown): SequenceProject => {
       SEQUENCER_LIMITS.maxBpm,
     ),
     stepCount,
+    stepsPerBeat,
     tracks:
       tracks.length >= SEQUENCER_LIMITS.minTracks
         ? tracks

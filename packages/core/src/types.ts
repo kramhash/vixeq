@@ -11,6 +11,7 @@ export type SequenceProject = {
   version: 1;
   bpm: number;
   stepCount: number;
+  stepsPerBeat: number;
   tracks: Track[];
 };
 
@@ -19,12 +20,14 @@ export type StepEventTrack = {
   name: string;
   enabled: boolean;
   value: StepValue;
+  nextValue: StepValue;
 };
 
 export type StepEvent = {
   stepIndex: number;
   bpm: number;
   timestamp: number;
+  durationMs: number;
   tracks: StepEventTrack[];
 };
 

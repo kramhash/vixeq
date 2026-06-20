@@ -132,6 +132,32 @@ describe("project utilities", () => {
     expect(removed.tracks).toHaveLength(1);
   });
 
+  it("createProject defaults stepsPerBeat to 4", () => {
+    const project = createProject();
+    expect(project.stepsPerBeat).toBe(4);
+  });
+
+  it("createProject accepts and clamps stepsPerBeat", () => {
+    expect(createProject({ stepsPerBeat: 2 }).stepsPerBeat).toBe(2);
+    expect(createProject({ stepsPerBeat: 8 }).stepsPerBeat).toBe(8);
+    expect(createProject({ stepsPerBeat: 0 }).stepsPerBeat).toBe(1);
+    expect(createProject({ stepsPerBeat: 999 }).stepsPerBeat).toBe(SEQUENCER_LIMITS.maxStepsPerBeat);
+  });
+
+  it("normalizeProject defaults stepsPerBeat to 4 when missing", () => {
+    const input = { version: 1, bpm: 120, stepCount: 4, tracks: [] };
+    const normalized = normalizeProject(input);
+    expect(normalized.stepsPerBeat).toBe(4);
+  });
+
+  it("normalizeProject clamps stepsPerBeat", () => {
+    const input = { version: 1, bpm: 120, stepCount: 4, stepsPerBeat: 0, tracks: [] };
+    expect(normalizeProject(input).stepsPerBeat).toBe(1);
+
+    const input2 = { version: 1, bpm: 120, stepCount: 4, stepsPerBeat: 999, tracks: [] };
+    expect(normalizeProject(input2).stepsPerBeat).toBe(SEQUENCER_LIMITS.maxStepsPerBeat);
+  });
+
   it("validates project shape and normalizes importable data", () => {
     const input = {
       version: 1,
