@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.4.0 - 2026-06-22
+
+### Added
+
+- Added the public `SequencerTransport` type for clock-backed playback sources.
+- Added browser audio transport helpers in `@vixeq/core`:
+  - `createMediaElementTransport()` for `HTMLMediaElement` playback.
+  - `createAudioBufferTransport()` for Web Audio `AudioBuffer` playback and seamless loops.
+- Added transport-aware controls to `@vixeq/react`:
+  - `useSequencerEngine({ transport })`.
+  - `isStarting` and `transportError` state.
+  - async `play()`, `stop()`, `toggle()`, and `reset()` controls.
+- Added `transport` and `showTransportControls` props to `SequencePlayer`.
+- Added audio clock and time-driven sequencer coverage, including AudioContext and transport tests.
+
+### Changed
+
+- `SequencePlayerRef` control methods now return `Promise<void>`.
+- `useSequencerEngine()` and `useSequencePlayer()` control methods now return `Promise<void>`.
+- `examples/website-pulse` now uses an audio-buffer transport for loop-synced choreography and supports loading a custom audio file.
+
+### Migration Notes
+
+- React event handlers can ignore the returned promise with `void player.toggle()` or await it when handling transport failures.
+- Cleanup callbacks should not return these promises directly:
+  ```ts
+  return () => {
+    void player.stop();
+  };
+  ```
+
 ## 0.3.0 - 2026-06-20
 
 ### Changed

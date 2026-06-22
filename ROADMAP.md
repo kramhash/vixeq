@@ -4,7 +4,10 @@
 
 Vixeq is a **general-purpose timing engine for the web**. The entry point is musical (BPM, steps, tracks) but the use cases are not limited to music: data visualization, ambient backgrounds, game-like periodic effects, UI choreography — anything that benefits from a clock-driven stream of `0.0`–`1.0` control values.
 
-The hosted `website-pulse` example shows this concretely: a live-event landing page where every CSS property — glow intensity, scale, color, EQ bar heights — is driven by a single `SequenceProject` editable in real time.
+Two first-class use cases illustrate the breadth:
+
+- **Visual sequencer**: A live-event landing page where every CSS property — glow intensity, scale, color, EQ bar heights — is driven by a single `SequenceProject` editable in real time. (`examples/website-pulse`)
+- **Music-synchronized presentation**: A visual show driven by vixeq that follows an external audio file. The sequencer tracks in sync with the music — play, pause, seek, and scrub all reflected immediately in the visuals. vixeq does not play audio; it follows whatever is playing.
 
 ## Guiding Principles
 
@@ -15,73 +18,195 @@ The hosted `website-pulse` example shows this concretely: a live-event landing p
 
 ## Release Plan
 
-### 0.3.0 — Engine Expressiveness
+### 0.3.0 — Engine Expressiveness ✓
 
 **Theme**: Give the engine more degrees of freedom without breaking any existing code.
 
-#### Variable step resolution (`stepsPerBeat`)
-
-Currently the step duration is hardcoded to one sixteenth note (`60000 / bpm / 4`). Adding `stepsPerBeat` (default `4`) to `SequenceProject` lets callers choose eighth notes, thirty-second notes, triplets, or arbitrary rates.
-
-Files to touch:
-- `packages/core/src/types.ts` — add `stepsPerBeat?: number` to `SequenceProject`
-- `packages/core/src/limits.ts` — add `SEQUENCER_LIMITS.stepsPerBeat` range
-- `packages/core/src/project.ts` — thread `stepsPerBeat` through `createProject` default
-- `packages/core/src/validation.ts` — clamp in `normalizeProject`
-- `packages/core/src/SequencerEngine.ts:202` — `60000 / bpm / stepsPerBeat`
-
-All existing projects without `stepsPerBeat` normalize to `4`, preserving current behavior.
-
-#### Step interpolation helpers (`nextValue` + easing functions)
-
-Discrete step events are currently the only source of truth. Smooth continuous motion requires the caller to roll their own rAF decay loop. To support **deliberate** continuous interpolation, two small additions:
-
-1. `StepEvent.tracks[n].nextValue` — the value at the *next* step index (wrapping). The caller can lerp `value → nextValue` over the step duration using the elapsed phase `(now - event.timestamp) / stepDurationMs`.
-
-2. A new `easing.ts` module (or extension of `smoothing.ts`) exporting pure stateless easing functions:
-   - `linear(t)`
-   - `easeInQuad(t)` / `easeOutQuad(t)` / `easeInOutQuad(t)`
-   - `easeInCubic(t)` / `easeOutCubic(t)` / `easeInOutCubic(t)`
-
-The engine's tick machinery is **not changed**. Interpolation remains a caller-side concern; vixeq provides the ingredients.
-
-Files to touch:
-- `packages/core/src/types.ts` — add `nextValue` to `StepEventTrack`
-- `packages/core/src/SequencerEngine.ts` — populate `nextValue` when emitting step events
-- `packages/core/src/easing.ts` (new) — pure easing functions + tests
-
-**Deliverables**: updated packages, tests for new code paths, one example updated to demonstrate continuous interpolated motion.
+Delivered:
+- `stepsPerBeat` on `SequenceProject` (default `4`). Enables eighth notes, thirty-second notes, triplets, or arbitrary step rates.
+- `StepEvent.durationMs`: step length in milliseconds, derived automatically from BPM and `stepsPerBeat`.
+- `StepEventTrack.nextValue`: the value at the next step index (wrapping), enabling deliberate `value → nextValue` interpolation within a step.
+- New `easing` module: `linear`, `easeInQuad`, `easeOutQuad`, `easeInOutQuad`, `easeInCubic`, `easeOutCubic`, `easeInOutCubic`, `lerp`.
+- `examples/website-svg`: SVG brandmark driven by a sequencer with continuous interpolation.
+- `examples/website-pulse`: live-event landing page with real-time editable CSS choreography.
 
 ---
 
-### 0.4.0 — Timeline Playback Integration
+### 0.4.0 — Time-Driven Playback & Audio Sync
 
-**Theme**: Activate the existing `timeline/` module by connecting it to `SequencerEngine`.
+**Theme**: Drive the sequencer from absolute time rather than an internal counter — enabling seek-accurate audio sync, tempo-variable timelines, and frame-accurate interpolation sampling.
 
-The `@vixeq/core` package already has a complete data layer for tempo-variable timelines (`TimingMap`, `TimelineProject`, `getEventsInBeatRange`), but `SequencerEngine` only plays `SequenceProject`. This gap means multi-tempo compositions and beat-accurate scheduling are currently impossible.
+#### Time-driven playback mode
 
-Work in this cycle:
-- Extend `SequencerEngine` (or introduce a parallel `TimelineEngine`) to accept a `TimelineProject` and schedule tick times using `beatToMs` across tempo-change boundaries.
+Currently `SequencerEngine` advances its step counter one increment per tick. This makes it impossible to seek: if the time source jumps forward or backward, the step counter does not follow.
+
+The fix is a time-driven mode where step position is derived from the current timestamp at each tick:
+
+```
+stepIndex = floor((now - originMs) / stepDurationMs) mod stepCount
+```
+
+This makes seek, scrub, and variable playback rate trivially correct. The increment-based mode remains the default for backwards compatibility.
+
+Files to touch:
+- `packages/core/src/SequencerEngine.ts` — add time-driven mode option and step-from-time derivation
+- `packages/core/src/types.ts` — extend `SequencerEngineOptions` with `timeDriven?: boolean`, `originMs?: number`
+
+#### `sampleChannels(timeMs)` — frame-accurate interpolation
+
+The current model requires callers to maintain their own `requestAnimationFrame` loop and re-derive `(now - event.timestamp) / stepDurationMs` from the last step event. `sampleChannels` replaces this boilerplate:
+
+```ts
+const values = engine.sampleChannels(performance.now());
+// { trackId: interpolatedValue, ... }
+```
+
+Returns the easing-interpolated `value → nextValue` position for each track at an arbitrary timestamp. Requires the time-driven mode so the engine knows the origin.
+
+Files to touch:
+- `packages/core/src/SequencerEngine.ts` — add `sampleChannels(timeMs): Record<string, number>`
+- `packages/core/src/types.ts` — add return type
+
+#### `createAudioClock` — hybrid audio sync
+
+A `SequencerClock` implementation that locks the sequencer to the playback position of an external `HTMLMediaElement` (`<audio>` or `<video>`).
+
+Design — hybrid for smooth sync:
+- `<audio>` element handles transport: play, pause, seek, loop, rate.
+- `AudioContext` provides a high-resolution monotonic clock for interpolation between `currentTime` updates.
+- `now = mediaTime + (ctx.currentTime - ctxAnchor) * rate` — updated on `play`, `pause`, `seeked`, `ratechange`.
+- If no `AudioContext` is provided, falls back to `mediaEl.currentTime * 1000` directly (simpler, slightly coarser).
+
+```ts
+import { createAudioClock } from "@vixeq/core";
+
+const clock = createAudioClock(audioEl, { audioContext: ctx });
+const engine = new SequencerEngine(project, { clock, timeDriven: true });
+
+audioEl.play();   // sequencer advances with the audio
+audioEl.pause();  // sequencer pauses
+audioEl.currentTime = 30; // sequencer jumps to the matching step
+```
+
+Core stays dependency-free: `AudioContext` and `HTMLMediaElement` are browser globals, not npm imports.
+
+Files to touch:
+- `packages/core/src/clock.ts` — add `createAudioClock`
+- `packages/core/src/types.ts` — extend `SequencerClock` if needed, add `AudioClockOptions`
+- `packages/core/src/index.ts` — export `createAudioClock`
+
+#### Timeline module connection
+
+The `@vixeq/core` package already has a complete data layer for tempo-variable timelines (`TimingMap`, `TimelineProject`, `beatToMs`, `getEventsInBeatRange`). The same time-driven foundation that enables audio sync also connects this module to `SequencerEngine`: tempo-change boundaries become first-class schedule points rather than postprocessing.
+
+Work:
+- Extend or companion `SequencerEngine` to accept a `TimelineProject` and schedule tick times using `beatToMs` across tempo-change boundaries.
 - Ensure `missedStepPolicy` semantics carry over.
-- Add a timeline-aware example or playground mode.
 
-This is an architectural change and therefore kept separate from 0.3.0.
+#### Flagship example update
+
+Update `examples/website-pulse` with an audio sync demo: a short CC0/royalty-free loop plays alongside the existing visual choreography, synchronized via `createAudioClock`. The existing editable sequencer UI remains. Audio source license to be attributed in the example README.
+
+**Deliverables**: updated packages, tests for new code paths, `website-pulse` updated with audio sync demo.
 
 ---
 
-### 0.5.0 — Reliability and Stabilization
+### 0.5.0 — Arrangement & Bindings
 
-**Theme**: Fill test gaps and polish the API surface before removing the "early development" label.
+**Theme**: Make it practical to build full-song visual shows and to bind sequencer values to the DOM without boilerplate.
 
-Known coverage gaps (as of v0.2.0):
+#### Arrangement / section switching
+
+Currently a `SequenceProject` is a single looping pattern. Building a full-song visual show requires sequencing multiple patterns in time. Work:
+- Arrange API: a sequence of (`patternId`, `startBeatOrMs`, `endBeatOrMs`) entries that the engine resolves at runtime.
+- Pattern switching on the existing timeline foundation from 0.4.0.
+
+#### React animation bindings
+
+`@vixeq/react` today provides hooks for subscribing to step events. The missing piece is a hook that runs a `requestAnimationFrame` loop and returns easing-interpolated values every frame — removing the DIY loop entirely:
+
+```ts
+const values = useAnimatedChannels(engine);
+// { "kick": 0.73, "bass": 0.21, ... } — updated every rAF tick
+```
+
+Also a CSS variable bind helper:
+
+```ts
+bindChannelsToElement(engine, element, {
+  kick: "--pulse-beat",
+  bass: "--pulse-cta",
+});
+```
+
+Files to touch:
+- `packages/react/src/useAnimatedChannels.ts` (new)
+- `packages/core/src/bind.ts` (new, framework-free CSS variable binder)
+- `packages/core/src/index.ts` — export `bindChannelsToElement`
+
+#### Envelope / decay primitives
+
+The "trigger and decay" pattern — a value spikes to 1.0 on a beat and falls back to 0 over a configured duration — appears in every visual sequencer. Formalizing it removes one more DIY concern:
+
+```ts
+import { createEnvelope } from "@vixeq/core";
+
+const env = createEnvelope({ attack: 5, decay: 120, curve: "easeOutCubic" });
+engine.on("step", (e) => {
+  if (e.tracks[0].value > 0) env.trigger(e.timestamp);
+});
+// env.sample(now) → 0.0–1.0
+```
+
+File: `packages/core/src/envelope.ts` (new).
+
+---
+
+### 0.6.0 — Reliability & Docs
+
+**Theme**: Fill test gaps and polish the API surface. Lay the groundwork for removing the "early development" label.
+
+#### Test coverage
+
+Known gaps (as of v0.3.0):
 - `packages/react/src/useSequencerEngine.ts` — no tests (lifecycle, project hot-swap, StrictMode)
 - `packages/player-react/src/SequencePlayer.tsx` — no tests (pointer-drag editing, imperative ref, nine edit reason types)
 - `packages/core/src/validation.ts` — no dedicated tests for `validateProject` / `normalizeProject`
+- New code from 0.4.0 and 0.5.0
 
-Work in this cycle:
-- Vitest + React Testing Library tests for the above.
-- Any API surface adjustments identified during testing.
-- Evaluate if `"early development"` can be retired from the README.
+Work: Vitest + React Testing Library tests for the above. Any API surface adjustments identified during testing.
+
+#### `prefers-reduced-motion` and SSR ergonomics
+
+`@vixeq/react` hooks run in `useEffect` which is safe for SSR, but there is no built-in handling for `prefers-reduced-motion`. For production use in Next.js and Astro (both SSR-first):
+- `useAnimatedChannels` respects `prefers-reduced-motion` by default, returning static values when motion is reduced.
+- No `window` accesses in the module entry point.
+
+#### Non-musical example
+
+Add one example demonstrating a use case with no musical framing — e.g., a data visualization dashboard where bar heights are driven by a `SequenceProject`, or a generative ambient background shader. This proves the "general-purpose timing engine" claim concretely.
+
+#### API reference documentation
+
+Document the public API surface — types, function signatures, options — in a format suitable for a future docs site.
+
+---
+
+### 1.0.0 — Stabilization & Commitment
+
+**Theme**: Freeze the public API surface, retire the "early development" label, and commit to semver.
+
+- Public API frozen. Breaking changes from this point forward require a major version bump.
+- README "early development" notice removed.
+- All 0.4.0–0.6.0 deliverables complete and integrated.
+- Flagship audio sync example polished and hosted.
+- API reference documentation complete.
+
+**Release gates** (all required):
+- Public API stable and documented
+- Audio sync fully working with flagship example
+- Test coverage complete for all packages
+- Non-musical use case demonstrated
 
 ---
 
@@ -89,16 +214,16 @@ Work in this cycle:
 
 These tasks run in parallel with the release cycles above:
 
-- **Update `README.md`**: add `website-pulse` and `website-svg` to the examples section; update the "Current Scope" list to reflect 0.3.0 additions.
-- **Non-musical example**: add one example demonstrating a use case with no musical framing (e.g., data visualization dashboard, ambient background shader, or UI state machine).
+- **Update `README.md`**: add `website-pulse` and `website-svg` to the examples section; update the "Current Scope" list to reflect 0.3.0 additions; update "does not include" section as audio sync lands in 0.4.0.
 - **Preset expansion**: add more named presets to `presets.ts` (e.g., triplet, waltz, slow pulse, burst).
+- **Multi-example Pages hosting**: host `website-svg` and `website-pulse` alongside the playground.
 
 ## Explicitly Out of Scope
 
-These items are not planned and are unlikely to be added:
+These items are not planned:
 
-- Audio engine or audio scheduling (Web Audio API, Tone.js integration)
-- MIDI input/output
-- DAW-style timeline editing UI
-- URL sharing / project serialization beyond JSON export
-- Production stability guarantees before 1.0
+- **Audio engine** — vixeq does not generate, synthesize, or schedule audio. It follows external audio; it does not produce it. `createAudioClock` (0.4.0) is an adapter to an external `HTMLMediaElement`, not a sampler or synthesizer. Tone.js integration, sample playback, Web Audio graph construction, and MIDI scheduling remain out of scope.
+- **MIDI input/output**
+- **DAW-style timeline editing UI**
+- **URL sharing / project serialization beyond JSON export**
+- **Production stability guarantees before 1.0**

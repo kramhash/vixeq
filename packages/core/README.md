@@ -41,6 +41,49 @@ engine.dispose();
 
 Use `setProject(nextProject)` when your app edits the immutable project while the engine is alive.
 
+## Audio Sync
+
+Vixeq does not require audio, but browser audio can be used as an optional clock source.
+
+```ts
+import { SequencerEngine, createMediaElementTransport, createProject } from "@vixeq/core";
+
+const project = createProject();
+const audio = new Audio("/loop.wav");
+audio.loop = true;
+
+const transport = createMediaElementTransport(audio);
+const engine = new SequencerEngine(project, {
+  clock: transport.clock,
+  timeDriven: true,
+});
+
+await transport.play();
+engine.start();
+```
+
+`createMediaElementTransport` is a browser-only helper for `HTMLMediaElement`. It coordinates `play`, `stop`, `pause`, `seek`, and exposes a `SequencerClock`; the sequencer engine itself stays audio-agnostic.
+
+For seamless loops, decode the file and use an `AudioBufferSourceNode` transport:
+
+```ts
+import { SequencerEngine, createAudioBufferTransport, createProject } from "@vixeq/core";
+
+const ctx = new AudioContext();
+const response = await fetch("/loop.wav");
+const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
+const transport = createAudioBufferTransport(ctx, buffer, { loop: true });
+const engine = new SequencerEngine(createProject(), {
+  clock: transport.clock,
+  timeDriven: true,
+});
+
+await transport.play();
+engine.start();
+```
+
+Loop boundaries are handled by `AudioBufferSourceNode.loop`. The transport creates a new one-shot source only when playback starts or when seeking during playback.
+
 ## Project Helpers
 
 ```ts
@@ -70,7 +113,7 @@ Use `validateProject` when you need errors for user-facing import flows. Use `no
 
 This package is currently in early development. It intentionally stays UI-agnostic, while React hooks and GUI components live in separate packages.
 
-The current scope is the engine, immutable project helpers, track transforms, validation, presets, smoothing helpers, and timeline utilities. It does not include audio output, MIDI, storage, or UI.
+The current scope is the engine, immutable project helpers, track transforms, validation, presets, smoothing helpers, timeline utilities, and optional browser audio transport helpers. It does not include MIDI, storage, or UI.
 
 The core API is intentionally small:
 
@@ -81,3 +124,4 @@ The core API is intentionally small:
 - `validateProject`
 - `normalizeProject`
 - built-in presets
+- optional `SequencerTransport` helpers

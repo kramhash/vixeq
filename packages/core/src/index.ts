@@ -1,4 +1,10 @@
 export { SequencerEngine } from "./SequencerEngine";
+export {
+  createAudioBufferTransport,
+  createAudioClock,
+  createAudioContextClock,
+  createMediaElementTransport,
+} from "./audioClock";
 export { browserClock } from "./clock";
 export {
   easeInCubic,
@@ -33,6 +39,10 @@ export * from "./timeline";
 export { normalizeProject, validateProject } from "./validation";
 export type { SmoothingConfig } from "./smoothing";
 export type {
+  AudioClock,
+  AudioClockOptions,
+  AudioBufferTransportOptions,
+  AudioContextClock,
   MissedStepPolicy,
   ProjectEvent,
   SequenceProject,
@@ -40,6 +50,7 @@ export type {
   SequencerEngineOptions,
   SequencerEventMap,
   SequencerEventName,
+  SequencerTransport,
   StepEvent,
   StepEventTrack,
   StepValue,
@@ -48,6 +59,7 @@ export type {
   Unsubscribe,
   ValidationIssue,
   ValidationResult,
+  MediaElementTransportOptions,
 } from "./types";
 export type { CreateProjectOptions, RandomizeTrackOptions } from "./project";
 export type { EasingFunction } from "./easing";

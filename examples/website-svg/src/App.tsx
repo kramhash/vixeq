@@ -115,8 +115,10 @@ export const App = () => {
   useSmoothedChannels(latestEvent, reducedMotion, onFrame);
 
   useEffect(() => {
-    if (!reducedMotion) playerRef.current?.play();
-    return () => playerRef.current?.stop();
+    if (!reducedMotion) void playerRef.current?.play();
+    return () => {
+      void playerRef.current?.stop();
+    };
   }, [reducedMotion]);
 
   const displayValues = reducedMotion ? STATIC_VALUES : svgValues;

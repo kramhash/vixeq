@@ -7,7 +7,8 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "gen:audio": "node scripts/gen-loop.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",

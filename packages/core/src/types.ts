@@ -85,6 +85,15 @@ export type SequencerClock = {
   clearTimer(timerId: unknown): void;
 };
 
+export type SequencerTransport = {
+  clock: SequencerClock;
+  play(): void | Promise<void>;
+  stop(): void | Promise<void>;
+  pause?(): void | Promise<void>;
+  seek?(timeMs: number): void | Promise<void>;
+  dispose?(): void;
+};
+
 export type MissedStepPolicy = "emit" | "skip";
 
 export type SequencerEngineOptions = {
@@ -92,6 +101,41 @@ export type SequencerEngineOptions = {
   lookaheadMs?: number;
   missedStepPolicy?: MissedStepPolicy;
   onStep?: SequencerEventHandler<"step">;
+  /** When true, step index is derived from absolute time rather than incremented. */
+  timeDriven?: boolean;
+  /** Absolute ms that corresponds to step 0 in time-driven mode. Defaults to 0. */
+  originMs?: number;
+};
+
+export type AudioClockOptions = {
+  /** An AudioContext for high-resolution interpolation between media.currentTime samples. */
+  audioContext?: AudioContext;
+};
+
+export type MediaElementTransportOptions = AudioClockOptions & {
+  /** Reset media.currentTime to this position when stop() is called. Defaults to 0. */
+  stopAtMs?: number;
+};
+
+export type AudioBufferTransportOptions = {
+  /** Destination node for playback. Defaults to audioContext.destination. */
+  destination?: AudioNode;
+  /** Loop the AudioBufferSourceNode. Defaults to false. */
+  loop?: boolean;
+  /** Reset transport time to this position when stop() is called. Defaults to 0. */
+  stopAtMs?: number;
+};
+
+export type AudioClock = SequencerClock & {
+  /** Remove all event listeners added to the media element. */
+  dispose(): void;
+};
+
+export type AudioContextClock = SequencerClock & {
+  /** Anchor to the current AudioContext time and begin advancing. Call at the same moment as source.start(0). */
+  start(): void;
+  /** Stop advancing; now() returns 0 until start() is called again. */
+  stop(): void;
 };
 
 export type ValidationIssue = {

@@ -208,6 +208,11 @@ body {
     transform: scale(calc(1 + var(--pulse-cta) * 0.06));
     transition: none;
 }
+.btn-primary:disabled {
+    cursor: not-allowed;
+    opacity: 0.62;
+    transform: none;
+}
 
 .btn-secondary {
     padding: 0.8rem 2rem;
@@ -333,6 +338,33 @@ body {
     color: inherit;
     cursor: pointer;
     font-size: inherit;
+}
+
+/* ─── audio file picker ──────────────────────────────── */
+.audio-file-label {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+    color: var(--c-muted);
+    cursor: pointer;
+    margin-top: 0.5rem;
+}
+.audio-file-input {
+    font-size: 0.8rem;
+    color: var(--c-muted);
+    min-width: 0;
+}
+
+.audio-error {
+    max-width: 46ch;
+    padding: 0.65rem 0.85rem;
+    border: 1px solid color-mix(in srgb, #ff6b7a 45%, transparent);
+    border-radius: 6px;
+    background: color-mix(in srgb, #ff6b7a 10%, transparent);
+    color: #ff9aa5;
+    font-size: 0.82rem;
+    line-height: 1.45;
 }
 
 /* ─── editor panel ──────────────────────────────────── */

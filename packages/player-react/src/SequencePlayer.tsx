@@ -9,6 +9,8 @@ import {
   setTrackEnabled,
   toggleStep,
   type SequenceProject,
+  type SequencerClock,
+  type SequencerTransport,
   type StepEvent,
   type TransportEvent,
 } from "@vixeq/core";
@@ -48,30 +50,54 @@ export type SequencePlayerProjectChange = {
 export type SequencePlayerTransportState = {
   currentStep: number;
   isPlaying: boolean;
+  isStarting: boolean;
   latestEvent: StepEvent | null;
+  transportError: unknown | null;
 };
 
 export type SequencePlayerRef = {
-  play: () => void;
-  stop: () => void;
-  toggle: () => void;
-  reset: (stepIndex?: number) => void;
+  play: () => Promise<void>;
+  stop: () => Promise<void>;
+  toggle: () => Promise<void>;
+  reset: (stepIndex?: number) => Promise<void>;
 };
 
-export type SequencePlayerProps = {
+type SequencePlayerBaseProps = {
   project: SequenceProject;
   onProjectChange: (change: SequencePlayerProjectChange) => void;
   onStep?: (event: StepEvent) => void;
   onTransportChange?: (event: TransportEvent) => void;
   onSelectedStepChange?: (selectedStep: SelectedStep | null) => void;
+  timeDriven?: boolean;
+  originMs?: number;
+  showTransportControls?: boolean;
   className?: string;
   style?: CSSProperties;
 };
 
-export type StandaloneSequencePlayerProps = Omit<SequencePlayerProps, "project" | "onProjectChange"> & {
-  defaultProject?: SequenceProject;
-  onProjectChange?: (change: SequencePlayerProjectChange) => void;
-};
+export type SequencePlayerProps =
+  | (SequencePlayerBaseProps & {
+      clock?: SequencerClock;
+      transport?: never;
+    })
+  | (SequencePlayerBaseProps & {
+      clock?: never;
+      transport: SequencerTransport;
+    });
+
+export type StandaloneSequencePlayerProps =
+  | (Omit<SequencePlayerBaseProps, "project" | "onProjectChange"> & {
+      defaultProject?: SequenceProject;
+      onProjectChange?: (change: SequencePlayerProjectChange) => void;
+      clock?: SequencerClock;
+      transport?: never;
+    })
+  | (Omit<SequencePlayerBaseProps, "project" | "onProjectChange"> & {
+      defaultProject?: SequenceProject;
+      onProjectChange?: (change: SequencePlayerProjectChange) => void;
+      clock?: never;
+      transport: SequencerTransport;
+    });
 
 const formatValue = (value: number): string => value.toFixed(2);
 
@@ -82,17 +108,44 @@ const readPointerValue = (event: PointerEvent<HTMLElement>): number => {
 };
 
 export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>(function SequencePlayer(
-  { project, onProjectChange, onStep, onTransportChange, onSelectedStepChange, className, style },
+  {
+    project,
+    onProjectChange,
+    onStep,
+    onTransportChange,
+    onSelectedStepChange,
+    clock,
+    transport,
+    timeDriven,
+    originMs,
+    showTransportControls = true,
+    className,
+    style,
+  },
   ref,
 ) {
   const [selected, setSelected] = useState<SelectedStep | null>(null);
   const draggingRef = useRef(false);
   const pointerStartRef = useRef<{ x: number; y: number; trackId: string; stepIndex: number } | null>(null);
-  const player = useSequencePlayer({
-    project,
-    onStep,
-    onTransportChange,
-  });
+  const player = useSequencePlayer(
+    transport
+      ? {
+          project,
+          onStep,
+          onTransportChange,
+          transport,
+          timeDriven,
+          originMs,
+        }
+      : {
+          project,
+          onStep,
+          onTransportChange,
+          clock,
+          timeDriven,
+          originMs,
+        },
+  );
 
   useImperativeHandle(
     ref,
@@ -146,36 +199,56 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
       data-playing={player.isPlaying ? "true" : "false"}
     >
       <header className="vixeq-player__transport">
-        <div className="vixeq-player__transport-main">
-          <button className="vixeq-player__play" type="button" onClick={player.toggle}>
-            {player.isPlaying ? "Stop" : "Play"}
-          </button>
-          <button type="button" onClick={() => player.reset(0)}>
-            Reset
-          </button>
-          <label className="vixeq-player__number-field">
-            BPM
-            <input
-              min={SEQUENCER_LIMITS.minBpm}
-              max={SEQUENCER_LIMITS.maxBpm}
-              step={1}
-              type="number"
-              value={project.bpm}
-              onChange={(event) =>
-                commitProject({
-                  project: setProjectBpm(project, Number(event.target.value)),
-                  reason: "bpm",
-                })
-              }
-            />
-          </label>
-        </div>
+        {showTransportControls && (
+          <div className="vixeq-player__transport-main">
+            <button
+              className="vixeq-player__play"
+              type="button"
+              disabled={player.isStarting}
+              onClick={() => {
+                void player.toggle();
+              }}
+            >
+              {player.isStarting ? "Starting..." : player.isPlaying ? "Stop" : "Play"}
+            </button>
+            <button
+              type="button"
+              disabled={player.isStarting}
+              onClick={() => {
+                void player.reset(0);
+              }}
+            >
+              Reset
+            </button>
+            <label className="vixeq-player__number-field">
+              BPM
+              <input
+                min={SEQUENCER_LIMITS.minBpm}
+                max={SEQUENCER_LIMITS.maxBpm}
+                step={1}
+                type="number"
+                value={project.bpm}
+                onChange={(event) =>
+                  commitProject({
+                    project: setProjectBpm(project, Number(event.target.value)),
+                    reason: "bpm",
+                  })
+                }
+              />
+            </label>
+          </div>
+        )}
         <div className="vixeq-player__readout">
           <span>Step {player.currentStep + 1}</span>
           <span>{project.stepCount} Steps</span>
           <span>{project.tracks.length} Lanes</span>
         </div>
       </header>
+      {player.transportError !== null && (
+        <p className="vixeq-player__error" role="alert">
+          Transport failed. Check the audio source and browser playback permission.
+        </p>
+      )}
 
       <div className="vixeq-player__body">
         <div className="vixeq-player__grid-shell">
@@ -386,17 +459,16 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
 export const StandaloneSequencePlayer = forwardRef<SequencePlayerRef, StandaloneSequencePlayerProps>(
   function StandaloneSequencePlayer({ defaultProject, onProjectChange, ...props }, ref) {
     const [project, setProject] = useState(() => defaultProject ?? createProject({ trackNames: ["Lane 1", "Lane 2", "Lane 3", "Lane 4"] }));
+    const nextProps = {
+      ...props,
+      ref,
+      project,
+      onProjectChange: (change: SequencePlayerProjectChange) => {
+        setProject(change.project);
+        onProjectChange?.(change);
+      },
+    } as SequencePlayerProps & { ref: typeof ref };
 
-    return (
-      <SequencePlayer
-        {...props}
-        ref={ref}
-        project={project}
-        onProjectChange={(change) => {
-          setProject(change.project);
-          onProjectChange?.(change);
-        }}
-      />
-    );
+    return <SequencePlayer {...nextProps} />;
   },
 );
