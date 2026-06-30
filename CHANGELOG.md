@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.5.0 - 2026-06-30
+
+### Added
+
+- **Envelope primitives** in `@vixeq/core`:
+  - `createEnvelope(options)` — time-based attack/decay envelope with configurable curve (`attack?`, `decay?`, `curve?`, `peak?`).
+  - `createDecayEnvelope(config)` — impulse-and-exponential-decay envelope backed by the existing `smoothing.ts` helpers (`exciteSmoothedValue` / `decaySmoothedValue`). Matches the beat-driven "punch-and-drop" pattern used in visual choreography.
+  - Both implement the `Envelope` interface (`trigger(timeMs, value?)` / `sample(timeMs)`).
+- **`@vixeq/core/dom` subpath** — DOM utility, tree-shakable and separately importable:
+  - `bindChannelsToElement(element, values, mapping, options?)` — writes a `Record<string, number>` of channel values as CSS custom properties on an `HTMLElement`. Replaces hand-rolled `element.style.setProperty` loops.
+- **`useAnimatedChannels` hook** in `@vixeq/react`:
+  - Runs a `requestAnimationFrame` loop and samples channel values every frame.
+  - **Envelope mode**: pass `envelopes` (a map of `trackId → Envelope`); the hook subscribes to step events and calls `envelope.trigger()` / `envelope.sample()` each frame.
+  - **Interpolation mode** (default, no envelopes): calls `engine.sampleChannels(now, easing)` each frame for smooth lerp-based animation.
+  - Accepts `latestEvent` in options as an alternative envelope trigger source when the engine is not directly accessible (e.g. when using `SequencePlayer`'s `onStep` callback).
+  - `reducedMotion` option pauses the rAF loop. SSR-safe (no `window.matchMedia` access).
+  - Values are stored in a mutable ref and pushed via `onFrame` callback — no React re-renders per frame.
+- **`engine` field** on `useSequencerEngine` / `useSequencePlayer` return value — exposes the underlying `SequencerEngine | null` for consumers who need direct engine access (e.g. for `useAnimatedChannels`).
+- **`onEngineChange` prop** on `SequencePlayer` (`@vixeq/player-react`) — callback called with the `SequencerEngine` when it becomes available and with `null` when disposed. Allows consumers of `SequencePlayer` to pass the engine to `useAnimatedChannels` for zero-re-render animation.
+
+### Changed
+
+- `examples/website-pulse` refactored to use the new public API: `useSmoothedChannels.ts` (hand-rolled rAF + CSS variable writes) replaced by `useAnimatedChannels` + `bindChannelsToElement`. Visual output is identical.
+
+### Notes
+
+- `@vixeq/core/dom` introduces the first `HTMLElement` usage in the core package. `@vixeq/core` itself remains DOM-free; the DOM utilities are behind the `./dom` subpath and are never imported by the main entry point.
+- Envelope mode and interpolation mode produce different animation curves. Use `createDecayEnvelope` for percussion-style "impulse and decay"; use `sampleChannels`-based interpolation for smooth continuous morphing between step values.
+
 ## 0.4.0 - 2026-06-22
 
 ### Added

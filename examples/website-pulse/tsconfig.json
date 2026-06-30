@@ -5,6 +5,7 @@
     "baseUrl": ".",
     "paths": {
       "@vixeq/core": ["../../packages/core/src/index.ts"],
+      "@vixeq/core/dom": ["../../packages/core/src/dom.ts"],
       "@vixeq/react": ["../../packages/react/src/index.ts"],
       "@vixeq/player-react": ["../../packages/player-react/src/index.tsx"]
     },

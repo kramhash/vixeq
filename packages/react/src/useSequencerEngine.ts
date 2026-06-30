@@ -27,6 +27,8 @@ export type SequencerEngineHookOptions =
     });
 
 export type SequencerEngineHookState = {
+  /** The underlying SequencerEngine instance, or null while unmounted. */
+  engine: SequencerEngine | null;
   currentStep: number;
   isPlaying: boolean;
   isStarting: boolean;
@@ -59,6 +61,7 @@ export function useSequencerEngine(options: SequencerEngineHookOptions): Sequenc
   const engineRef = useRef<SequencerEngine | null>(null);
   const projectRef = useRef(project);
   const isStartingRef = useRef(false);
+  const [engine, setEngine] = useState<SequencerEngine | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -72,19 +75,20 @@ export function useSequencerEngine(options: SequencerEngineHookOptions): Sequenc
   }, [clock, transport]);
 
   useEffect(() => {
-    const engine = new SequencerEngine(projectRef.current, {
+    const newEngine = new SequencerEngine(projectRef.current, {
       clock: activeClock,
       timeDriven,
       originMs,
     });
-    engineRef.current = engine;
+    engineRef.current = newEngine;
+    setEngine(newEngine);
 
-    const offStep = engine.on("step", (event) => {
+    const offStep = newEngine.on("step", (event) => {
       setCurrentStep(event.stepIndex);
       setLatestEvent(event);
       onStepRef.current?.(event);
     });
-    const offTransport = engine.on("transport", (event) => {
+    const offTransport = newEngine.on("transport", (event) => {
       if (event.type === "start") {
         setIsPlaying(true);
       }
@@ -103,8 +107,9 @@ export function useSequencerEngine(options: SequencerEngineHookOptions): Sequenc
     return () => {
       offStep();
       offTransport();
-      engine.dispose();
+      newEngine.dispose();
       engineRef.current = null;
+      setEngine(null);
     };
   }, [activeClock, originMs, onStepRef, onTransportChangeRef, timeDriven]);
 
@@ -194,6 +199,7 @@ export function useSequencerEngine(options: SequencerEngineHookOptions): Sequenc
   }, [transport]);
 
   return {
+    engine,
     currentStep,
     isPlaying,
     isStarting,

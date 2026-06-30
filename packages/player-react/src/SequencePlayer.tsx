@@ -10,6 +10,7 @@ import {
   toggleStep,
   type SequenceProject,
   type SequencerClock,
+  type SequencerEngine,
   type SequencerTransport,
   type StepEvent,
   type TransportEvent,
@@ -18,6 +19,7 @@ import { useSequencePlayer } from "@vixeq/react";
 import {
   forwardRef,
   useCallback,
+  useEffect,
   useImperativeHandle,
   useRef,
   useState,
@@ -68,6 +70,12 @@ type SequencePlayerBaseProps = {
   onStep?: (event: StepEvent) => void;
   onTransportChange?: (event: TransportEvent) => void;
   onSelectedStepChange?: (selectedStep: SelectedStep | null) => void;
+  /**
+   * Called with the underlying SequencerEngine when it becomes available, and
+   * with null when it is disposed (unmount or clock/transport change).
+   * Pass the received engine to useAnimatedChannels for zero-re-render animation.
+   */
+  onEngineChange?: (engine: SequencerEngine | null) => void;
   timeDriven?: boolean;
   originMs?: number;
   showTransportControls?: boolean;
@@ -114,6 +122,7 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
     onStep,
     onTransportChange,
     onSelectedStepChange,
+    onEngineChange,
     clock,
     transport,
     timeDriven,
@@ -157,6 +166,13 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
     }),
     [player.play, player.reset, player.stop, player.toggle],
   );
+
+  // Forward the engine instance to the caller so they can pass it to
+  // useAnimatedChannels for zero-re-render animation via direct subscription.
+  useEffect(() => {
+    onEngineChange?.(player.engine);
+    return () => { onEngineChange?.(null); };
+  }, [player.engine, onEngineChange]);
 
   const updateSelected = useCallback(
     (nextSelected: SelectedStep | null) => {

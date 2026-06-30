@@ -1,18 +1,35 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { VixeqMark } from "./VixeqMark";
 import { SequencePlayer } from "@vixeq/player-react";
 import type { SequencePlayerRef } from "@vixeq/player-react";
 import {
   createAudioBufferTransport,
+  createDecayEnvelope,
   type SequenceProject,
+  type SequencerEngine,
   type SequencerTransport,
-  type StepEvent,
   type TransportEvent,
 } from "@vixeq/core";
-import { brandProject } from "./brandProject";
-import { useSmoothedChannels } from "./useSmoothedChannels";
+import { bindChannelsToElement } from "@vixeq/core/dom";
+import { useAnimatedChannels } from "@vixeq/react";
+import { brandProject, brandTrackIds } from "./brandProject";
 
 const EQ_AMPLITUDES = [0.65, 0.95, 0.8, 1.0, 0.75, 0.9, 0.6];
+
+// Smoothing configs — same values as the previous useSmoothedChannels for visual parity
+const ENVELOPE_CONFIGS = {
+  beat: { decayRate: 4.5, impact: 1.0, lift: 0 },
+  cta:  { decayRate: 3.0, impact: 0.85, lift: 0 },
+  eq:   { decayRate: 7.0, impact: 0.9, lift: 0 },
+  mood: { decayRate: 1.0, impact: 0.5, lift: 0.02 },
+} as const;
+
+const CSS_MAPPING = {
+  [brandTrackIds.beat]: "--pulse-beat",
+  [brandTrackIds.cta]:  "--pulse-cta",
+  [brandTrackIds.eq]:   "--pulse-eq",
+  [brandTrackIds.mood]: "--pulse-mood",
+};
 
 const useReducedMotion = () => {
   const [reduced, setReduced] = useState(
@@ -31,7 +48,6 @@ export const App = () => {
   const [project, setProject] = useState<SequenceProject>(brandProject);
   const [editorOpen, setEditorOpen] = useState(false);
   const reducedMotion = useReducedMotion();
-  const [latestEvent, setLatestEvent] = useState<StepEvent | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [transportError, setTransportError] = useState<string | null>(null);
@@ -73,16 +89,37 @@ export const App = () => {
     };
   }, []);
 
-  const handleStep = useCallback((e: StepEvent) => {
-    setLatestEvent(e);
-  }, []);
-
   const handleTransportChange = useCallback((e: TransportEvent) => {
     if (e.type === "start") setIsPlaying(true);
     if (e.type === "stop") setIsPlaying(false);
   }, []);
 
-  useSmoothedChannels(rootRef, latestEvent, reducedMotion);
+  // Create one envelope per channel; stable for the component's lifetime.
+  const envelopes = useMemo(
+    () => ({
+      [brandTrackIds.beat]: createDecayEnvelope(ENVELOPE_CONFIGS.beat),
+      [brandTrackIds.cta]:  createDecayEnvelope(ENVELOPE_CONFIGS.cta),
+      [brandTrackIds.eq]:   createDecayEnvelope(ENVELOPE_CONFIGS.eq),
+      [brandTrackIds.mood]: createDecayEnvelope(ENVELOPE_CONFIGS.mood),
+    }),
+    [],
+  );
+
+  // Engine exposed by <SequencePlayer> for zero-re-render direct subscription.
+  const [engine, setEngine] = useState<SequencerEngine | null>(null);
+
+  // Write envelope values to CSS custom properties every animation frame.
+  // Engine direct subscription avoids per-step React re-renders.
+  useAnimatedChannels(engine, {
+    envelopes,
+    reducedMotion,
+    onFrame: (values) => {
+      const el = rootRef.current;
+      if (el) {
+        bindChannelsToElement(el, values, CSS_MAPPING);
+      }
+    },
+  });
 
   const handlePlay = useCallback(async () => {
     if (!playerRef.current) return;
@@ -246,7 +283,7 @@ export const App = () => {
             ref={playerRef}
             project={project}
             onProjectChange={({ project: p }) => setProject(p)}
-            onStep={handleStep}
+            onEngineChange={setEngine}
             onTransportChange={handleTransportChange}
             transport={transport}
             timeDriven={true}

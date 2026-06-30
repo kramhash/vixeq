@@ -109,11 +109,51 @@ const project = normalizeProject(input);
 
 Use `validateProject` when you need errors for user-facing import flows. Use `normalizeProject` when you want to coerce importable data into a bounded project.
 
+## Envelopes
+
+Stateful envelope primitives for beat-driven visual effects.
+
+```ts
+import { createEnvelope, createDecayEnvelope } from "@vixeq/core";
+
+// Time-based: attack (0→peak) then decay (peak→0) in milliseconds
+const env = createEnvelope({ attack: 5, decay: 200, curve: easeOutCubic });
+
+// Exponential decay backed by smoothing.ts — matches the "punch-and-drop" feel
+const beatEnv = createDecayEnvelope({ decayRate: 4.5, impact: 1.0, lift: 0 });
+
+engine.on("step", (e) => {
+  const trackValue = e.tracks[0].enabled ? e.tracks[0].value : 0;
+  beatEnv.trigger(e.timestamp, trackValue);
+});
+
+// In your rAF loop:
+const value = beatEnv.sample(performance.now()); // 0–1
+```
+
+Both implement `Envelope`: `trigger(timeMs, value?)` and `sample(timeMs)`.
+
+## DOM Bindings
+
+Write channel values directly to CSS custom properties (separate `@vixeq/core/dom` subpath):
+
+```ts
+import { bindChannelsToElement } from "@vixeq/core/dom";
+
+// In your rAF loop:
+bindChannelsToElement(rootEl, values, {
+  "track-1": "--pulse-beat",
+  "track-2": "--pulse-cta",
+});
+```
+
+This is equivalent to looping over `element.style.setProperty(cssVar, value.toFixed(4))`. The `./dom` subpath imports `HTMLElement` from browser globals; the main `@vixeq/core` entry remains DOM-free.
+
 ## Package Status
 
 This package is currently in early development. It intentionally stays UI-agnostic, while React hooks and GUI components live in separate packages.
 
-The current scope is the engine, immutable project helpers, track transforms, validation, presets, smoothing helpers, timeline utilities, and optional browser audio transport helpers. It does not include MIDI, storage, or UI.
+The current scope is the engine, immutable project helpers, track transforms, validation, presets, smoothing helpers, timeline utilities, envelope primitives, optional browser audio transport helpers, and a DOM utilities subpath. It does not include MIDI, storage, or UI.
 
 The core API is intentionally small:
 
@@ -124,4 +164,6 @@ The core API is intentionally small:
 - `validateProject`
 - `normalizeProject`
 - built-in presets
+- `createEnvelope` / `createDecayEnvelope`
 - optional `SequencerTransport` helpers
+- `bindChannelsToElement` (via `@vixeq/core/dom`)

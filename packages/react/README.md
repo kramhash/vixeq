@@ -62,4 +62,82 @@ function AudioSequencer() {
 }
 ```
 
+## Animated Channels
+
+Drive CSS custom properties (or any per-frame sink) with a `requestAnimationFrame` loop, using either envelope-based or interpolation-based values.
+
+### Envelope mode
+
+Pass a map of `trackId → Envelope` to trigger and sample beat-driven decay animations:
+
+```tsx
+import { createDecayEnvelope } from "@vixeq/core";
+import { bindChannelsToElement } from "@vixeq/core/dom";
+import { useAnimatedChannels, useSequencerEngine } from "@vixeq/react";
+import { useMemo, useRef } from "react";
+
+const ENVELOPES = {
+  [beatTrackId]: createDecayEnvelope({ decayRate: 4.5, impact: 1.0, lift: 0 }),
+  [ctaTrackId]:  createDecayEnvelope({ decayRate: 2.0, impact: 0.8, lift: 0 }),
+};
+
+const CSS_MAPPING = {
+  [beatTrackId]: "--pulse-beat",
+  [ctaTrackId]:  "--pulse-cta",
+};
+
+function PulseScene() {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const { engine } = useSequencerEngine({ project });
+  const envelopes = useMemo(() => ENVELOPES, []);
+
+  useAnimatedChannels(engine, {
+    envelopes,
+    onFrame: (values) => {
+      if (rootRef.current) bindChannelsToElement(rootRef.current, values, CSS_MAPPING);
+    },
+  });
+
+  return <div ref={rootRef} className="scene" />;
+}
+```
+
+### Interpolation mode
+
+Without `envelopes`, the hook calls `engine.sampleChannels(now, easing)` each frame for smooth step-to-step morphing:
+
+```tsx
+import { easeOutCubic } from "@vixeq/core";
+import { useAnimatedChannels, useSequencerEngine } from "@vixeq/react";
+
+function MorphScene() {
+  const { engine } = useSequencerEngine({ project });
+  const valuesRef = useAnimatedChannels(engine, {
+    easing: easeOutCubic,
+    onFrame: (values) => { /* write to DOM */ },
+  });
+  // valuesRef.current holds the latest { trackId: 0–1 } map
+}
+```
+
+### `reducedMotion`
+
+Pass `reducedMotion: true` to pause the rAF loop. The hook does not read `window.matchMedia` — wire it yourself via a state variable. A `usePrefersReducedMotion()` helper is planned for a future release.
+
+### `latestEvent`
+
+When you don't have direct access to the engine (e.g., you're using `SequencePlayer`), pass `latestEvent` from an `onStep` callback to trigger envelopes:
+
+```tsx
+const [latestEvent, setLatestEvent] = useState<StepEvent | null>(null);
+
+useAnimatedChannels(null, {
+  envelopes,
+  latestEvent,
+  onFrame: (values) => { /* ... */ },
+});
+```
+
+---
+
 This package is a thin React integration layer for the core engine. It does not include GUI, visualizer, shader, storage, or audio components.

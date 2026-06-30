@@ -1,6 +1,6 @@
 {
   "name": "@vixeq/core",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "description": "A UI-agnostic step sequencer engine for 0-1 control values.",
   "license": "MIT",
@@ -21,6 +21,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./dom": {
+      "types": "./dist/dom.d.ts",
+      "import": "./dist/dom.js",
+      "require": "./dist/dom.cjs"
     }
   },
   "files": [
@@ -40,7 +45,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts --sourcemap",
+    "build": "tsup src/index.ts src/dom.ts --format esm,cjs --dts --sourcemap",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

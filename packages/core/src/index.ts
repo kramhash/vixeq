@@ -1,4 +1,6 @@
 export { SequencerEngine } from "./SequencerEngine";
+export { createDecayEnvelope, createEnvelope } from "./envelope";
+export type { CreateEnvelopeOptions, Envelope } from "./envelope";
 export {
   createAudioBufferTransport,
   createAudioClock,

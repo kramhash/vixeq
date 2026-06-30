@@ -31,3 +31,11 @@ const build = (): SequenceProject => {
 };
 
 export const brandProject = build();
+
+/** Explicit track ID mapping for use with useAnimatedChannels / bindChannelsToElement. */
+export const brandTrackIds = {
+  beat: brandProject.tracks[0]!.id,
+  cta:  brandProject.tracks[1]!.id,
+  eq:   brandProject.tracks[2]!.id,
+  mood: brandProject.tracks[3]!.id,
+} as const;

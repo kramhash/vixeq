@@ -111,9 +111,29 @@ Update `examples/website-pulse` with an audio sync demo: a short CC0/royalty-fre
 
 ---
 
-### 0.5.0 — Arrangement & Bindings
+### 0.5.0 — Bindings & Envelope ✓
 
-**Theme**: Make it practical to build full-song visual shows and to bind sequencer values to the DOM without boilerplate.
+**Theme**: Formalize the "rAF loop + envelope + CSS var" pattern that appears in every beat-driven visual, removing the DIY boilerplate.
+
+Delivered:
+- `createEnvelope(options)` — time-based attack/decay envelope with configurable `attack`, `decay`, and `curve`. Trigger on a step event; sample at any timestamp.
+- `createDecayEnvelope(config)` — impulse-and-exponential-decay envelope backed by `smoothing.ts`. Reproduces the percussive "punch-and-drop" pattern from `website-pulse`.
+- `Envelope` interface (`trigger(timeMs, value?)` / `sample(timeMs)`) — unified contract implemented by both envelope types.
+- `@vixeq/core/dom` subpath — `bindChannelsToElement(element, values, mapping)` writes a channel value map to CSS custom properties. Core remains DOM-free; the binder is a separate tree-shakable entry.
+- `useAnimatedChannels(engine, options)` in `@vixeq/react` — rAF loop with two modes:
+  - **Envelope mode**: subscribes to step events; triggers and samples `Envelope` instances per frame.
+  - **Interpolation mode**: calls `engine.sampleChannels(now, easing)` per frame.
+  - `reducedMotion` option; `onFrame` callback for zero-overhead DOM writes; `latestEvent` option for use without direct engine access.
+- `engine: SequencerEngine | null` added to `useSequencerEngine` / `useSequencePlayer` return value.
+- `examples/website-pulse` — `useSmoothedChannels.ts` deleted; refactored to use the new public API with identical visual output.
+
+**Arrangement / section switching** was deferred to a future release. It requires a new playback model in `SequencerEngine` (currently a single looping `SequenceProject`) and benefits from independent scope.
+
+---
+
+### 0.6.0 — Arrangement & Reliability
+
+**Theme**: Multi-pattern arrangement, test coverage, and SSR ergonomics.
 
 #### Arrangement / section switching
 
@@ -121,65 +141,19 @@ Currently a `SequenceProject` is a single looping pattern. Building a full-song 
 - Arrange API: a sequence of (`patternId`, `startBeatOrMs`, `endBeatOrMs`) entries that the engine resolves at runtime.
 - Pattern switching on the existing timeline foundation from 0.4.0.
 
-#### React animation bindings
-
-`@vixeq/react` today provides hooks for subscribing to step events. The missing piece is a hook that runs a `requestAnimationFrame` loop and returns easing-interpolated values every frame — removing the DIY loop entirely:
-
-```ts
-const values = useAnimatedChannels(engine);
-// { "kick": 0.73, "bass": 0.21, ... } — updated every rAF tick
-```
-
-Also a CSS variable bind helper:
-
-```ts
-bindChannelsToElement(engine, element, {
-  kick: "--pulse-beat",
-  bass: "--pulse-cta",
-});
-```
-
-Files to touch:
-- `packages/react/src/useAnimatedChannels.ts` (new)
-- `packages/core/src/bind.ts` (new, framework-free CSS variable binder)
-- `packages/core/src/index.ts` — export `bindChannelsToElement`
-
-#### Envelope / decay primitives
-
-The "trigger and decay" pattern — a value spikes to 1.0 on a beat and falls back to 0 over a configured duration — appears in every visual sequencer. Formalizing it removes one more DIY concern:
-
-```ts
-import { createEnvelope } from "@vixeq/core";
-
-const env = createEnvelope({ attack: 5, decay: 120, curve: "easeOutCubic" });
-engine.on("step", (e) => {
-  if (e.tracks[0].value > 0) env.trigger(e.timestamp);
-});
-// env.sample(now) → 0.0–1.0
-```
-
-File: `packages/core/src/envelope.ts` (new).
-
----
-
-### 0.6.0 — Reliability & Docs
-
-**Theme**: Fill test gaps and polish the API surface. Lay the groundwork for removing the "early development" label.
-
 #### Test coverage
 
-Known gaps (as of v0.3.0):
+Known gaps (as of v0.5.0):
 - `packages/react/src/useSequencerEngine.ts` — no tests (lifecycle, project hot-swap, StrictMode)
 - `packages/player-react/src/SequencePlayer.tsx` — no tests (pointer-drag editing, imperative ref, nine edit reason types)
 - `packages/core/src/validation.ts` — no dedicated tests for `validateProject` / `normalizeProject`
-- New code from 0.4.0 and 0.5.0
 
 Work: Vitest + React Testing Library tests for the above. Any API surface adjustments identified during testing.
 
 #### `prefers-reduced-motion` and SSR ergonomics
 
-`@vixeq/react` hooks run in `useEffect` which is safe for SSR, but there is no built-in handling for `prefers-reduced-motion`. For production use in Next.js and Astro (both SSR-first):
-- `useAnimatedChannels` respects `prefers-reduced-motion` by default, returning static values when motion is reduced.
+`@vixeq/react` hooks run in `useEffect` which is safe for SSR. Remaining work:
+- `useAnimatedChannels` currently takes `reducedMotion` as an option. Add a `usePrefersReducedMotion()` helper hook that reads `window.matchMedia` — so callers don't need to wire this manually.
 - No `window` accesses in the module entry point.
 
 #### Non-musical example
