@@ -131,9 +131,11 @@ Delivered:
 
 ---
 
-### 0.6.0 — Arrangement & Reliability
+### 0.6.0 — Arrangement & Reliability ✓
 
 **Theme**: Multi-pattern arrangement, test coverage, and SSR ergonomics.
+
+Delivered in 0.6.0: ArrangementEngine and React integration, missing lifecycle and editor coverage, SSR-safe reduced-motion detection, a non-musical interval workout example, and Markdown API references.
 
 #### Arrangement / section switching
 

@@ -50,10 +50,14 @@ This repository includes small examples that are easier to copy than the full pl
 ```sh
 pnpm --filter vixeq-example-vanilla-core dev
 pnpm --filter vixeq-example-react-player dev
+pnpm --filter vixeq-example-arrangement-demo dev
+pnpm --filter vixeq-example-cycling-workout dev
 ```
 
 - `examples/vanilla-core`: framework-free usage of `@vixeq/core`.
 - `examples/react-player`: controlled `SequencePlayer` usage with external transport controls.
+- `examples/arrangement-demo`: multi-pattern, audio-clock-synchronized arrangement playback.
+- `examples/cycling-workout`: editable interval cycling targets played as a non-musical arrangement.
 
 The hosted playground demonstrates the full package stack: https://kramhash.github.io/vixeq/
 
@@ -77,6 +81,8 @@ The current release line is focused on proving the engine and package boundaries
 - React hooks for using the engine from an app
 - an embeddable React sequence player
 - timeline conversion/query utilities
+- multi-pattern arrangements with gaps, seek, looping, and section events
+- opt-in reduced-motion detection for React animation (`usePrefersReducedMotion`)
 - copyable examples
 - a hosted playground demo
 

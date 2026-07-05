@@ -1,0 +1,176 @@
+:root {
+  --arr-pulse: 0;
+  --arr-glow: 0;
+  --arr-burst: 0;
+  --bg: #0b0d12;
+  --fg: #eef0f4;
+  --muted: #8a90a0;
+  --accent: #7dd8ff;
+  --accent-chorus: #ff8a6b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.app {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 48px 24px 64px;
+}
+
+.app-header h1 {
+  font-size: 1.5rem;
+  margin: 0 0 8px;
+}
+
+.app-header p {
+  color: var(--muted);
+  line-height: 1.6;
+  max-width: 620px;
+}
+
+.app-header code {
+  color: var(--accent);
+  background: rgba(125, 216, 255, 0.08);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+.stage {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  margin: 40px 0 24px;
+  padding: 32px;
+  border-radius: 16px;
+  background: radial-gradient(circle at 30% 30%, rgba(125, 216, 255, 0.06), transparent 60%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.stage-visual {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+
+.stage-pulse {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: scale(calc(0.7 + var(--arr-pulse) * 0.5));
+  opacity: calc(0.35 + var(--arr-pulse) * 0.65);
+  transition: transform 40ms linear, opacity 40ms linear;
+}
+
+.stage-glow {
+  position: absolute;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 calc(20px + var(--arr-glow) * 60px) calc(4px + var(--arr-glow) * 20px) rgba(125, 216, 255, calc(0.15 + var(--arr-glow) * 0.35));
+}
+
+.stage-burst {
+  position: absolute;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 138, 107, calc(var(--arr-burst) * 0.9));
+  transform: scale(calc(0.9 + var(--arr-burst) * 0.35));
+  opacity: var(--arr-burst);
+  transition: transform 40ms linear, opacity 40ms linear;
+}
+
+.stage-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.section-badge {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--muted);
+}
+
+.section-badge[data-section^="chorus"] {
+  color: var(--accent-chorus);
+  border-color: rgba(255, 138, 107, 0.4);
+}
+
+.section-badge[data-section^="intro"] {
+  color: var(--accent);
+  border-color: rgba(125, 216, 255, 0.4);
+}
+
+.btn-primary {
+  background: var(--fg);
+  color: var(--bg);
+  border: none;
+  border-radius: 999px;
+  padding: 10px 28px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.timeline {
+  margin-top: 8px;
+}
+
+.timeline-track {
+  position: relative;
+  height: 44px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.timeline-progress {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(125, 216, 255, 0.18);
+  pointer-events: none;
+}
+
+.timeline-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.timeline-marker:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--fg);
+}

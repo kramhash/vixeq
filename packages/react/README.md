@@ -62,6 +62,37 @@ function AudioSequencer() {
 }
 ```
 
+## Arrangement Usage
+
+`useArrangement` mirrors `useSequencerEngine`'s lifecycle (create on mount, dispose on unmount, hot-swap on prop change) for an `ArrangementProject` — a song-level structure with multiple patterns placed on a shared beat timeline.
+
+```tsx
+import { createArrangement } from "@vixeq/core";
+import { useAnimatedChannels, useArrangement } from "@vixeq/react";
+
+function Song() {
+  const [arrangement] = useState(() =>
+    createArrangement({ bpm: 120, patterns, sections }),
+  );
+  const { engine, currentSection, isPlaying, toggle, seek } = useArrangement({ arrangement });
+
+  // engine satisfies ChannelSource, so it composes directly with useAnimatedChannels
+  useAnimatedChannels(engine, {
+    onFrame: (values) => { /* write to DOM */ },
+  });
+
+  return (
+    <>
+      <button type="button" onClick={toggle}>{isPlaying ? "Stop" : "Play"}</button>
+      <button type="button" onClick={() => seek(16)}>Jump to chorus</button>
+      <span>{currentSection?.id ?? "(gap)"}</span>
+    </>
+  );
+}
+```
+
+`error` on the returned state captures constructor/hot-swap failures (e.g. an invalid arrangement) without throwing during render.
+
 ## Animated Channels
 
 Drive CSS custom properties (or any per-frame sink) with a `requestAnimationFrame` loop, using either envelope-based or interpolation-based values.
@@ -122,7 +153,13 @@ function MorphScene() {
 
 ### `reducedMotion`
 
-Pass `reducedMotion: true` to pause the rAF loop. The hook does not read `window.matchMedia` — wire it yourself via a state variable. A `usePrefersReducedMotion()` helper is planned for a future release.
+Pass `reducedMotion: true` to pause the rAF loop. This is opt-in — the hook does not read `window.matchMedia` on its own. Compose it with `usePrefersReducedMotion()` to follow the OS setting:
+
+```tsx
+import { useAnimatedChannels, usePrefersReducedMotion } from "@vixeq/react";
+
+useAnimatedChannels(engine, { reducedMotion: usePrefersReducedMotion() });
+```
 
 ### `latestEvent`
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
 import {
-  SequencerEngine,
+  type ChannelSource,
   type EasingFunction,
   type Envelope,
   type StepEvent,
@@ -56,7 +56,7 @@ export type AnimatedChannelsOptions = {
  * the DOM (via `bindChannelsToElement`) without triggering re-renders.
  */
 export function useAnimatedChannels(
-  engine: SequencerEngine | null,
+  engine: ChannelSource | null,
   options: AnimatedChannelsOptions = {},
 ): MutableRefObject<Record<string, number>> {
   const { envelopes, easing, reducedMotion = false, onFrame, latestEvent } = options;

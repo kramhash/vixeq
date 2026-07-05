@@ -1,4 +1,28 @@
 export { SequencerEngine } from "./SequencerEngine";
+export {
+  ArrangementEngine,
+  arrangementDurationBeats,
+  createArrangement,
+  normalizeArrangement,
+  resolveArrangementStep,
+  sampleArrangement,
+  sectionAtBeat,
+  unionTrackIds,
+  validateArrangement,
+} from "./arrangement";
+export type {
+  ArrangementEngineOptions,
+  ArrangementEventHandler,
+  ArrangementEventMap,
+  ArrangementEventName,
+  ArrangementProject,
+  ArrangementSection,
+  ArrangementSectionEvent,
+  ArrangementTransportEvent,
+  CreateArrangementOptions,
+  ResolvedArrangementStep,
+  SectionLookup,
+} from "./arrangement";
 export { createDecayEnvelope, createEnvelope } from "./envelope";
 export type { CreateEnvelopeOptions, Envelope } from "./envelope";
 export {
@@ -45,6 +69,7 @@ export type {
   AudioClockOptions,
   AudioBufferTransportOptions,
   AudioContextClock,
+  ChannelSource,
   MissedStepPolicy,
   ProjectEvent,
   SequenceProject,

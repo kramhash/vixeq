@@ -1,3 +1,5 @@
+import type { EasingFunction } from "./easing";
+
 export type StepValue = number;
 
 export type Track = {
@@ -152,3 +154,13 @@ export type ValidationResult =
       ok: false;
       errors: ValidationIssue[];
     };
+
+/**
+ * Minimal contract shared by SequencerEngine and ArrangementEngine.
+ * Lets rAF-driven consumers (e.g. useAnimatedChannels) work with either
+ * engine without depending on the concrete class.
+ */
+export type ChannelSource = {
+  on(eventName: "step", handler: SequencerEventHandler<"step">): Unsubscribe;
+  sampleChannels(timeMs: number, easing?: EasingFunction): Record<string, number>;
+};

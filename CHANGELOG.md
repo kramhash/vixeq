@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.6.0 - 2026-07-05
+
+### Added
+
+- Arrangement projects, pure resolution helpers, and `ArrangementEngine` for multi-pattern playback with gaps, section events, seek, optional looping, deterministic ending, and atomic hot-swap.
+- `useArrangement()` with recoverable error state and live arrangement updates.
+- `usePrefersReducedMotion()`, an opt-in helper for wiring the OS reduced-motion preference into `useAnimatedChannels({ reducedMotion })`.
+- Lifecycle, StrictMode, hot-swap, pointer editing, imperative ref, and validation tests across Core, React, and Player React.
+- Non-musical `examples/cycling-workout` demonstration and package API references under `docs/api`.
+
+### Changed
+
+- `useAnimatedChannels()` accepts the shared `ChannelSource` contract and therefore supports both sequencer engines.
+- Arrangement loop behavior is an engine option rather than project data, keeping playback policy separate from arrangement content.
+
+### Breaking
+
+- `validateProject` now enforces bpm/stepCount/stepsPerBeat ranges, `steps.length === stepCount`, step values within 0-1, and non-empty/unique track ids. Projects that previously validated may now be rejected — run them through `normalizeProject` to repair.
+
+### Migration Notes
+
+- Use `ArrangementEngineOptions.loop` or `useArrangement({ loop: true })` instead of storing `loop` on `ArrangementProject`.
+- `ArrangementEngine.reset()` is now parameterless and always returns to beat 0. Use `seek(beat)` to move to an arbitrary position.
+
 ## 0.5.0 - 2026-06-30
 
 ### Added

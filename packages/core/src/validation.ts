@@ -21,19 +21,29 @@ export const validateProject = (input: unknown): ValidationResult => {
 
   if (typeof input.bpm !== "number" || Number.isNaN(input.bpm)) {
     errors.push({ path: "bpm", message: "BPM must be a number." });
+  } else if (input.bpm < SEQUENCER_LIMITS.minBpm || input.bpm > SEQUENCER_LIMITS.maxBpm) {
+    errors.push({ path: "bpm", message: `BPM must be between ${SEQUENCER_LIMITS.minBpm} and ${SEQUENCER_LIMITS.maxBpm}.` });
   }
 
-  if (!Number.isInteger(input.stepCount)) {
+  if (typeof input.stepCount !== "number" || !Number.isInteger(input.stepCount)) {
     errors.push({ path: "stepCount", message: "Step count must be an integer." });
+  } else if (input.stepCount < SEQUENCER_LIMITS.minStepCount || input.stepCount > SEQUENCER_LIMITS.maxStepCount) {
+    errors.push({ path: "stepCount", message: `Step count must be between ${SEQUENCER_LIMITS.minStepCount} and ${SEQUENCER_LIMITS.maxStepCount}.` });
   }
 
-  if (input.stepsPerBeat !== undefined && !Number.isInteger(input.stepsPerBeat)) {
+  if (input.stepsPerBeat !== undefined && (typeof input.stepsPerBeat !== "number" || !Number.isInteger(input.stepsPerBeat))) {
     errors.push({ path: "stepsPerBeat", message: "Steps per beat must be an integer." });
+  } else if (typeof input.stepsPerBeat === "number" && (input.stepsPerBeat < SEQUENCER_LIMITS.minStepsPerBeat || input.stepsPerBeat > SEQUENCER_LIMITS.maxStepsPerBeat)) {
+    errors.push({ path: "stepsPerBeat", message: `Steps per beat must be between ${SEQUENCER_LIMITS.minStepsPerBeat} and ${SEQUENCER_LIMITS.maxStepsPerBeat}.` });
   }
 
   if (!Array.isArray(input.tracks)) {
     errors.push({ path: "tracks", message: "Tracks must be an array." });
   } else {
+    if (input.tracks.length < SEQUENCER_LIMITS.minTracks || input.tracks.length > SEQUENCER_LIMITS.maxTracks) {
+      errors.push({ path: "tracks", message: `Track count must be between ${SEQUENCER_LIMITS.minTracks} and ${SEQUENCER_LIMITS.maxTracks}.` });
+    }
+    const trackIds = new Set<string>();
     input.tracks.forEach((track, trackIndex) => {
       if (!isRecord(track)) {
         errors.push({ path: `tracks.${trackIndex}`, message: "Track must be an object." });
@@ -42,6 +52,10 @@ export const validateProject = (input: unknown): ValidationResult => {
 
       if (typeof track.id !== "string") {
         errors.push({ path: `tracks.${trackIndex}.id`, message: "Track id must be a string." });
+      } else if (!track.id.trim() || trackIds.has(track.id)) {
+        errors.push({ path: `tracks.${trackIndex}.id`, message: "Track id must be non-empty and unique." });
+      } else {
+        trackIds.add(track.id);
       }
 
       if (typeof track.name !== "string") {
@@ -55,12 +69,18 @@ export const validateProject = (input: unknown): ValidationResult => {
       if (!Array.isArray(track.steps)) {
         errors.push({ path: `tracks.${trackIndex}.steps`, message: "Track steps must be an array." });
       } else {
+        if (Number.isInteger(input.stepCount) && track.steps.length !== input.stepCount) {
+          errors.push({ path: `tracks.${trackIndex}.steps`, message: "Track steps length must equal stepCount." });
+        }
         track.steps.forEach((step, stepIndex) => {
           if (typeof step !== "number" || Number.isNaN(step)) {
             errors.push({
               path: `tracks.${trackIndex}.steps.${stepIndex}`,
               message: "Step value must be a number.",
             });
+          }
+          else if (step < 0 || step > 1) {
+            errors.push({ path: `tracks.${trackIndex}.steps.${stepIndex}`, message: "Step value must be between 0 and 1." });
           }
         });
       }
@@ -88,14 +108,21 @@ export const normalizeProject = (input: unknown): SequenceProject => {
   );
 
   const rawTracks = Array.isArray(input.tracks) ? input.tracks : [];
+  const seenTrackIds = new Set<string>();
   const tracks = rawTracks
     .filter(isRecord)
     .slice(0, SEQUENCER_LIMITS.maxTracks)
     .map((track, index): Track => {
       const rawSteps = Array.isArray(track.steps) ? track.steps : [];
 
+      let id = typeof track.id === "string" && track.id.trim() ? track.id : `track-${index + 1}`;
+      while (seenTrackIds.has(id)) {
+        id = `track-${index + 1}-${id}`;
+      }
+      seenTrackIds.add(id);
+
       return {
-        id: typeof track.id === "string" && track.id.trim() ? track.id : `track-${index + 1}`,
+        id,
         name: typeof track.name === "string" && track.name.trim() ? track.name.trim() : `Track ${index + 1}`,
         enabled: typeof track.enabled === "boolean" ? track.enabled : true,
         steps: Array.from({ length: stepCount }, (_, stepIndex) => {

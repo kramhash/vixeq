@@ -173,11 +173,31 @@ describe("project utilities", () => {
       ],
     };
 
-    expect(validateProject(input).ok).toBe(true);
+    expect(validateProject(input).ok).toBe(false);
 
     const normalized = normalizeProject(input);
     expect(normalized.bpm).toBe(SEQUENCER_LIMITS.maxBpm);
     expect(normalized.tracks[0].name).toBe("Track 1");
     expect(normalized.tracks[0].steps).toEqual([0, 0.25, 1, 0]);
+    expect(validateProject(normalized).ok).toBe(true);
+  });
+
+  it("normalizeProject dedupes duplicate track ids", () => {
+    const input = {
+      version: 1,
+      bpm: 120,
+      stepCount: 4,
+      tracks: [
+        { id: "kick", name: "Kick", enabled: true, steps: [1, 0, 0, 0] },
+        { id: "kick", name: "Kick 2", enabled: true, steps: [0, 1, 0, 0] },
+      ],
+    };
+
+    expect(validateProject(input).ok).toBe(false);
+
+    const normalized = normalizeProject(input);
+    const ids = normalized.tracks.map((track) => track.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(validateProject(normalized).ok).toBe(true);
   });
 });

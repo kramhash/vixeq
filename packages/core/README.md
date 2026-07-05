@@ -149,6 +149,36 @@ bindChannelsToElement(rootEl, values, {
 
 This is equivalent to looping over `element.style.setProperty(cssVar, value.toFixed(4))`. The `./dom` subpath imports `HTMLElement` from browser globals; the main `@vixeq/core` entry remains DOM-free.
 
+## Arrangement
+
+Sequence multiple patterns on a shared song-level beat timeline. An `ArrangementProject` holds a library of patterns plus a list of non-overlapping sections that place them on that timeline; the arrangement's own `bpm` is the single source of truth (each pattern's `bpm` is ignored).
+
+```ts
+import { ArrangementEngine, createArrangement } from "@vixeq/core";
+
+const arrangement = createArrangement({
+  bpm: 120,
+  patterns: { verse: verseProject, chorus: chorusProject },
+  sections: [
+    { id: "v1", patternId: "verse", startBeat: 0, endBeat: 16 },
+    { id: "c1", patternId: "chorus", startBeat: 16, endBeat: 32 },
+  ],
+});
+
+const engine = new ArrangementEngine(arrangement, { loop: false });
+
+engine.on("step", (event) => console.log(event.stepIndex, event.tracks));
+engine.on("section", (event) => console.log(event.section?.id ?? "(gap)"));
+
+engine.start();
+engine.seek(16); // jump to the chorus
+engine.reset();  // rewind to beat 0
+```
+
+Gaps between sections (or past the end, when not looping) output `0` on every channel. `ArrangementEngine` is always time-driven — position is derived from the clock, so `seek`/scrub/audio-sync are correct by construction — and implements the same `on("step", ...)` / `sampleChannels()` shape as `SequencerEngine` (see the `ChannelSource` type), so it works with `useAnimatedChannels` and `bindChannelsToElement` unmodified.
+
+Use `validateArrangement` / `normalizeArrangement` the same way as their `SequenceProject` counterparts. The pure functions behind the engine (`resolveArrangementStep`, `sampleArrangement`, `sectionAtBeat`, `arrangementDurationBeats`, `unionTrackIds`) are also exported for custom playback loops.
+
 ## Package Status
 
 This package is currently in early development. It intentionally stays UI-agnostic, while React hooks and GUI components live in separate packages.
@@ -167,3 +197,4 @@ The core API is intentionally small:
 - `createEnvelope` / `createDecayEnvelope`
 - optional `SequencerTransport` helpers
 - `bindChannelsToElement` (via `@vixeq/core/dom`)
+- `ArrangementEngine` / `createArrangement` for multi-pattern song playback
