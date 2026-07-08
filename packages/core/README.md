@@ -25,7 +25,7 @@ const off = engine.on("step", (event) => {
   console.log(event.stepIndex, event.tracks);
 });
 
-engine.start();
+await engine.play();
 ```
 
 ## Engine Lifecycle
@@ -33,9 +33,10 @@ engine.start();
 ```ts
 const engine = new SequencerEngine(project);
 
-engine.start();
-engine.stop();
-engine.reset(0);
+await engine.play();
+await engine.pause();
+await engine.seekStep(0);
+await engine.stop();
 engine.dispose();
 ```
 
@@ -43,14 +44,13 @@ Use `setProject(nextProject)` when your app edits the immutable project while th
 
 ## Audio Sync
 
-Vixeq does not require audio, but browser audio can be used as an optional playback transport. In the 0.7 staging API, `SequencerEngine` still consumes a `PlaybackClock`; full Engine-to-`PlaybackTransport` integration lands in the Playback v2 engine phase.
+Vixeq does not require audio, but browser audio can be used as an optional playback transport.
 
 ```ts
 import {
   SequencerEngine,
   createMediaElementTransport,
   createProject,
-  type PlaybackClock,
 } from "@vixeq/core";
 
 const project = createProject();
@@ -58,15 +58,9 @@ const audio = new Audio("/loop.wav");
 audio.loop = true;
 
 const transport = createMediaElementTransport(audio);
-const clock: PlaybackClock = {
-  now: () => transport.getPositionMs(),
-  setTimer: (callback, delayMs) => setTimeout(callback, Math.max(0, delayMs)),
-  clearTimer: (timerId) => clearTimeout(timerId as ReturnType<typeof setTimeout>),
-};
-const engine = new SequencerEngine(project, { clock, timeDriven: true });
+const engine = new SequencerEngine(project, { transport });
 
-await transport.play();
-engine.start();
+await engine.play();
 ```
 
 `createMediaElementTransport` is a browser-only helper for `HTMLMediaElement`. It exposes the shared `PlaybackTransport` state, controls, and event stream while leaving media-element ownership with the caller.
@@ -78,22 +72,15 @@ import {
   SequencerEngine,
   createAudioBufferTransport,
   createProject,
-  type PlaybackClock,
 } from "@vixeq/core";
 
 const ctx = new AudioContext();
 const response = await fetch("/loop.wav");
 const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
 const transport = createAudioBufferTransport(ctx, buffer, { loop: true });
-const clock: PlaybackClock = {
-  now: () => transport.getPositionMs(),
-  setTimer: (callback, delayMs) => setTimeout(callback, Math.max(0, delayMs)),
-  clearTimer: (timerId) => clearTimeout(timerId as ReturnType<typeof setTimeout>),
-};
-const engine = new SequencerEngine(createProject(), { clock, timeDriven: true });
+const engine = new SequencerEngine(createProject(), { transport });
 
-await transport.play();
-engine.start();
+await engine.play();
 ```
 
 Loop boundaries are handled by `AudioBufferSourceNode.loop`. The transport creates a new one-shot source only when playback starts or when seeking during playback.
@@ -138,11 +125,11 @@ const beatEnv = createDecayEnvelope({ decayRate: 4.5, impact: 1.0, lift: 0 });
 
 engine.on("step", (e) => {
   const trackValue = e.tracks[0].enabled ? e.tracks[0].value : 0;
-  beatEnv.trigger(e.timestamp, trackValue);
+  beatEnv.trigger(e.scheduledPositionMs, trackValue);
 });
 
 // In your rAF loop:
-const value = beatEnv.sample(performance.now()); // 0–1
+const value = beatEnv.sample(engine.getPosition().positionMs); // 0–1
 ```
 
 Both implement `Envelope`: `trigger(timeMs, value?)` and `sample(timeMs)`.

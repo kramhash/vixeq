@@ -263,11 +263,16 @@ export class ArrangementEngine {
   private emitStep(resolved: ResolvedArrangementStep, timestamp: number): void {
     const pattern = this.arrangement.patterns[resolved.section.patternId];
     const durationMs = this.msPerBeat / pattern.stepsPerBeat;
+    const positionMs = this.beatAt(timestamp) * this.msPerBeat;
     const event: StepEvent = {
       stepIndex: resolved.stepIndex,
       bpm: this.arrangement.bpm,
       timestamp,
+      scheduledPositionMs: positionMs,
+      transportPositionMs: positionMs,
+      lateByMs: 0,
       durationMs,
+      cause: "tick",
       tracks: pattern.tracks.map((track) => ({
         id: track.id,
         name: track.name,

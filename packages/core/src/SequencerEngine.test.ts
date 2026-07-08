@@ -1,20 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SequencerEngine } from "./SequencerEngine";
-import { createProject, setStepValue } from "./project";
-import type { PlaybackClock, StepEvent } from "./types";
+import { createClockTransport, type PlaybackTransport } from "./playbackTransport";
+import { createProject, setProjectBpm, setStepValue } from "./project";
+import { easeOutQuad } from "./easing";
+import type { EnginePlaybackEvent, PlaybackClock, ProjectEvent, StepEvent } from "./types";
 
 class FakeClock implements PlaybackClock {
   currentTime = 0;
-  timers: Array<{ id: number; callback: () => void; dueAt: number }> = [];
-  private nextId = 1;
+  private nextTimerId = 1;
+  private timers: Array<{ id: number; callback: () => void; dueAt: number }> = [];
 
   now(): number {
     return this.currentTime;
   }
 
   setTimer(callback: () => void, delayMs: number): unknown {
-    const id = this.nextId;
-    this.nextId += 1;
+    const id = this.nextTimerId;
+    this.nextTimerId += 1;
     this.timers.push({ id, callback, dueAt: this.currentTime + delayMs });
     return id;
   }
@@ -25,170 +27,392 @@ class FakeClock implements PlaybackClock {
 
   advance(ms: number): void {
     const target = this.currentTime + ms;
-
     while (true) {
-      this.timers.sort((a, b) => a.dueAt - b.dueAt);
-      const nextTimer = this.timers[0];
-      if (!nextTimer || nextTimer.dueAt > target) {
-        break;
-      }
-
+      this.timers.sort((left, right) => left.dueAt - right.dueAt);
+      const timer = this.timers[0];
+      if (!timer || timer.dueAt > target) break;
       this.timers.shift();
-      this.currentTime = nextTimer.dueAt;
-      nextTimer.callback();
+      this.currentTime = timer.dueAt;
+      timer.callback();
     }
-
     this.currentTime = target;
+  }
+
+  jumpWithoutRunningTimers(ms: number): void {
+    this.currentTime += ms;
   }
 }
 
-describe("SequencerEngine", () => {
-  it("emits every sixteenth step at the configured BPM", () => {
-    const clock = new FakeClock();
-    let project = createProject({ bpm: 120, stepCount: 16, trackCount: 1 });
-    project = setStepValue(project, project.tracks[0].id, 0, 1);
-    project = setStepValue(project, project.tracks[0].id, 1, 0.5);
+const STEP_MS = 125;
 
-    const events: StepEvent[] = [];
-    const engine = new SequencerEngine(project, { clock, lookaheadMs: 10 });
-    engine.on("step", (event) => events.push(event));
+const buildTransport = (durationMs?: number): { clock: FakeClock; transport: PlaybackTransport } => {
+  const clock = new FakeClock();
+  const transport = createClockTransport(clock, durationMs === undefined ? undefined : { durationMs });
+  return { clock, transport };
+};
 
-    engine.start();
-    clock.advance(375);
-
-    expect(events.map((event) => event.stepIndex)).toEqual([0, 1, 2, 3]);
-    expect(events.map((event) => event.timestamp)).toEqual([0, 125, 250, 375]);
-    expect(events[0].tracks[0].value).toBe(1);
-    expect(events[1].tracks[0].value).toBe(0.5);
+describe("SequencerEngine — Playback v2", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
   });
 
-  it("applies BPM changes from the next scheduled step", () => {
-    const clock = new FakeClock();
-    const project = createProject({ bpm: 120, stepCount: 16, trackCount: 1 });
-    const events: StepEvent[] = [];
-    const engine = new SequencerEngine(project, { clock, lookaheadMs: 10 });
-    engine.on("step", (event) => events.push(event));
-
-    engine.start();
-    clock.advance(125);
-    engine.setBpm(60);
-    clock.advance(250);
-
-    expect(events.map((event) => event.stepIndex)).toEqual([0, 1, 2]);
-    expect(events.map((event) => event.timestamp)).toEqual([0, 125, 375]);
-    expect(events[1].bpm).toBe(120);
-    expect(events[2].bpm).toBe(60);
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
-  it("emits missed steps by default", () => {
-    const clock = new FakeClock();
+  it("PB-EN-001 plays through a PlaybackTransport and emits step 0 with cause play", async () => {
+    const { transport } = buildTransport();
     const project = createProject({ bpm: 120, stepCount: 16, trackCount: 1 });
-    const events: StepEvent[] = [];
-    const engine = new SequencerEngine(project, { clock, lookaheadMs: 500 });
-    engine.on("step", (event) => events.push(event));
+    const engine = new SequencerEngine(project, { transport });
+    const playback: EnginePlaybackEvent[] = [];
+    const steps: StepEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+    engine.on("step", (event) => steps.push(event));
 
-    engine.start();
-    clock.currentTime = 500;
-    clock.timers.shift()?.callback();
+    await engine.play();
 
-    expect(events.map((event) => event.stepIndex)).toEqual([0, 1, 2, 3, 4]);
+    expect(playback).toMatchObject([
+      { type: "play", cause: "command", previousState: "stopped" },
+    ]);
+    expect(steps).toMatchObject([
+      {
+        stepIndex: 0,
+        cause: "play",
+        scheduledPositionMs: 0,
+        transportPositionMs: 0,
+        lateByMs: 0,
+      },
+    ]);
+    expect(engine.getPlaybackState()).toBe("playing");
   });
 
-  it("can skip missed steps", () => {
-    const clock = new FakeClock();
+  it("PB-EN-002 emits natural tick steps from transport position", async () => {
+    const { clock, transport } = buildTransport();
     const project = createProject({ bpm: 120, stepCount: 16, trackCount: 1 });
-    const events: StepEvent[] = [];
+    const engine = new SequencerEngine(project, { transport, lookaheadMs: 1000 });
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
+
+    await engine.play();
+    clock.advance(STEP_MS * 3);
+    await vi.advanceTimersByTimeAsync(STEP_MS * 3);
+
+    expect(steps.map((event) => event.stepIndex)).toEqual([0, 1, 2, 3]);
+    expect(steps.map((event) => event.scheduledPositionMs)).toEqual([0, 125, 250, 375]);
+    expect(steps.slice(1).every((event) => event.cause === "tick")).toBe(true);
+  });
+
+  it("PB-EN-002 pauses and resumes without duplicating the current step", async () => {
+    const { clock, transport } = buildTransport();
+    const project = createProject({ bpm: 120, stepCount: 16, trackCount: 1 });
+    const engine = new SequencerEngine(project, { transport, lookaheadMs: 1000 });
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
+
+    await engine.play();
+    clock.advance(60);
+    await engine.pause();
+    clock.advance(500);
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(engine.getPosition().positionMs).toBe(60);
+    expect(steps.map((event) => event.stepIndex)).toEqual([0]);
+
+    await engine.play();
+    clock.advance(65);
+    await vi.advanceTimersByTimeAsync(65);
+
+    expect(steps.map((event) => event.stepIndex)).toEqual([0, 1]);
+  });
+
+  it("PB-EN-008 delayed callback with emit catches up every crossed step", async () => {
+    const { clock, transport } = buildTransport();
+    const project = createProject({ bpm: 120, stepCount: 16, trackCount: 1 });
+    const engine = new SequencerEngine(project, { transport, lookaheadMs: 1000 });
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
+
+    await engine.play();
+    clock.jumpWithoutRunningTimers(STEP_MS * 4);
+    await vi.advanceTimersByTimeAsync(STEP_MS);
+
+    expect(steps.map((event) => event.stepIndex)).toEqual([0, 1, 2, 3, 4]);
+    expect(steps[1]).toMatchObject({
+      scheduledPositionMs: 125,
+      transportPositionMs: 500,
+      lateByMs: 375,
+    });
+  });
+
+  it("PB-EN-009 can skip missed transport-driven steps", async () => {
+    const { clock, transport } = buildTransport();
+    const project = createProject({ bpm: 120, stepCount: 16, trackCount: 1 });
     const engine = new SequencerEngine(project, {
-      clock,
-      lookaheadMs: 500,
+      transport,
+      lookaheadMs: 1000,
       missedStepPolicy: "skip",
     });
-    engine.on("step", (event) => events.push(event));
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
 
-    engine.start();
-    clock.currentTime = 500;
-    clock.timers.shift()?.callback();
+    await engine.play();
+    clock.jumpWithoutRunningTimers(STEP_MS * 4);
+    await vi.advanceTimersByTimeAsync(STEP_MS);
 
-    expect(events.map((event) => event.stepIndex)).toEqual([0, 4]);
+    expect(steps.map((event) => event.stepIndex)).toEqual([0, 4]);
+    expect(steps[1].lateByMs).toBe(0);
   });
 
-  it("keeps the current step within range when project changes", () => {
-    const clock = new FakeClock();
-    const project = createProject({ bpm: 120, stepCount: 16, trackCount: 1 });
-    const engine = new SequencerEngine(project, { clock, lookaheadMs: 10 });
+  it("PB-EN-003 stops by returning the shared transport and local position to zero", async () => {
+    const { clock, transport } = buildTransport();
+    const engine = new SequencerEngine(createProject(), { transport });
+    const playback: EnginePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
 
-    engine.reset(15);
-    engine.setProject(createProject({ bpm: 90, stepCount: 8, trackCount: 1 }));
+    await engine.play();
+    clock.advance(40);
+    await engine.stop();
 
-    expect(engine.getCurrentStepIndex()).toBe(7);
-    expect(engine.getProject().bpm).toBe(90);
+    expect(transport.getSnapshot()).toMatchObject({ state: "stopped", positionMs: 0 });
+    expect(engine.getPosition()).toEqual({ positionMs: 0, beat: 0 });
+    expect(playback.at(-1)).toMatchObject({ type: "stop", cause: "command" });
   });
 
-  it("uses stepsPerBeat=2 to produce 250ms steps at 120BPM", () => {
-    const clock = new FakeClock();
-    const project = createProject({ bpm: 120, stepCount: 4, stepsPerBeat: 2, trackCount: 1 });
-    const events: StepEvent[] = [];
-    const engine = new SequencerEngine(project, { clock, lookaheadMs: 10 });
-    engine.on("step", (event) => events.push(event));
+  it("PB-EN-004 PB-EN-005 validates and seeks by step", async () => {
+    const { transport } = buildTransport();
+    const engine = new SequencerEngine(createProject({ bpm: 120, stepCount: 16 }), { transport });
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
 
-    engine.start();
-    clock.advance(750);
+    expect(() => engine.seekStep(-1)).toThrow(RangeError);
+    expect(() => engine.seekStep(16)).toThrow(RangeError);
+    await engine.seekStep(3);
 
-    expect(events.map((e) => e.timestamp)).toEqual([0, 250, 500, 750]);
-    expect(events[0].durationMs).toBeCloseTo(250);
+    expect(transport.getPositionMs()).toBe(3 * STEP_MS);
+    expect(steps).toMatchObject([
+      { stepIndex: 3, cause: "seek", transportPositionMs: 375, scheduledPositionMs: 375 },
+    ]);
+    expect(engine.getPlaybackState()).toBe("paused");
   });
 
-  it("defaults stepsPerBeat to 4 (125ms at 120BPM)", () => {
-    const clock = new FakeClock();
-    const project = createProject({ bpm: 120, stepCount: 2, trackCount: 1 });
-    const events: StepEvent[] = [];
-    const engine = new SequencerEngine(project, { clock, lookaheadMs: 10 });
-    engine.on("step", (event) => events.push(event));
+  it("PB-EN-007 seekPositionMs delegates range validation to the transport", async () => {
+    const { transport } = buildTransport(500);
+    const engine = new SequencerEngine(createProject({ bpm: 120 }), { transport });
+    const playback: EnginePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
 
-    engine.start();
-    clock.advance(125);
-
-    expect(events[0].durationMs).toBeCloseTo(125);
+    await engine.seekPositionMs(250);
+    expect(engine.getCurrentStepIndex()).toBe(2);
+    expect(() => engine.seekPositionMs(501)).toThrow(RangeError);
+    await transport.seekMs(100);
+    expect(playback.at(-1)).toMatchObject({ type: "seek", cause: "transport" });
   });
 
-  it("populates nextValue with the next step value (wrapping at end)", () => {
-    const clock = new FakeClock();
-    let project = createProject({ bpm: 120, stepCount: 3, trackCount: 1 });
+  it("PB-CH-001 PB-CH-004 samples the current logical position and pure positions separately", async () => {
+    const { clock, transport } = buildTransport();
+    let project = createProject({ bpm: 120, stepCount: 4, trackCount: 1 });
     const trackId = project.tracks[0].id;
-    project = setStepValue(project, trackId, 0, 0.1);
-    project = setStepValue(project, trackId, 1, 0.5);
-    project = setStepValue(project, trackId, 2, 0.9);
-
-    const events: StepEvent[] = [];
-    const engine = new SequencerEngine(project, { clock, lookaheadMs: 10 });
-    engine.on("step", (event) => events.push(event));
-
-    engine.start();
-    clock.advance(374);
-
-    // step 0 → nextValue should be step 1; step 2 → nextValue should wrap to step 0
-    expect(events[0].tracks[0].value).toBeCloseTo(0.1);
-    expect(events[0].tracks[0].nextValue).toBeCloseTo(0.5);
-    expect(events[1].tracks[0].nextValue).toBeCloseTo(0.9);
-    expect(events[2].tracks[0].nextValue).toBeCloseTo(0.1);
-  });
-
-  it("sets nextValue to 0 for disabled tracks", () => {
-    const clock = new FakeClock();
-    let project = createProject({ bpm: 120, stepCount: 2, trackCount: 1 });
-    const trackId = project.tracks[0].id;
-    project = setStepValue(project, trackId, 0, 1);
+    project = setStepValue(project, trackId, 0, 0);
     project = setStepValue(project, trackId, 1, 1);
-    project = { ...project, tracks: project.tracks.map((t) => ({ ...t, enabled: false })) };
+    const engine = new SequencerEngine(project, { transport });
 
-    const events: StepEvent[] = [];
-    const engine = new SequencerEngine(project, { clock, lookaheadMs: 10 });
-    engine.on("step", (event) => events.push(event));
+    expect(engine.sampleChannelsAt(STEP_MS / 2)[trackId]).toBeCloseTo(0.5);
+    expect(engine.sampleChannelsAt(STEP_MS / 2, easeOutQuad)[trackId]).toBeCloseTo(0.75);
 
-    engine.start();
-    clock.advance(125);
+    await engine.play();
+    clock.advance(STEP_MS / 2);
+    expect(engine.sampleChannels()[trackId]).toBeCloseTo(0.5);
+  });
 
-    expect(events[0].tracks[0].value).toBe(0);
-    expect(events[0].tracks[0].nextValue).toBe(0);
+  it("PB-EN-011 PB-EN-011A setProject preserves fractional beat without seeking transport", async () => {
+    const { transport } = buildTransport();
+    let project = createProject({ bpm: 120, stepCount: 4, trackCount: 1 });
+    const trackId = project.tracks[0].id;
+    project = setStepValue(project, trackId, 1, 1);
+    const engine = new SequencerEngine(project, { transport });
+    const projects: ProjectEvent[] = [];
+    engine.on("project", (event) => projects.push(event));
+
+    await engine.seekPositionMs(STEP_MS);
+    const nextProject = setProjectBpm(project, 60);
+    engine.setProject(nextProject);
+
+    expect(transport.getPositionMs()).toBe(STEP_MS);
+    expect(engine.getPosition()).toEqual({ positionMs: 250, beat: 0.25 });
+    expect(projects).toHaveLength(1);
+    expect(projects[0]).toMatchObject({
+      project: nextProject,
+      previousProject: project,
+      positionMs: 250,
+      beat: 0.25,
+    });
+  });
+
+  it("PB-EN-012 external seek after live tempo edit discards the temporary anchor", async () => {
+    const { transport } = buildTransport();
+    const project = createProject({ bpm: 120, stepCount: 4, trackCount: 1 });
+    const engine = new SequencerEngine(project, { transport });
+
+    await engine.seekPositionMs(STEP_MS);
+    engine.setProject(setProjectBpm(project, 60));
+    expect(engine.getPosition()).toEqual({ positionMs: 250, beat: 0.25 });
+
+    await transport.seekMs(0);
+
+    expect(engine.getPosition()).toEqual({ positionMs: 0, beat: 0 });
+  });
+
+  it("PB-EN-027 adopts an already-playing transport without synthetic step events", async () => {
+    const { clock, transport } = buildTransport();
+    await transport.play();
+    clock.advance(STEP_MS * 2);
+    const engine = new SequencerEngine(createProject({ bpm: 120, stepCount: 16 }), {
+      transport,
+      lookaheadMs: 1000,
+    });
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
+
+    expect(steps).toEqual([]);
+    clock.advance(STEP_MS);
+    await vi.advanceTimersByTimeAsync(STEP_MS);
+
+    expect(steps.map((event) => event.stepIndex)).toEqual([3]);
+  });
+
+  it("PB-EN-013A rejects invalid constructor and hot-swap projects", () => {
+    const project = createProject();
+    expect(() => new SequencerEngine({ ...project, bpm: 0 })).toThrow(TypeError);
+    expect(() => new SequencerEngine(project, { lookaheadMs: -1 })).toThrow(RangeError);
+
+    const engine = new SequencerEngine(project);
+    expect(() => engine.setProject({ ...project, tracks: [] })).toThrow(TypeError);
+    expect(engine.getProject()).toBe(project);
+  });
+
+  it("PB-EN-017 forwards transport ended and replay starts from zero", async () => {
+    const { clock, transport } = buildTransport(100);
+    const project = createProject({ bpm: 120 });
+    const first = new SequencerEngine(project, { transport });
+    const second = new SequencerEngine(project, { transport });
+    const firstPlayback: EnginePlaybackEvent[] = [];
+    const secondPlayback: EnginePlaybackEvent[] = [];
+    first.on("playback", (event) => firstPlayback.push(event));
+    second.on("playback", (event) => secondPlayback.push(event));
+
+    await first.play();
+    clock.advance(100);
+    expect(first.getPlaybackState()).toBe("ended");
+    expect(second.getPlaybackState()).toBe("ended");
+    await first.play();
+
+    expect(firstPlayback.map((event) => event.type)).toEqual(["play", "ended", "play"]);
+    expect(secondPlayback.map((event) => event.type)).toEqual(["play", "ended", "play"]);
+    expect(transport.getPositionMs()).toBe(0);
+    expect(first.getCurrentStepIndex()).toBe(0);
+  });
+
+  it("PB-EN-011 PB-EN-017 setProject while ended does not leave a stale anchor after replay", async () => {
+    const { clock, transport } = buildTransport(1000);
+    const project = createProject({ bpm: 120 });
+    const engine = new SequencerEngine(project, { transport });
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
+
+    await engine.play();
+    clock.advance(1000);
+    expect(engine.getPlaybackState()).toBe("ended");
+
+    engine.setProject(setProjectBpm(project, 60));
+    expect(engine.getPosition().positionMs).toBe(2000);
+
+    await engine.play();
+
+    expect(transport.getPositionMs()).toBe(0);
+    expect(engine.getPosition().positionMs).toBe(0);
+    expect(engine.getCurrentStepIndex()).toBe(0);
+    expect(steps.at(-1)).toMatchObject({ stepIndex: 0, scheduledPositionMs: 0 });
+  });
+
+  it("PB-EN-019 PB-EN-026 one Engine disposal leaves a borrowed shared transport usable", async () => {
+    const { transport } = buildTransport();
+    const project = createProject();
+    const first = new SequencerEngine(project, { transport });
+    const second = new SequencerEngine(project, { transport });
+    const firstPlayback: EnginePlaybackEvent[] = [];
+    const secondPlayback: EnginePlaybackEvent[] = [];
+    first.on("playback", (event) => firstPlayback.push(event));
+    second.on("playback", (event) => secondPlayback.push(event));
+
+    first.dispose();
+    first.dispose();
+    await second.play();
+
+    expect(transport.getPlaybackState()).toBe("playing");
+    expect(second.getPlaybackState()).toBe("playing");
+    expect(firstPlayback).toEqual([]);
+    expect(secondPlayback).toMatchObject([{ type: "play", cause: "command" }]);
+  });
+
+  it("PB-EN-020 Engine APIs throw after Engine disposal", () => {
+    const { transport } = buildTransport();
+    const engine = new SequencerEngine(createProject(), { transport });
+    engine.dispose();
+
+    expect(() => engine.getProject()).toThrowError(expect.objectContaining({ code: "TRANSPORT_DISPOSED" }));
+    expect(() => engine.sampleChannels()).toThrowError(expect.objectContaining({ code: "TRANSPORT_DISPOSED" }));
+    expect(() => engine.on("step", () => {})).toThrowError(expect.objectContaining({ code: "TRANSPORT_DISPOSED" }));
+    expect(() => engine.play()).toThrowError(expect.objectContaining({ code: "TRANSPORT_DISPOSED" }));
+    expect(transport.getPlaybackState()).toBe("stopped");
+  });
+
+  it("PB-EN-021 isolates Engine listener failures", async () => {
+    const onListenerError = vi.fn();
+    const { transport } = buildTransport();
+    const healthy = vi.fn();
+    const engine = new SequencerEngine(createProject(), { transport, onListenerError });
+    engine.on("playback", () => {
+      throw new Error("listener failed");
+    });
+    engine.on("playback", healthy);
+
+    await engine.play();
+
+    expect(healthy).toHaveBeenCalledOnce();
+    expect(onListenerError).toHaveBeenCalledWith(expect.any(Error), {
+      source: "engine",
+      eventName: "playback",
+    });
+  });
+
+  it("PB-EN-018 transport disposal detaches the Engine at the cached position", async () => {
+    const { clock, transport } = buildTransport();
+    const engine = new SequencerEngine(createProject(), { transport });
+    const playback: EnginePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+
+    await engine.play();
+    clock.advance(20);
+    transport.dispose();
+
+    expect(engine.getPlaybackState()).toBe("paused");
+    expect(engine.getPosition().positionMs).toBe(20);
+    expect(playback.at(-1)).toMatchObject({ type: "error", cause: "transport" });
+    await expect(engine.play()).rejects.toMatchObject({ code: "TRANSPORT_DISPOSED" });
+  });
+
+  it("PB-EN-028 maps external transport events to playback cause transport", async () => {
+    const { transport } = buildTransport(1000);
+    const engine = new SequencerEngine(createProject(), { transport });
+    const playback: EnginePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+
+    await transport.seekMs(250);
+    await transport.setPlaybackRate(2);
+
+    expect(playback).toMatchObject([
+      { type: "seek", cause: "transport" },
+      { type: "ratechange", cause: "transport" },
+    ]);
   });
 });

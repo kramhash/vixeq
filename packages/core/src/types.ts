@@ -1,4 +1,9 @@
 import type { EasingFunction } from "./easing";
+import type {
+  ListenerErrorContext,
+  PlaybackState,
+  PlaybackTransport,
+} from "./playbackTransport";
 
 export type StepValue = number;
 
@@ -28,10 +33,17 @@ export type StepEventTrack = {
 export type StepEvent = {
   stepIndex: number;
   bpm: number;
-  timestamp: number;
+  scheduledPositionMs: number;
+  transportPositionMs: number;
+  lateByMs: number;
   durationMs: number;
+  cause: StepEventCause;
   tracks: StepEventTrack[];
+  /** @deprecated Use scheduledPositionMs. Kept until ArrangementEngine moves to Playback v2. */
+  timestamp?: number;
 };
+
+export type StepEventCause = "play" | "tick" | "seek" | "project-change";
 
 export type TransportEvent =
   | {
@@ -64,12 +76,18 @@ export type ProjectEvent = {
   project: SequenceProject;
   previousProject: SequenceProject;
   stepIndex: number;
-  timestamp: number;
+  changedChannelIds: string[];
+  previousChannels: Record<string, number>;
+  channels: Record<string, number>;
+  positionMs: number;
+  beat: number;
+  /** @deprecated Kept until ArrangementEngine moves to Playback v2. */
+  timestamp?: number;
 };
 
 export type SequencerEventMap = {
   step: StepEvent;
-  transport: TransportEvent;
+  playback: SequencerPlaybackEvent;
   project: ProjectEvent;
 };
 
@@ -98,15 +116,56 @@ export type SequencerTransport = {
 
 export type MissedStepPolicy = "emit" | "skip";
 
+export type EnginePlaybackCause = "command" | "transport" | "local-end";
+
+export type EnginePlaybackSnapshot = {
+  state: PlaybackState;
+  positionMs: number;
+  beat: number;
+  playbackRate: number;
+  projectLoop: boolean;
+  transportLoop: boolean;
+  buffering: boolean;
+};
+
+export type SequencerPlaybackSnapshot = EnginePlaybackSnapshot & {
+  stepIndex: number;
+};
+
+export type EnginePlaybackEvent = {
+  type:
+    | "play"
+    | "pause"
+    | "stop"
+    | "seek"
+    | "ratechange"
+    | "loopchange"
+    | "loop"
+    | "durationchange"
+    | "bufferingchange"
+    | "ended"
+    | "error";
+  cause: EnginePlaybackCause;
+  previousState: PlaybackState;
+  snapshot: EnginePlaybackSnapshot;
+  error?: unknown;
+};
+
+export type SequencerPlaybackEvent = Omit<EnginePlaybackEvent, "snapshot"> & {
+  snapshot: SequencerPlaybackSnapshot;
+};
+
+export type ChannelPosition = {
+  positionMs: number;
+  beat: number;
+};
+
 export type SequencerEngineOptions = {
-  clock?: PlaybackClock;
+  transport?: PlaybackTransport;
   lookaheadMs?: number;
   missedStepPolicy?: MissedStepPolicy;
   onStep?: SequencerEventHandler<"step">;
-  /** When true, step index is derived from absolute time rather than incremented. */
-  timeDriven?: boolean;
-  /** Absolute ms that corresponds to step 0 in time-driven mode. Defaults to 0. */
-  originMs?: number;
+  onListenerError?: (error: unknown, context: ListenerErrorContext) => void;
 };
 
 export type ValidationIssue = {
@@ -131,5 +190,10 @@ export type ValidationResult =
  */
 export type ChannelSource = {
   on(eventName: "step", handler: SequencerEventHandler<"step">): Unsubscribe;
-  sampleChannels(timeMs: number, easing?: EasingFunction): Record<string, number>;
+  sampleChannels(easing?: EasingFunction): Record<string, number>;
+  sampleChannelsAt(timeMs: number, easing?: EasingFunction): Record<string, number>;
+  getPosition(): ChannelPosition;
+  getPlaybackState(): PlaybackState;
+  on(eventName: "playback", handler: SequencerEventHandler<"playback">): Unsubscribe;
+  on(eventName: "project", handler: SequencerEventHandler<"project">): Unsubscribe;
 };

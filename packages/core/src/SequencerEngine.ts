@@ -1,52 +1,140 @@
 import { browserClock } from "./clock";
 import { linear, lerp, type EasingFunction } from "./easing";
-import { SEQUENCER_LIMITS } from "./limits";
-import { clamp } from "./project";
-import { normalizeProject } from "./validation";
+import {
+  createClockTransport,
+  PlaybackError,
+  type PlaybackSnapshot,
+  type PlaybackState,
+  type PlaybackTransport,
+  type PlaybackTransportEvent,
+} from "./playbackTransport";
+import { validateProject } from "./validation";
 import type {
+  ChannelPosition,
+  EnginePlaybackEvent,
+  EnginePlaybackSnapshot,
   ProjectEvent,
   SequenceProject,
-  PlaybackClock,
   SequencerEngineOptions,
   SequencerEventHandler,
   SequencerEventMap,
   SequencerEventName,
+  SequencerPlaybackEvent,
   StepEvent,
-  TransportEvent,
+  StepEventCause,
   Unsubscribe,
 } from "./types";
 
+type ProjectPositionAnchor = {
+  transportPositionMs: number;
+  projectPositionMs: number;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const assertFiniteNonNegative = (value: number, name: string): void => {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new RangeError(`${name} must be a finite, non-negative number.`);
+  }
+};
+
+const assertStepIndex = (value: number, stepCount: number): void => {
+  if (!Number.isInteger(value) || value < 0 || value >= stepCount) {
+    throw new RangeError(`stepIndex must be an integer from 0 to ${stepCount - 1}.`);
+  }
+};
+
+const assertValidProject = (project: SequenceProject): void => {
+  const result = validateProject(project);
+  if (!result.ok) {
+    throw new TypeError(`Invalid SequenceProject: ${result.errors[0]?.path ?? "$"} ${result.errors[0]?.message ?? ""}`.trim());
+  }
+};
+
+const reportListenerError = (
+  error: unknown,
+  eventName: string,
+  onListenerError?: SequencerEngineOptions["onListenerError"],
+): void => {
+  if (onListenerError) {
+    try {
+      onListenerError(error, { source: "engine", eventName });
+      return;
+    } catch (reportingError) {
+      error = reportingError;
+    }
+  }
+
+  const reportError = (globalThis as typeof globalThis & {
+    reportError?: (error: unknown) => void;
+  }).reportError;
+  if (reportError) {
+    reportError.call(globalThis, error);
+  } else if (typeof console !== "undefined") {
+    console.error(error);
+  }
+};
+
 export class SequencerEngine {
   private project: SequenceProject;
-  private readonly clock: PlaybackClock;
+  private readonly transport: PlaybackTransport;
+  private readonly ownsTransport: boolean;
   private readonly lookaheadMs: number;
   private readonly listeners: {
     [TEventName in SequencerEventName]: Set<SequencerEventHandler<TEventName>>;
   };
   private readonly missedStepPolicy: "emit" | "skip";
-  private readonly timeDriven: boolean;
-  private originMs: number;
-  private lastEmittedAbsoluteStep: number | null = null;
-  private timerId: unknown;
-  private playing = false;
+  private readonly onListenerError?: SequencerEngineOptions["onListenerError"];
+  private readonly unsubscribeTransport: Unsubscribe;
+  private disposed = false;
+  private transportDisposed = false;
+  private transportTimerId: ReturnType<typeof setTimeout> | undefined;
+  private playbackState: PlaybackState;
+  private buffering = false;
+  private cachedPositionMs = 0;
   private currentStepIndex = 0;
-  private nextStepAt = 0;
+  private lastEmittedAbsoluteStep: number | null = null;
+  private projectAnchor: ProjectPositionAnchor | null = null;
+  private readonly pendingCommandEvents: PlaybackTransportEvent["type"][] = [];
 
   constructor(project: SequenceProject, options: SequencerEngineOptions = {}) {
-    this.project = normalizeProject(project);
-    this.clock = options.clock ?? browserClock;
+    if (!isRecord(options)) {
+      throw new TypeError("SequencerEngine options must be an object.");
+    }
+    if (options.lookaheadMs !== undefined) {
+      assertFiniteNonNegative(options.lookaheadMs, "lookaheadMs");
+    }
+
+    assertValidProject(project);
+    this.project = project;
+    this.transport = options.transport ?? createClockTransport(browserClock);
+    this.ownsTransport = options.transport === undefined;
     this.lookaheadMs = options.lookaheadMs ?? 25;
     this.missedStepPolicy = options.missedStepPolicy ?? "emit";
-    this.timeDriven = options.timeDriven ?? false;
-    this.originMs = options.originMs ?? 0;
+    this.onListenerError = options.onListenerError;
     this.listeners = {
       step: new Set(),
-      transport: new Set(),
+      playback: new Set(),
       project: new Set(),
     };
 
     if (options.onStep) {
       this.on("step", options.onStep);
+    }
+
+    const snapshot = this.transport.getSnapshot();
+    this.playbackState = snapshot.state;
+    this.buffering = snapshot.buffering;
+    this.cachedPositionMs = snapshot.positionMs;
+    this.currentStepIndex = this.stepIndexAt(snapshot.positionMs);
+    this.lastEmittedAbsoluteStep = snapshot.state === "stopped" && snapshot.positionMs === 0
+      ? null
+      : this.absoluteStepAt(snapshot.positionMs);
+
+    this.unsubscribeTransport = this.transport.subscribe((event) => this.handleTransportEvent(event));
+    if (snapshot.state === "playing" && !snapshot.buffering) {
+      this.scheduleNextTick();
     }
   }
 
@@ -54,6 +142,7 @@ export class SequencerEngine {
     eventName: TEventName,
     handler: SequencerEventHandler<TEventName>,
   ): Unsubscribe {
+    this.assertLive();
     this.listeners[eventName].add(handler as never);
 
     return () => {
@@ -61,211 +150,347 @@ export class SequencerEngine {
     };
   }
 
-  start(): void {
-    if (this.playing) {
-      return;
-    }
-
-    const now = this.clock.now();
-    this.playing = true;
-    if (this.timeDriven) {
-      this.lastEmittedAbsoluteStep = null;
-    } else {
-      this.nextStepAt = now;
-    }
-    this.emitTransport({ type: "start", bpm: this.project.bpm, stepIndex: this.currentStepIndex, timestamp: now });
-    this.tick();
+  play(): Promise<void> {
+    this.assertLive();
+    if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
+    return this.runTransportCommand("play", () => this.transport.play());
   }
 
-  stop(): void {
-    if (!this.playing) {
-      return;
-    }
-
-    this.playing = false;
-    this.clearTimer();
-    this.emitTransport({
-      type: "stop",
-      bpm: this.project.bpm,
-      stepIndex: this.currentStepIndex,
-      timestamp: this.clock.now(),
-    });
+  pause(): Promise<void> {
+    this.assertLive();
+    if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
+    return this.runTransportCommand("pause", () => this.transport.pause());
   }
 
-  reset(stepIndex = 0): void {
-    this.currentStepIndex = this.normalizeStepIndex(stepIndex);
-    if (this.timeDriven) {
-      this.originMs = this.clock.now() - this.currentStepIndex * this.getStepDurationMs();
-      this.lastEmittedAbsoluteStep = null;
-    } else if (this.playing) {
-      this.nextStepAt = this.clock.now();
-    }
+  stop(): Promise<void> {
+    this.assertLive();
+    if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
+    return this.runTransportCommand("stop", () => this.transport.stop());
+  }
 
-    this.emitTransport({
-      type: "reset",
-      bpm: this.project.bpm,
-      stepIndex: this.currentStepIndex,
-      timestamp: this.clock.now(),
-    });
+  seekPositionMs(positionMs: number): Promise<void> {
+    this.assertLive();
+    assertFiniteNonNegative(positionMs, "positionMs");
+    if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
+    return this.runTransportCommand("seek", () => this.transport.seekMs(positionMs));
+  }
+
+  seekStep(stepIndex: number): Promise<void> {
+    this.assertLive();
+    assertStepIndex(stepIndex, this.project.stepCount);
+    return this.seekPositionMs(stepIndex * this.getStepDurationMs());
   }
 
   dispose(): void {
-    this.stop();
-    this.listeners.step.clear();
-    this.listeners.transport.clear();
-    this.listeners.project.clear();
-  }
-
-  setBpm(bpm: number): void {
-    const previousBpm = this.project.bpm;
-    const nextBpm = clamp(bpm, SEQUENCER_LIMITS.minBpm, SEQUENCER_LIMITS.maxBpm);
-    if (previousBpm === nextBpm) {
+    if (this.disposed) {
       return;
     }
 
-    this.project = { ...this.project, bpm: nextBpm };
-    if (this.playing) {
-      this.nextStepAt = this.clock.now() + this.getStepDurationMs();
+    this.disposed = true;
+    this.clearTimer();
+    this.unsubscribeTransport();
+    this.listeners.step.clear();
+    this.listeners.playback.clear();
+    this.listeners.project.clear();
+    if (this.ownsTransport) {
+      this.transport.dispose();
     }
-    this.emitTransport({
-      type: "bpm",
-      bpm: nextBpm,
-      previousBpm,
-      stepIndex: this.currentStepIndex,
-      timestamp: this.clock.now(),
-    });
   }
 
   setProject(project: SequenceProject): void {
+    this.assertLive();
+    assertValidProject(project);
+
     const previousProject = this.project;
-    const nextProject = normalizeProject(project);
-    this.project = nextProject;
-    this.currentStepIndex = this.normalizeStepIndex(this.currentStepIndex);
+    if (previousProject === project) {
+      return;
+    }
+
+    const positionMs = this.getLogicalPositionMs();
+    const previousChannels = this.sampleProjectChannels(previousProject, positionMs);
+    const preservedBeat = positionMs / this.getMsPerBeat(previousProject);
+    const nextPositionMs = preservedBeat * this.getMsPerBeat(project);
+    const channels = this.sampleProjectChannels(project, nextPositionMs);
+    const changedChannelIds = this.getChangedChannelIds(previousChannels, channels);
+
+    this.project = project;
+    this.projectAnchor = {
+      transportPositionMs: this.getTransportPositionMs(),
+      projectPositionMs: nextPositionMs,
+    };
+    this.cachedPositionMs = nextPositionMs;
+    this.currentStepIndex = this.stepIndexAt(nextPositionMs);
+    this.lastEmittedAbsoluteStep = this.absoluteStepAt(nextPositionMs);
 
     const event: ProjectEvent = {
-      project: nextProject,
+      project,
       previousProject,
       stepIndex: this.currentStepIndex,
-      timestamp: this.clock.now(),
+      changedChannelIds,
+      previousChannels,
+      channels,
+      positionMs: nextPositionMs,
+      beat: preservedBeat,
     };
     this.emit("project", event);
+    this.rescheduleIfPlaying();
   }
 
   getProject(): SequenceProject {
+    this.assertLive();
     return this.project;
   }
 
   getCurrentStepIndex(): number {
+    this.assertLive();
     return this.currentStepIndex;
   }
 
-  isPlaying(): boolean {
-    return this.playing;
+  getPlaybackState(): PlaybackState {
+    this.assertLive();
+    return this.playbackState;
   }
 
-  /**
-   * Sample the interpolated 0–1 value for each track at an arbitrary absolute timestamp.
-   * Uses linear easing by default; pass a custom EasingFunction to change the curve.
-   * Works regardless of whether timeDriven is enabled.
-   */
-  sampleChannels(timeMs: number, easing: EasingFunction = linear): Record<string, number> {
-    const stepDur = this.getStepDurationMs();
-    const elapsed = timeMs - this.originMs;
-    const absoluteStep = elapsed <= 0 ? 0 : Math.floor(elapsed / stepDur);
-    const phase = elapsed <= 0 ? 0 : (elapsed % stepDur) / stepDur;
-    const stepCount = Math.max(1, this.project.stepCount);
+  getPosition(): ChannelPosition {
+    this.assertLive();
+    const positionMs = this.getLogicalPositionMs();
+    return {
+      positionMs,
+      beat: positionMs / this.getMsPerBeat(this.project),
+    };
+  }
 
-    const result: Record<string, number> = {};
-    for (const track of this.project.tracks) {
-      if (!track.enabled) {
-        result[track.id] = 0;
-        continue;
+  sampleChannels(easing: EasingFunction = linear): Record<string, number> {
+    this.assertLive();
+    return this.sampleProjectChannels(this.project, this.getLogicalPositionMs(), easing);
+  }
+
+  sampleChannelsAt(timeMs: number, easing: EasingFunction = linear): Record<string, number> {
+    this.assertLive();
+    assertFiniteNonNegative(timeMs, "timeMs");
+    return this.sampleProjectChannels(this.project, timeMs, easing);
+  }
+
+  private runTransportCommand(
+    expectedEventType: PlaybackTransportEvent["type"],
+    command: () => Promise<void>,
+  ): Promise<void> {
+    this.pendingCommandEvents.push(expectedEventType);
+    const markerIndex = this.pendingCommandEvents.length - 1;
+
+    const clearPendingCommand = (): void => {
+      if (this.pendingCommandEvents[markerIndex] === expectedEventType) {
+        this.pendingCommandEvents.splice(markerIndex, 1);
+      } else {
+        const staleIndex = this.pendingCommandEvents.indexOf(expectedEventType);
+        if (staleIndex >= 0) {
+          this.pendingCommandEvents.splice(staleIndex, 1);
+        }
       }
-      const idx = ((absoluteStep % stepCount) + stepCount) % stepCount;
-      const nextIdx = (idx + 1) % stepCount;
-      result[track.id] = lerp(track.steps[idx] ?? 0, track.steps[nextIdx] ?? 0, easing(phase));
+    };
+
+    try {
+      return command().finally(clearPendingCommand);
+    } catch (error) {
+      clearPendingCommand();
+      throw error;
     }
-    return result;
   }
 
-  private tick(): void {
-    if (!this.playing) {
+  private handleTransportEvent(event: PlaybackTransportEvent): void {
+    if (this.disposed) {
       return;
     }
 
-    if (this.timeDriven) {
-      this.tickTimeDriven();
-    } else {
-      this.tickIncrement();
+    if (event.type === "dispose") {
+      this.handleTransportDispose(event.snapshot);
+      return;
     }
-  }
 
-  private tickTimeDriven(): void {
-    const now = this.clock.now();
-    const stepDur = this.getStepDurationMs();
-    const elapsed = now - this.originMs;
+    const previousState = this.playbackState;
+    const cause = this.consumeCommandCause(event.type) ? "command" : "transport";
 
-    let delay: number;
+    if (
+      event.type === "seek" ||
+      event.type === "stop" ||
+      (event.type === "play" && previousState === "ended")
+    ) {
+      this.projectAnchor = null;
+    }
 
-    if (elapsed >= 0) {
-      const absoluteStep = Math.floor(elapsed / stepDur);
-      const last = this.lastEmittedAbsoluteStep;
+    this.applyTransportSnapshot(event.snapshot);
 
-      if (last === null || absoluteStep !== last) {
-        this.currentStepIndex = this.normalizeStepIndex(absoluteStep);
-        this.emitStep(now);
-        this.lastEmittedAbsoluteStep = absoluteStep;
+    if (event.type === "play") {
+      this.emitPlayback(event.type, cause, previousState);
+      if (previousState === "stopped" || previousState === "ended") {
+        this.emitStepForPosition(this.getLogicalPositionMs(), "play");
       }
-
-      // Schedule next poll at the start of the next step boundary
-      const phaseMs = elapsed % stepDur;
-      const msUntilNextStep = stepDur - phaseMs;
-      delay = Math.max(0, Math.min(this.lookaheadMs, msUntilNextStep));
-    } else {
-      // Before origin: wait until origin
-      delay = Math.min(this.lookaheadMs, -elapsed);
+      this.rescheduleIfPlaying();
+      return;
     }
 
-    this.timerId = this.clock.setTimer(() => this.tickTimeDriven(), delay);
-  }
-
-  private tickIncrement(): void {
-    const now = this.clock.now();
-    if (now >= this.nextStepAt) {
-      this.emitDueSteps(now);
+    if (event.type === "pause") {
+      this.clearTimer();
+      this.emitPlayback(event.type, cause, previousState);
+      return;
     }
 
-    const delay = Math.max(0, Math.min(this.lookaheadMs, this.nextStepAt - this.clock.now()));
-    this.timerId = this.clock.setTimer(() => this.tickIncrement(), delay);
-  }
-
-  private emitDueSteps(now: number): void {
-    if (this.missedStepPolicy === "skip" && now > this.nextStepAt + this.getStepDurationMs()) {
-      const missedSteps = Math.floor((now - this.nextStepAt) / this.getStepDurationMs());
-      this.currentStepIndex = this.normalizeStepIndex(this.currentStepIndex + missedSteps);
-      this.nextStepAt += missedSteps * this.getStepDurationMs();
+    if (event.type === "stop") {
+      this.clearTimer();
+      this.currentStepIndex = 0;
+      this.lastEmittedAbsoluteStep = null;
+      this.cachedPositionMs = 0;
+      this.emitPlayback(event.type, cause, previousState);
+      return;
     }
 
-    while (now >= this.nextStepAt) {
-      const timestamp = this.nextStepAt;
-      this.emitStep(timestamp);
-      this.currentStepIndex = this.normalizeStepIndex(this.currentStepIndex + 1);
-      this.nextStepAt += this.getStepDurationMs();
+    if (event.type === "seek") {
+      this.clearTimer();
+      this.emitPlayback(event.type, cause, previousState);
+      this.emitStepForPosition(this.getLogicalPositionMs(), "seek");
+      this.rescheduleIfPlaying();
+      return;
+    }
 
-      if (this.missedStepPolicy === "skip") {
-        break;
+    if (event.type === "ratechange") {
+      this.emitPlayback(event.type, cause, previousState);
+      this.rescheduleIfPlaying();
+      return;
+    }
+
+    if (event.type === "bufferingchange") {
+      if (event.snapshot.buffering) {
+        this.clearTimer();
       }
+      this.emitPlayback(event.type, cause, previousState);
+      this.rescheduleIfPlaying();
+      return;
+    }
+
+    if (event.type === "ended") {
+      this.clearTimer();
+      this.emitPlayback(event.type, cause, previousState);
+      return;
+    }
+
+    if (event.type === "error") {
+      this.emitPlayback(event.type, "transport", previousState, event.error);
+      return;
+    }
+
+    this.emitPlayback(event.type, cause, previousState);
+    this.rescheduleIfPlaying();
+  }
+
+  private handleTransportDispose(snapshot: PlaybackSnapshot): void {
+    const previousState = this.playbackState;
+    this.cachedPositionMs = this.positionFromTransportPosition(snapshot.positionMs);
+    this.transportDisposed = true;
+    this.clearTimer();
+    if (this.playbackState === "playing") {
+      this.playbackState = "paused";
+    }
+    this.buffering = snapshot.buffering;
+    this.emitPlayback(
+      "error",
+      "transport",
+      previousState,
+      new PlaybackError("TRANSPORT_DISPOSED"),
+    );
+  }
+
+  private consumeCommandCause(eventType: PlaybackTransportEvent["type"]): boolean {
+    const index = this.pendingCommandEvents.indexOf(eventType);
+    if (index < 0) {
+      return false;
+    }
+    this.pendingCommandEvents.splice(index, 1);
+    return true;
+  }
+
+  private applyTransportSnapshot(snapshot: PlaybackSnapshot): void {
+    this.playbackState = snapshot.state;
+    this.buffering = snapshot.buffering;
+    this.cachedPositionMs = this.positionFromTransportPosition(snapshot.positionMs);
+    this.currentStepIndex = this.stepIndexAt(this.cachedPositionMs);
+  }
+
+  private scheduleNextTick(): void {
+    if (this.playbackState !== "playing" || this.buffering || this.transportDisposed) {
+      return;
+    }
+
+    this.clearTimer();
+    const positionMs = this.getLogicalPositionMs();
+    const stepDurationMs = this.getStepDurationMs();
+    const absoluteStep = this.absoluteStepAt(positionMs);
+    const phaseMs = positionMs - absoluteStep * stepDurationMs;
+    const alreadyEmitted = this.lastEmittedAbsoluteStep === absoluteStep;
+    const untilNextStepMs = phaseMs <= 0.000_001 && alreadyEmitted
+      ? stepDurationMs
+      : Math.max(0, stepDurationMs - phaseMs);
+    const rate = this.transportDisposed ? 1 : this.transport.getPlaybackRate();
+    const delayMs = Math.max(0, Math.min(this.lookaheadMs, untilNextStepMs / rate));
+
+    this.transportTimerId = setTimeout(() => this.tick(), delayMs);
+  }
+
+  private rescheduleIfPlaying(): void {
+    if (this.playbackState === "playing" && !this.buffering && !this.transportDisposed) {
+      this.scheduleNextTick();
     }
   }
 
-  private emitStep(timestamp: number): void {
+  private tick(): void {
+    this.transportTimerId = undefined;
+    if (this.disposed || this.playbackState !== "playing" || this.buffering || this.transportDisposed) {
+      return;
+    }
+
+    this.emitDueSteps(this.getLogicalPositionMs());
+    this.scheduleNextTick();
+  }
+
+  private emitDueSteps(positionMs: number): void {
+    const absoluteStep = this.absoluteStepAt(positionMs);
+    const last = this.lastEmittedAbsoluteStep;
+    if (last !== null && absoluteStep <= last) {
+      return;
+    }
+
+    if (last === null || this.missedStepPolicy === "skip") {
+      this.emitStepAtAbsolute(absoluteStep, "tick", positionMs);
+      return;
+    }
+
+    for (let next = last + 1; next <= absoluteStep; next += 1) {
+      this.emitStepAtAbsolute(next, "tick", positionMs);
+    }
+  }
+
+  private emitStepForPosition(positionMs: number, cause: StepEventCause): void {
+    const absoluteStep = this.absoluteStepAt(positionMs);
+    this.emitStepAtAbsolute(absoluteStep, cause, positionMs, positionMs);
+  }
+
+  private emitStepAtAbsolute(
+    absoluteStep: number,
+    cause: StepEventCause,
+    transportPositionMs: number,
+    scheduledPositionMs = absoluteStep * this.getStepDurationMs(),
+  ): void {
+    this.currentStepIndex = this.normalizeStepIndex(absoluteStep);
+    this.lastEmittedAbsoluteStep = absoluteStep;
     const nextIndex = this.normalizeStepIndex(this.currentStepIndex + 1);
     const durationMs = this.getStepDurationMs();
     const event: StepEvent = {
       stepIndex: this.currentStepIndex,
       bpm: this.project.bpm,
-      timestamp,
+      scheduledPositionMs,
+      transportPositionMs,
+      lateByMs: Math.max(0, transportPositionMs - scheduledPositionMs),
       durationMs,
+      cause,
       tracks: this.project.tracks.map((track) => ({
         id: track.id,
         name: track.name,
@@ -277,8 +502,110 @@ export class SequencerEngine {
     this.emit("step", event);
   }
 
-  private getStepDurationMs(): number {
-    return 60_000 / this.project.bpm / this.project.stepsPerBeat;
+  private emitPlayback(
+    type: EnginePlaybackEvent["type"],
+    cause: EnginePlaybackEvent["cause"],
+    previousState: PlaybackState,
+    error?: unknown,
+  ): void {
+    const baseSnapshot = this.createPlaybackSnapshot();
+    const event: SequencerPlaybackEvent = {
+      type,
+      cause,
+      previousState,
+      snapshot: {
+        ...baseSnapshot,
+        stepIndex: this.currentStepIndex,
+      },
+      ...(error !== undefined ? { error } : {}),
+    };
+    this.emit("playback", event);
+  }
+
+  private createPlaybackSnapshot(): EnginePlaybackSnapshot {
+    const positionMs = this.getLogicalPositionMs();
+    const transportSnapshot = this.transportDisposed ? null : this.transport.getSnapshot();
+    return {
+      state: this.playbackState,
+      positionMs,
+      beat: positionMs / this.getMsPerBeat(this.project),
+      playbackRate: transportSnapshot?.playbackRate ?? 1,
+      projectLoop: true,
+      transportLoop: transportSnapshot?.loop ?? false,
+      buffering: this.buffering,
+    };
+  }
+
+  private getLogicalPositionMs(): number {
+    if (this.transportDisposed || this.buffering) {
+      return this.cachedPositionMs;
+    }
+    return this.positionFromTransportPosition(this.getTransportPositionMs());
+  }
+
+  private getTransportPositionMs(): number {
+    if (this.transportDisposed) {
+      return this.cachedPositionMs;
+    }
+    return this.transport.getPositionMs();
+  }
+
+  private positionFromTransportPosition(transportPositionMs: number): number {
+    if (!this.projectAnchor) {
+      return transportPositionMs;
+    }
+    return Math.max(
+      0,
+      this.projectAnchor.projectPositionMs + (transportPositionMs - this.projectAnchor.transportPositionMs),
+    );
+  }
+
+  private sampleProjectChannels(
+    project: SequenceProject,
+    positionMs: number,
+    easing: EasingFunction = linear,
+  ): Record<string, number> {
+    const stepDur = this.getStepDurationMs(project);
+    const absoluteStep = this.absoluteStepAt(positionMs, project);
+    const phase = positionMs <= 0 ? 0 : (positionMs % stepDur) / stepDur;
+    const stepCount = Math.max(1, project.stepCount);
+
+    const result: Record<string, number> = {};
+    for (const track of project.tracks) {
+      if (!track.enabled) {
+        result[track.id] = 0;
+        continue;
+      }
+      const idx = ((absoluteStep % stepCount) + stepCount) % stepCount;
+      const nextIdx = (idx + 1) % stepCount;
+      result[track.id] = lerp(track.steps[idx] ?? 0, track.steps[nextIdx] ?? 0, easing(phase));
+    }
+    return result;
+  }
+
+  private getChangedChannelIds(
+    previousChannels: Record<string, number>,
+    channels: Record<string, number>,
+  ): string[] {
+    return [...new Set([...Object.keys(previousChannels), ...Object.keys(channels)])].filter(
+      (channelId) => previousChannels[channelId] !== channels[channelId],
+    );
+  }
+
+  private absoluteStepAt(positionMs: number, project = this.project): number {
+    return Math.max(0, Math.floor(positionMs / this.getStepDurationMs(project)));
+  }
+
+  private stepIndexAt(positionMs: number): number {
+    return this.normalizeStepIndex(this.absoluteStepAt(positionMs));
+  }
+
+  private getMsPerBeat(project: SequenceProject): number {
+    return 60_000 / project.bpm;
+  }
+
+  private getStepDurationMs(project = this.project): number {
+    return this.getMsPerBeat(project) / project.stepsPerBeat;
   }
 
   private normalizeStepIndex(stepIndex: number): number {
@@ -286,23 +613,29 @@ export class SequencerEngine {
     return ((Math.trunc(stepIndex) % stepCount) + stepCount) % stepCount;
   }
 
-  private emitTransport(event: TransportEvent): void {
-    this.emit("transport", event);
-  }
-
   private emit<TEventName extends SequencerEventName>(
     eventName: TEventName,
     event: SequencerEventMap[TEventName],
   ): void {
-    for (const handler of this.listeners[eventName]) {
-      handler(event as never);
+    for (const handler of [...this.listeners[eventName]]) {
+      try {
+        handler(event as never);
+      } catch (error) {
+        reportListenerError(error, eventName, this.onListenerError);
+      }
     }
   }
 
   private clearTimer(): void {
-    if (this.timerId !== undefined) {
-      this.clock.clearTimer(this.timerId);
-      this.timerId = undefined;
+    if (this.transportTimerId !== undefined) {
+      clearTimeout(this.transportTimerId);
+      this.transportTimerId = undefined;
+    }
+  }
+
+  private assertLive(): void {
+    if (this.disposed) {
+      throw new PlaybackError("TRANSPORT_DISPOSED", "SequencerEngine has been disposed.");
     }
   }
 }

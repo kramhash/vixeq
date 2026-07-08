@@ -414,6 +414,10 @@ State-preserving operations are no-ops except explicit seek.
   disposal.
 - Transport disposal is different: the Engine remains sampleable at its
   cached final position but cannot resume.
+- `PlaybackErrorCode` has no dedicated code for "the Engine itself is
+  disposed." APIs called after Engine disposal intentionally reuse
+  `TRANSPORT_DISPOSED`, distinguished only by the error `message`; this does
+  not imply the Engine's transport is also disposed.
 
 ## 4. Sampling and ChannelSource
 

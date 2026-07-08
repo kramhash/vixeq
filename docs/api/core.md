@@ -3,6 +3,8 @@
 ## Sequencing
 
 - `new SequencerEngine(project, options?)` — plays and samples one looping `SequenceProject`.
+- Sequencer controls: `play()`, `pause()`, `stop()`, `seekStep(stepIndex)`, `seekPositionMs(positionMs)`, `setProject(next)`, `sampleChannels()`, `sampleChannelsAt(positionMs)`, `dispose()`.
+- Sequencer options include `transport`, `lookaheadMs`, `missedStepPolicy`, `onStep`, and `onListenerError`. Omitting `transport` creates an Engine-owned browser-clock transport.
 - `createProject(options?)`, `createTrack(name, stepCount)` — create normalized project data.
 - `setProjectBpm`, `setStepValue`, `toggleStep`, `addTrack`, `removeTrack`, `renameTrack`, `setTrackEnabled`, `clearTrack`, `rotateTrackSteps`, `randomizeTrack` — immutable project updates.
 - `validateProject(input)`, `normalizeProject(input)` — validation and import-boundary normalization.
@@ -21,7 +23,7 @@ Gaps are valid and output zero. Sections restart their pattern at step 0. Missin
 ## Timing, audio, and values
 
 - `browserClock`, `createClockTransport`, `createMediaElementTransport`, `createAudioBufferTransport`.
-- Playback v2 adds `PlaybackClock`, `PlaybackTransport`, `PlaybackSnapshot`, `PlaybackError`, and clock, media-element, and AudioBuffer transport factories. Engine integration follows in P3/P4.
+- Playback v2 adds `PlaybackClock`, `PlaybackTransport`, `PlaybackSnapshot`, `PlaybackError`, and clock, media-element, and AudioBuffer transport factories. `SequencerEngine` uses `PlaybackTransport`; Arrangement integration follows in P4.
 - `createEnvelope`, `createDecayEnvelope`, smoothing helpers, easing functions, `lerp`.
 - Timeline exports provide beat/time conversion and event queries for tempo-variable data.
 

@@ -80,6 +80,10 @@ export { normalizeProject, validateProject } from "./validation";
 export type { SmoothingConfig } from "./smoothing";
 export type {
   ChannelSource,
+  ChannelPosition,
+  EnginePlaybackCause,
+  EnginePlaybackEvent,
+  EnginePlaybackSnapshot,
   MissedStepPolicy,
   ProjectEvent,
   SequenceProject,
@@ -87,7 +91,10 @@ export type {
   SequencerEngineOptions,
   SequencerEventMap,
   SequencerEventName,
+  SequencerPlaybackEvent,
+  SequencerPlaybackSnapshot,
   SequencerTransport,
+  StepEventCause,
   StepEvent,
   StepEventTrack,
   StepValue,

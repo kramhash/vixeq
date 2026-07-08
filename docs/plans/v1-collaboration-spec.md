@@ -619,7 +619,7 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | P0 | 0.7 | Commit Playback v2 behavior matrix and API migration map | — | done | Codex (author), Claude (reviewer) | `docs/behavior/`, `CHANGELOG.md` |
 | P1 | 0.7 | Implement `PlaybackTransport` contract and browser/clock transports | P0 | done | Codex (author), Claude (reviewer) | `packages/core/src/` transport files |
 | P2 | 0.7 | Rebuild media and AudioBuffer transports | P1 | done | Codex (author), Claude (reviewer) | `packages/core/src/audioClock.ts` or replacement |
-| P3 | 0.7 | Refactor `SequencerEngine` to Playback v2 | P1 | pending | — | `packages/core/src/SequencerEngine.ts` |
+| P3 | 0.7 | Refactor `SequencerEngine` to Playback v2 | P1 | done | Codex (author), Claude (author of blocker fixes + reviewer) | `packages/core/src/SequencerEngine.ts` |
 | P4 | 0.7 | Refactor `ArrangementEngine` playback shell without schema v2 | P1 | pending | — | `packages/core/src/arrangement/ArrangementEngine.ts` |
 | P5 | 0.7 | Refactor sampling, `ChannelSource`, and Envelopes | P3, P4 | pending | — | Core types/envelope files |
 | P6 | 0.7 | Refactor React hooks and reduced-motion behavior | P3, P4, P5 | pending | — | `packages/react/src/` |

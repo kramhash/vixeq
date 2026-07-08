@@ -8,6 +8,16 @@
   clock-domain sampling with transport-owned sampling, standardizes
   play/pause/stop/seek semantics, and introduces the shared
   `PlaybackTransport` contract.
+- `SequencerEngine` now uses `PlaybackTransport` directly in the staged 0.7
+  implementation: `play()`, `pause()`, `stop()`, `seekStep()`, and
+  `seekPositionMs()` replace `start()`, `reset()`, `setBpm()`, raw `clock`,
+  `timeDriven`, and `originMs` Sequencer APIs. Arrangement, React hooks,
+  Player React, and examples are migrated in later Playback v2 stages.
+- Added `SequencerPlaybackEvent` (`EnginePlaybackEvent` with a
+  `SequencerPlaybackSnapshot`), the Sequencer-specific event type for
+  `SequencerEventMap["playback"]`. `EnginePlaybackEvent.snapshot` stays the
+  generic `EnginePlaybackSnapshot` so other Engines (e.g. Arrangement in P4)
+  can define their own concrete playback event type under the shared name.
 - This section documents planned work and is not part of the currently shipped
   `0.6.0` API. See the
   [Playback v2 contract](./docs/behavior/playback-v2.md),

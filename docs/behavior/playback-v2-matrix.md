@@ -64,44 +64,46 @@ Status values: `planned`, `covered`, `blocked`.
 
 | ID | Scenario | Expected result | Status |
 | --- | --- | --- | --- |
-| PB-EN-001 | default Sequencer play | always time-driven; step 0 emitted | planned |
-| PB-EN-002 | Sequencer pause/resume mid-step | position and phase freeze; no duplicate step | planned |
-| PB-EN-003 | Engine stop | local position and shared transport return to 0 | planned |
-| PB-EN-004 | valid seekStep | transport seeks; one destination step with cause seek | planned |
-| PB-EN-005 | invalid seekStep | synchronous RangeError | planned |
+| PB-EN-001 | default Sequencer play | always time-driven; step 0 emitted | covered |
+| PB-EN-002 | Sequencer pause/resume mid-step | position and phase freeze; no duplicate step | covered |
+| PB-EN-003 | Engine stop | local position and shared transport return to 0 | covered |
+| PB-EN-004 | valid seekStep | transport seeks; one destination step with cause seek | covered |
+| PB-EN-005 | invalid seekStep | synchronous RangeError | covered |
 | PB-EN-006 | valid seekBeat | mapped transport position; one Arrangement destination step | planned |
-| PB-EN-007 | valid seekPositionMs | transport position is authoritative | planned |
-| PB-EN-008 | delayed callback with emit | every crossed step emitted in order with lateByMs | planned |
-| PB-EN-009 | delayed callback with skip | stale steps omitted; current scheduling resumes | planned |
+| PB-EN-007 | valid seekPositionMs | transport position is authoritative | covered |
+| PB-EN-008 | delayed callback with emit | every crossed step emitted in order with lateByMs | covered |
+| PB-EN-009 | delayed callback with skip | stale steps omitted; current scheduling resumes | covered |
 | PB-EN-010 | explicit forward/backward seek | missedStepPolicy ignored | planned |
-| PB-EN-011 | BPM/stepsPerBeat hot-swap | fractional beat preserved; media not sought | planned |
-| PB-EN-011A | Sequencer Project update | one strict setProject path and one Project event | planned |
-| PB-EN-012 | external seek after live tempo edit | temporary anchor discarded; evaluate from position 0 | planned |
-| PB-EN-013 | invalid hot-swap | old Project/state/position/cursor remain atomic | planned |
+| PB-EN-011 | BPM/stepsPerBeat hot-swap | fractional beat preserved; media not sought | covered |
+| PB-EN-011A | Sequencer Project update | one strict setProject path and one Project event | covered |
+| PB-EN-012 | external seek after live tempo edit | temporary anchor discarded; evaluate from position 0 | covered |
+| PB-EN-013 | invalid hot-swap | old Project/state/position/cursor remain atomic | covered |
 | PB-EN-013A | invalid Engine constructor input | Sequencer and Arrangement throw TypeError without normalization | planned |
 | PB-EN-014 | non-loop finite Project shortened | move to new end and enter ended | planned |
 | PB-EN-015 | looping finite Project shortened | modulo position and continue | planned |
 | PB-EN-016 | local Project end on shared transport | Engine ends; transport and peers continue | planned |
-| PB-EN-017 | transport end | all attached Engines enter ended | planned |
-| PB-EN-018 | transport dispose while playing | cache final position, become paused, controls reject | planned |
+| PB-EN-017 | transport end | all attached Engines enter ended | covered |
+| PB-EN-018 | transport dispose while playing | cache final position, become paused, controls reject | covered |
 | PB-EN-018A | transport dispose while stopped/paused/ended | preserve local state and cached position | planned |
-| PB-EN-019 | Engine dispose | idempotent; borrowed transport survives | planned |
-| PB-EN-020 | Engine API after dispose | update/sample/subscribe/controls throw | planned |
-| PB-EN-021 | Engine listener throws | peers/listeners/scheduler continue | planned |
+| PB-EN-019 | Engine dispose | idempotent; borrowed transport survives | covered |
+| PB-EN-020 | Engine API after dispose | update/sample/subscribe/controls throw | covered |
+| PB-EN-021 | Engine listener throws | peers/listeners/scheduler continue | covered |
 | PB-EN-022 | Arrangement setLoop changes value | projectLoop updates and one command loopchange emits | planned |
 | PB-EN-023 | Arrangement setLoop gets non-boolean | synchronous TypeError and no event | planned |
 | PB-EN-024 | Arrangement setLoop gets current value | no-op and no event | planned |
 | PB-EN-025 | Arrangement setArrangement succeeds | one strict atomic Project event | planned |
-| PB-EN-026 | two Engines share one transport | both adopt and receive the ordered transport state stream | planned |
+| PB-EN-026 | two Engines share one transport | both adopt and receive the ordered transport state stream | covered |
+| PB-EN-027 | Engine attaches to an already-playing transport | snapshot adopted immediately; no synthetic step events for time already elapsed | covered |
+| PB-EN-028 | external (non-command) transport events | mapped to Engine playback events with cause transport | covered |
 
 ## Sampling, Project events, and Envelopes
 
 | ID | Scenario | Expected result | Status |
 | --- | --- | --- | --- |
-| PB-CH-001 | sampleChannels with browser transport | uses Engine logical position | planned |
+| PB-CH-001 | sampleChannels with browser transport | uses Engine logical position | covered |
 | PB-CH-002 | sampleChannels with media transport | phase follows media position without clock-domain input | planned |
 | PB-CH-003 | sample while paused/buffering/ended | returns frozen position values | planned |
-| PB-CH-004 | sampleChannelsAt | evaluates Project-relative milliseconds independent of state | planned |
+| PB-CH-004 | sampleChannelsAt | evaluates Project-relative milliseconds independent of state | covered |
 | PB-CH-005 | metadata-only Project change | project event has no changedChannelIds | planned |
 | PB-CH-006 | active value change | project event contains only affected channel IDs | planned |
 | PB-CH-007 | normal Project change | no synthetic StepEvent | planned |
