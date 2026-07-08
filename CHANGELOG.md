@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Planned breaking changes
+
+- Playback v2 is specified for the `0.7.0-beta.1` implementation. It replaces
+  clock-domain sampling with transport-owned sampling, standardizes
+  play/pause/stop/seek semantics, and introduces the shared
+  `PlaybackTransport` contract.
+- This section documents planned work and is not part of the currently shipped
+  `0.6.0` API. See the
+  [Playback v2 contract](./docs/behavior/playback-v2.md),
+  [behavior matrix](./docs/behavior/playback-v2-matrix.md), and
+  [0.7 migration guide](./docs/migrations/0.7-playback-v2.md).
+
 ## 0.6.0 - 2026-07-05
 
 ### Added

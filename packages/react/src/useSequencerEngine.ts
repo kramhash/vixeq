@@ -1,7 +1,7 @@
 import {
   SequencerEngine,
   type SequenceProject,
-  type SequencerClock,
+  type PlaybackClock,
   type SequencerTransport,
   type StepEvent,
   type TransportEvent,
@@ -18,7 +18,7 @@ type SequencerEngineHookBaseOptions = {
 
 export type SequencerEngineHookOptions =
   | (SequencerEngineHookBaseOptions & {
-      clock?: SequencerClock;
+      clock?: PlaybackClock;
       transport?: never;
     })
   | (SequencerEngineHookBaseOptions & {
@@ -52,7 +52,7 @@ const useLatestRef = <TValue>(value: TValue) => {
 
 export function useSequencerEngine(options: SequencerEngineHookOptions): SequencerEngineHookState {
   const { project } = options;
-  const clock = (options as { clock?: SequencerClock }).clock;
+  const clock = (options as { clock?: PlaybackClock }).clock;
   const transport = (options as { transport?: SequencerTransport }).transport;
   const activeClock = transport?.clock ?? clock;
   const { timeDriven, originMs } = options;

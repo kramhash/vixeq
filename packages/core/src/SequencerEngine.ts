@@ -6,7 +6,7 @@ import { normalizeProject } from "./validation";
 import type {
   ProjectEvent,
   SequenceProject,
-  SequencerClock,
+  PlaybackClock,
   SequencerEngineOptions,
   SequencerEventHandler,
   SequencerEventMap,
@@ -18,7 +18,7 @@ import type {
 
 export class SequencerEngine {
   private project: SequenceProject;
-  private readonly clock: SequencerClock;
+  private readonly clock: PlaybackClock;
   private readonly lookaheadMs: number;
   private readonly listeners: {
     [TEventName in SequencerEventName]: Set<SequencerEventHandler<TEventName>>;

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createProject, setStepValue } from "../project";
-import type { SequencerClock, StepEvent } from "../types";
+import type { PlaybackClock, StepEvent } from "../types";
 import { ArrangementEngine } from "./ArrangementEngine";
 import { createArrangement } from "./project";
 import type { ArrangementSectionEvent, ArrangementProject } from "./types";
 
-class FakeClock implements SequencerClock {
+class FakeClock implements PlaybackClock {
   currentTime = 0;
   timers: Array<{ id: number; callback: () => void; dueAt: number }> = [];
   private nextId = 1;

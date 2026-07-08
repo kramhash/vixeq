@@ -3,10 +3,10 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { createProject, type SequencerClock } from "@vixeq/core";
+import { createProject, type PlaybackClock } from "@vixeq/core";
 import { SequencePlayer, type SequencePlayerChangeReason, type SequencePlayerRef } from "./SequencePlayer";
 
-class FakeClock implements SequencerClock {
+class FakeClock implements PlaybackClock {
   now = () => 0;
   setTimer = () => 1;
   clearTimer = () => undefined;

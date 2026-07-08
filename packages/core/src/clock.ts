@@ -1,4 +1,4 @@
-import type { SequencerClock } from "./types";
+import type { PlaybackClock } from "./types";
 
 const getHighResolutionNow = (): number => {
   if (typeof performance !== "undefined" && typeof performance.now === "function") {
@@ -8,7 +8,7 @@ const getHighResolutionNow = (): number => {
   return Date.now();
 };
 
-export const browserClock: SequencerClock = {
+export const browserClock: PlaybackClock = {
   now: getHighResolutionNow,
   setTimer(callback, delayMs) {
     return setTimeout(callback, Math.max(0, delayMs));

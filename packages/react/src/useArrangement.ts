@@ -3,14 +3,14 @@ import {
   type ArrangementProject,
   type ArrangementSection,
   type ArrangementSectionEvent,
-  type SequencerClock,
+  type PlaybackClock,
   type StepEvent,
 } from "@vixeq/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type UseArrangementOptions = {
   arrangement: ArrangementProject;
-  clock?: SequencerClock;
+  clock?: PlaybackClock;
   /** Absolute ms that corresponds to beat 0. Omit to anchor on first start(). */
   originMs?: number;
   loop?: boolean;

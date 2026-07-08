@@ -168,21 +168,83 @@ Document the public API surface — types, function signatures, options — in a
 
 ---
 
-### 1.0.0 — Stabilization & Commitment
+### 0.7.0 — Playback v2
 
-**Theme**: Freeze the public API surface, retire the "early development" label, and commit to semver.
+**Theme**: Replace clock-domain-dependent playback with one transport-owned,
+testable state model before extending Timeline.
 
-- Public API frozen. Breaking changes from this point forward require a major version bump.
-- README "early development" notice removed.
-- All 0.4.0–0.6.0 deliverables complete and integrated.
-- Flagship audio sync example polished and hosted.
-- API reference documentation complete.
+- [ ] Approve the Playback v2 behavioral contract, behavior matrix, and 0.7 migration map.
+- [ ] Replace `SequencerTransport` and direct Engine clock options with shareable `PlaybackTransport`.
+- [ ] Standardize async `play` / `pause` / `stop` / unit-specific seek semantics.
+- [ ] Make `SequencerEngine` always time-driven and remove public `timeDriven` / `originMs`.
+- [ ] Make channel sampling and Envelopes use logical transport position.
+- [ ] Apply strict Engine validation and atomic Project hot-swap.
+- [ ] Align React hooks and `player-react` with playback state, pending operations, errors, position refs, and reduced motion.
+- [ ] Migrate official examples and verify packed `0.7.0-beta.n` packages before stable release.
 
-**Release gates** (all required):
-- Public API stable and documented
-- Audio sync fully working with flagship example
-- Test coverage complete for all packages
-- Non-musical use case demonstrated
+The approved contract is in
+[`docs/behavior/playback-v2.md`](./docs/behavior/playback-v2.md). Detailed task
+ownership and dependencies are in
+[`docs/plans/v1-collaboration-spec.md`](./docs/plans/v1-collaboration-spec.md).
+
+---
+
+### 0.8.0 — Timeline and Arrangement v2
+
+**Theme**: Add variable-tempo cue scheduling and connect Arrangement playback
+to the same timing map without building a DAW editor.
+
+- [ ] Replace `TimingMap.offsetMs` with transport-relative `startPositionMs` and enforce a strict tempo map.
+- [ ] Introduce point-event-only `TimelineProject` v2 with explicit duration and JSON-safe payloads.
+- [ ] Add indexed `TimelineEngine` and `useTimeline()`.
+- [ ] Introduce `ArrangementProject` v2 with shared `TimingMap` and explicit duration.
+- [ ] Add explicit, issue-reporting Timeline and Arrangement v1-to-v2 migration APIs.
+- [ ] Integrate Sequencer animation and Timeline cues over one shared audio transport in `website-pulse`.
+- [ ] Verify packed `0.8.0-beta.n` packages and migration fixtures before stable release.
+
+---
+
+### 0.9.0 — Release Readiness
+
+**Theme**: Make public stability measurable before the API freeze.
+
+- [ ] Commit API Extractor reports for all three public packages and fail CI on unreviewed differences.
+- [ ] Enforce Core branch coverage of at least 90%, React branch coverage of at least 85%, and 100% on critical playback/timing/migration modules.
+- [ ] Test Node.js 22 and 24, React 18 and 19, TypeScript `>=5.5 <6`, SSR imports, and ESM/CJS packed consumers.
+- [ ] Run actual media E2E in the locked Playwright Chromium, Firefox, and WebKit versions.
+- [ ] Add pull-request CI for typecheck, tests, builds, API reports, coverage, compatibility, package smoke tests, and browser E2E.
+- [ ] Polish `website-pulse`, `cycling-workout`, and playground release fixtures.
+- [ ] Publish a Pages index with `/playground/`, `/website-pulse/`, and `/cycling-workout/`.
+
+All public packages use lockstep versions, including prereleases, through these milestones.
+
+---
+
+### 1.0.0-rc.1 — API Freeze
+
+**Theme**: Freeze the candidate API and validate the distributable packages under real usage.
+
+- [ ] Freeze all three public package APIs against their committed reports.
+- [ ] Publish all public packages at the same RC version.
+- [ ] Make the official examples consume the packed RC packages rather than workspace source paths for release verification.
+- [ ] Verify fresh installation from npm tarballs, including ESM, CJS, types, exports, and CSS entry points.
+- [ ] Keep the RC public for at least 14 days.
+- [ ] Require zero known blocker or critical defects.
+- [ ] Require the compatibility matrix to remain green and no public API changes during the RC observation window. Any API change starts a new RC evaluation.
+
+---
+
+### 1.0.0 — Stability Commitment
+
+**Theme**: Retire the early-development label and begin explicit semver guarantees.
+
+- [ ] Confirm every 0.7–0.9 and RC gate is complete.
+- [ ] Publish `@vixeq/core`, `@vixeq/react`, and `@vixeq/player-react` at the same `1.0.0` version.
+- [ ] Remove the README and package README early-development and pre-1.0 stability disclaimers.
+- [ ] Document the compatibility matrix, semver policy, and support policy.
+- [ ] Deprecate public APIs with `@deprecated` and migration notes for at least two minor releases; remove them only in the next major release, except for security or correctness emergencies.
+- [ ] Use a tag-triggered release workflow that runs typecheck, tests, builds, E2E, API checks, and packed-package smoke tests before publishing with npm provenance and creating a GitHub Release.
+- [ ] Run a post-publish clean-install smoke test.
 
 ---
 
@@ -190,15 +252,14 @@ Document the public API surface — types, function signatures, options — in a
 
 These tasks run in parallel with the release cycles above:
 
-- **Update `README.md`**: add `website-pulse` and `website-svg` to the examples section; update the "Current Scope" list to reflect 0.3.0 additions; update "does not include" section as audio sync lands in 0.4.0.
+- **Update `README.md`**: list the current examples and keep the scope, package status, and exclusions aligned with shipped behavior.
 - **Preset expansion**: add more named presets to `presets.ts` (e.g., triplet, waltz, slow pulse, burst).
-- **Multi-example Pages hosting**: host `website-svg` and `website-pulse` alongside the playground.
 
 ## Explicitly Out of Scope
 
 These items are not planned:
 
-- **Audio engine** — vixeq does not generate, synthesize, or schedule audio. It follows external audio; it does not produce it. `createAudioClock` (0.4.0) is an adapter to an external `HTMLMediaElement`, not a sampler or synthesizer. Tone.js integration, sample playback, Web Audio graph construction, and MIDI scheduling remain out of scope.
+- **Audio engine** — vixeq does not generate, synthesize, or schedule audio. It follows external audio through `PlaybackTransport`; it does not produce it. Tone.js integration, sample playback APIs, Web Audio graph construction, and MIDI scheduling remain out of scope.
 - **MIDI input/output**
 - **DAW-style timeline editing UI**
 - **URL sharing / project serialization beyond JSON export**

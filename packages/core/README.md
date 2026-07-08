@@ -43,40 +43,54 @@ Use `setProject(nextProject)` when your app edits the immutable project while th
 
 ## Audio Sync
 
-Vixeq does not require audio, but browser audio can be used as an optional clock source.
+Vixeq does not require audio, but browser audio can be used as an optional playback transport. In the 0.7 staging API, `SequencerEngine` still consumes a `PlaybackClock`; full Engine-to-`PlaybackTransport` integration lands in the Playback v2 engine phase.
 
 ```ts
-import { SequencerEngine, createMediaElementTransport, createProject } from "@vixeq/core";
+import {
+  SequencerEngine,
+  createMediaElementTransport,
+  createProject,
+  type PlaybackClock,
+} from "@vixeq/core";
 
 const project = createProject();
 const audio = new Audio("/loop.wav");
 audio.loop = true;
 
 const transport = createMediaElementTransport(audio);
-const engine = new SequencerEngine(project, {
-  clock: transport.clock,
-  timeDriven: true,
-});
+const clock: PlaybackClock = {
+  now: () => transport.getPositionMs(),
+  setTimer: (callback, delayMs) => setTimeout(callback, Math.max(0, delayMs)),
+  clearTimer: (timerId) => clearTimeout(timerId as ReturnType<typeof setTimeout>),
+};
+const engine = new SequencerEngine(project, { clock, timeDriven: true });
 
 await transport.play();
 engine.start();
 ```
 
-`createMediaElementTransport` is a browser-only helper for `HTMLMediaElement`. It coordinates `play`, `stop`, `pause`, `seek`, and exposes a `SequencerClock`; the sequencer engine itself stays audio-agnostic.
+`createMediaElementTransport` is a browser-only helper for `HTMLMediaElement`. It exposes the shared `PlaybackTransport` state, controls, and event stream while leaving media-element ownership with the caller.
 
 For seamless loops, decode the file and use an `AudioBufferSourceNode` transport:
 
 ```ts
-import { SequencerEngine, createAudioBufferTransport, createProject } from "@vixeq/core";
+import {
+  SequencerEngine,
+  createAudioBufferTransport,
+  createProject,
+  type PlaybackClock,
+} from "@vixeq/core";
 
 const ctx = new AudioContext();
 const response = await fetch("/loop.wav");
 const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
 const transport = createAudioBufferTransport(ctx, buffer, { loop: true });
-const engine = new SequencerEngine(createProject(), {
-  clock: transport.clock,
-  timeDriven: true,
-});
+const clock: PlaybackClock = {
+  now: () => transport.getPositionMs(),
+  setTimer: (callback, delayMs) => setTimeout(callback, Math.max(0, delayMs)),
+  clearTimer: (timerId) => clearTimeout(timerId as ReturnType<typeof setTimeout>),
+};
+const engine = new SequencerEngine(createProject(), { clock, timeDriven: true });
 
 await transport.play();
 engine.start();
@@ -195,6 +209,6 @@ The core API is intentionally small:
 - `normalizeProject`
 - built-in presets
 - `createEnvelope` / `createDecayEnvelope`
-- optional `SequencerTransport` helpers
+- optional `PlaybackTransport` helpers
 - `bindChannelsToElement` (via `@vixeq/core/dom`)
 - `ArrangementEngine` / `createArrangement` for multi-pattern song playback

@@ -2,10 +2,10 @@
 import { act, renderHook } from "@testing-library/react";
 import { StrictMode, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { createArrangement, createProject, type SequencerClock } from "@vixeq/core";
+import { createArrangement, createProject, type PlaybackClock } from "@vixeq/core";
 import { useArrangement } from "./useArrangement";
 
-class FakeClock implements SequencerClock {
+class FakeClock implements PlaybackClock {
   time = 0;
   now = () => this.time;
   setTimer = () => 1;

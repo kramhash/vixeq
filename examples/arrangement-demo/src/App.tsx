@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  createAudioClock,
   createDecayEnvelope,
+  createMediaElementTransport,
   sectionAtBeat,
-  type SequencerClock,
+  type PlaybackClock,
+  type PlaybackTransport,
 } from "@vixeq/core";
 import { bindChannelsToElement } from "@vixeq/core/dom";
 import { useAnimatedChannels, useArrangement } from "@vixeq/react";
@@ -28,27 +29,39 @@ export const App = () => {
   const rootRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const ctxRef = useRef<AudioContext | null>(null);
-  const [clock, setClock] = useState<SequencerClock | null>(null);
+  const [clock, setClock] = useState<PlaybackClock | null>(null);
+  const [transport, setTransport] = useState<PlaybackTransport | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [displaySeconds, setDisplaySeconds] = useState(0);
 
-  // The <audio> element is the transport; createAudioClock exposes its
-  // playback position (interpolated via the AudioContext) as the clock
-  // ArrangementEngine polls. This is the same audio-sync building block
-  // introduced in 0.4.0 — Arrangement just consumes it.
+  // The <audio> element is the transport. Playback v2 exposes media control
+  // through PlaybackTransport; until ArrangementEngine consumes transports
+  // directly, adapt its position into the PlaybackClock the engine polls.
   useEffect(() => {
     const audioEl = audioRef.current;
     if (!audioEl) return;
 
     const ctx = new AudioContext();
     ctxRef.current = ctx;
-    const audioClock = createAudioClock(audioEl, { audioContext: ctx });
-    setClock(audioClock);
+    const mediaTransport = createMediaElementTransport(audioEl, { audioContext: ctx });
+    const mediaClock: PlaybackClock = {
+      now: () => mediaTransport.getPositionMs(),
+      setTimer(callback, delayMs) {
+        return setTimeout(callback, Math.max(0, delayMs));
+      },
+      clearTimer(timerId) {
+        clearTimeout(timerId as ReturnType<typeof setTimeout>);
+      },
+    };
+
+    setTransport(mediaTransport);
+    setClock(mediaClock);
 
     return () => {
-      audioClock.dispose();
+      mediaTransport.dispose();
       void ctx.close();
       ctxRef.current = null;
+      setTransport(null);
       setClock(null);
     };
   }, []);
@@ -101,27 +114,25 @@ export const App = () => {
   const activeLabel = activeSection ? SECTION_LABELS[activeSection.section.id] : "—";
 
   const handleToggle = useCallback(async () => {
-    const audioEl = audioRef.current;
-    const ctx = ctxRef.current;
-    if (!audioEl || !ctx || !engine) return;
+    if (!transport || !engine) return;
 
     if (isPlaying) {
-      audioEl.pause();
+      await transport.pause();
       engine.stop();
       setIsPlaying(false);
     } else {
-      await ctx.resume();
-      await audioEl.play();
+      await transport.play();
       engine.start();
       setIsPlaying(true);
     }
-  }, [isPlaying, engine]);
+  }, [isPlaying, engine, transport]);
 
   const handleJump = useCallback((startBeat: number) => {
-    const audioEl = audioRef.current;
-    if (!audioEl) return;
-    audioEl.currentTime = startBeat * BEAT_SECONDS;
-  }, []);
+    if (!transport) return;
+    const nextSeconds = startBeat * BEAT_SECONDS;
+    void transport.seekMs(nextSeconds * 1000);
+    setDisplaySeconds(nextSeconds);
+  }, [transport]);
 
   const progressPct = (displaySeconds / (TOTAL_BEATS * BEAT_SECONDS)) * 100;
 
@@ -147,7 +158,7 @@ export const App = () => {
           <span className="section-badge" data-section={activeSection?.section.id ?? "gap"}>
             {activeLabel}
           </span>
-          <button className="btn-primary" onClick={handleToggle} disabled={!clock}>
+          <button className="btn-primary" onClick={handleToggle} disabled={!transport || !clock}>
             {isPlaying ? "Pause" : "Play"}
           </button>
         </div>

@@ -1,284 +1,556 @@
-import type {
-  AudioBufferTransportOptions,
-  AudioClock,
-  AudioClockOptions,
-  AudioContextClock,
-  MediaElementTransportOptions,
-  SequencerTransport,
-} from "./types";
+import {
+  createClockTransport,
+  PlaybackError,
+  type PlaybackSnapshot,
+  type PlaybackState,
+  type PlaybackTransport,
+  type PlaybackTransportBaseOptions,
+  type PlaybackTransportEvent,
+} from "./playbackTransport";
+import type { PlaybackClock } from "./types";
 
-type Anchor = {
-  mediaMs: number;
-  ctxMs: number;
+export type MediaElementTransportOptions = PlaybackTransportBaseOptions & {
+  audioContext?: AudioContext;
 };
 
-/**
- * Creates a SequencerClock that follows an HTMLMediaElement's playback position.
- *
- * When an AudioContext is provided, now() interpolates between media.currentTime
- * samples using the AudioContext's high-resolution monotonic clock, eliminating
- * the jitter caused by media.currentTime's low update rate.
- *
- * The media element is the transport: call play/pause/seek on it to control the
- * sequencer. The AudioContext is a clock source only — you do not need to route
- * audio through it.
- *
- * The AudioContext must be resumed before playback (user-gesture requirement).
- * Call ctx.resume() in the same handler that calls audioEl.play().
- *
- * Call dispose() when done to remove all event listeners added to the media element.
- */
-export function createAudioClock(
-  media: HTMLMediaElement,
-  options: AudioClockOptions = {},
-): AudioClock {
-  const { audioContext: ctx } = options;
+export type AudioBufferTransportOptions = PlaybackTransportBaseOptions & {
+  destination?: AudioNode;
+  loop?: boolean;
+};
 
-  let anchor: Anchor = {
-    mediaMs: media.currentTime * 1000,
-    ctxMs: ctx ? ctx.currentTime * 1000 : 0,
-  };
-  let paused = media.paused;
+const MEDIA_EVENTS = [
+  "play",
+  "pause",
+  "seeking",
+  "seeked",
+  "ratechange",
+  "durationchange",
+  "waiting",
+  "playing",
+  "timeupdate",
+  "ended",
+  "error",
+] as const;
 
-  const resample = () => {
-    anchor = {
-      mediaMs: media.currentTime * 1000,
-      ctxMs: ctx ? ctx.currentTime * 1000 : 0,
-    };
-    paused = media.paused;
-  };
+const mediaDurationMs = (media: HTMLMediaElement): number | null =>
+  Number.isFinite(media.duration) && media.duration > 0 ? media.duration * 1000 : null;
 
-  media.addEventListener("play", resample);
-  media.addEventListener("pause", resample);
-  media.addEventListener("seeked", resample);
-  media.addEventListener("ratechange", resample);
-  media.addEventListener("timeupdate", resample);
+const mediaPositionMs = (media: HTMLMediaElement): number =>
+  Math.max(0, media.currentTime * 1000);
 
-  return {
-    now(): number {
-      if (!ctx || paused) {
-        return media.currentTime * 1000;
-      }
-      const ctxElapsedMs = (ctx.currentTime * 1000 - anchor.ctxMs) * media.playbackRate;
-      return anchor.mediaMs + ctxElapsedMs;
-    },
+const reportListenerError = (
+  error: unknown,
+  eventName: string,
+  onListenerError?: PlaybackTransportBaseOptions["onListenerError"],
+): void => {
+  if (onListenerError) {
+    try {
+      onListenerError(error, { source: "transport", eventName });
+      return;
+    } catch (reportingError) {
+      error = reportingError;
+    }
+  }
 
-    setTimer(callback: () => void, delayMs: number): unknown {
-      return setTimeout(callback, Math.max(0, delayMs));
-    },
+  const reportError = (globalThis as typeof globalThis & {
+    reportError?: (error: unknown) => void;
+  }).reportError;
+  if (reportError) {
+    reportError.call(globalThis, error);
+  } else if (typeof console !== "undefined") {
+    console.error(error);
+  }
+};
 
-    clearTimer(timerId: unknown): void {
-      clearTimeout(timerId as ReturnType<typeof setTimeout>);
-    },
+const assertFinitePositive = (value: number, name: string): void => {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new RangeError(`${name} must be a finite number greater than zero.`);
+  }
+};
 
-    dispose(): void {
-      media.removeEventListener("play", resample);
-      media.removeEventListener("pause", resample);
-      media.removeEventListener("seeked", resample);
-      media.removeEventListener("ratechange", resample);
-      media.removeEventListener("timeupdate", resample);
-    },
-  };
-}
+const assertBoolean = (value: boolean, name: string): void => {
+  if (typeof value !== "boolean") {
+    throw new TypeError(`${name} must be a boolean.`);
+  }
+};
 
-/**
- * Creates a transport around an HTMLMediaElement and exposes its playback
- * position as a SequencerClock.
- *
- * The media element remains the audio source. This helper only coordinates
- * play/stop/seek and clock sampling so a SequencerEngine can follow it.
- */
+/** Creates a PlaybackTransport backed by a borrowed HTMLMediaElement. */
 export function createMediaElementTransport(
   media: HTMLMediaElement,
   options: MediaElementTransportOptions = {},
-): SequencerTransport {
-  const { audioContext, stopAtMs = 0 } = options;
-  const clock = createAudioClock(media, { audioContext });
+): PlaybackTransport {
+  let state: PlaybackState = media.ended
+    ? "ended"
+    : media.paused
+      ? mediaPositionMs(media) === 0
+        ? "stopped"
+        : "paused"
+      : "playing";
+  let durationMs = mediaDurationMs(media);
+  let playbackRate = media.playbackRate;
+  let loop = media.loop;
+  let buffering = false;
+  let disposed = false;
+  let operationQueue = Promise.resolve();
+  let seekPreviousPositionMs = mediaPositionMs(media);
+  let lastObservedPositionMs = seekPreviousPositionMs;
+  let loopIteration = 0;
+  let suppressPlay = false;
+  let suppressPause = false;
+  let suppressSeekTargetMs: number | null = null;
+  let suppressRateTarget: number | null = null;
+  let suppressError = false;
+  let suppressNextError = false;
+  const listeners = new Set<(event: PlaybackTransportEvent) => void>();
 
-  const seek = (timeMs: number) => {
-    media.currentTime = Math.max(0, timeMs) / 1000;
+  const assertActive = (): void => {
+    if (disposed) throw new PlaybackError("TRANSPORT_DISPOSED");
+  };
+
+  const createSnapshot = (): PlaybackSnapshot => ({
+    state,
+    positionMs: mediaPositionMs(media),
+    durationMs,
+    playbackRate,
+    loop,
+    buffering,
+  });
+
+  const emit = (event: PlaybackTransportEvent): void => {
+    for (const listener of [...listeners]) {
+      try {
+        listener(event);
+      } catch (error) {
+        reportListenerError(error, event.type, options.onListenerError);
+      }
+    }
+  };
+
+  const updateStateAfterSeek = (): void => {
+    const positionMs = mediaPositionMs(media);
+    if (state === "stopped") {
+      state = positionMs === 0 ? "stopped" : "paused";
+    } else if (state === "ended") {
+      state = durationMs !== null && positionMs === durationMs ? "ended" : "paused";
+    }
+  };
+
+  const onPlay = (): void => {
+    state = "playing";
+    buffering = false;
+    lastObservedPositionMs = mediaPositionMs(media);
+    if (suppressPlay) {
+      suppressPlay = false;
+      return;
+    }
+    emit({ type: "play", snapshot: createSnapshot() });
+  };
+
+  const onPause = (): void => {
+    if (!media.ended) state = "paused";
+    lastObservedPositionMs = mediaPositionMs(media);
+    if (suppressPause) {
+      suppressPause = false;
+      return;
+    }
+    emit({ type: "pause", snapshot: createSnapshot() });
+  };
+
+  const onSeeking = (): void => {
+    seekPreviousPositionMs = lastObservedPositionMs;
+  };
+
+  const onSeeked = (): void => {
+    updateStateAfterSeek();
+    const positionMs = mediaPositionMs(media);
+    lastObservedPositionMs = positionMs;
+    if (suppressSeekTargetMs !== null && Math.abs(positionMs - suppressSeekTargetMs) < 0.5) {
+      suppressSeekTargetMs = null;
+      return;
+    }
+    emit({
+      type: "seek",
+      previousPositionMs: seekPreviousPositionMs,
+      snapshot: createSnapshot(),
+    });
+  };
+
+  const onRateChange = (): void => {
+    const previousPlaybackRate = playbackRate;
+    playbackRate = media.playbackRate;
+    if (suppressRateTarget !== null && playbackRate === suppressRateTarget) {
+      suppressRateTarget = null;
+      return;
+    }
+    if (previousPlaybackRate !== playbackRate) {
+      emit({ type: "ratechange", previousPlaybackRate, snapshot: createSnapshot() });
+    }
+  };
+
+  const onDurationChange = (): void => {
+    const nextDurationMs = mediaDurationMs(media);
+    if (nextDurationMs === durationMs) return;
+    const previousDurationMs = durationMs;
+    durationMs = nextDurationMs;
+    emit({ type: "durationchange", previousDurationMs, snapshot: createSnapshot() });
+  };
+
+  const setBuffering = (nextBuffering: boolean): void => {
+    if (buffering === nextBuffering || state !== "playing") return;
+    const previousBuffering = buffering;
+    buffering = nextBuffering;
+    emit({ type: "bufferingchange", previousBuffering, snapshot: createSnapshot() });
+  };
+
+  const onTimeUpdate = (): void => {
+    const positionMs = mediaPositionMs(media);
+    const nextLoop = media.loop;
+    if (nextLoop !== loop) {
+      const previousLoop = loop;
+      loop = nextLoop;
+      emit({ type: "loopchange", previousLoop, snapshot: createSnapshot() });
+    }
+    if (state === "playing" && loop && positionMs + 0.5 < lastObservedPositionMs) {
+      loopIteration += 1;
+      emit({ type: "loop", iteration: loopIteration, snapshot: createSnapshot() });
+    }
+    lastObservedPositionMs = positionMs;
+  };
+
+  const handlers: Record<(typeof MEDIA_EVENTS)[number], EventListener> = {
+    play: onPlay,
+    pause: onPause,
+    seeking: onSeeking,
+    seeked: onSeeked,
+    ratechange: onRateChange,
+    durationchange: onDurationChange,
+    waiting: () => setBuffering(true),
+    playing: () => setBuffering(false),
+    timeupdate: onTimeUpdate,
+    ended: () => {
+      state = "ended";
+      buffering = false;
+      lastObservedPositionMs = mediaPositionMs(media);
+      emit({ type: "ended", snapshot: createSnapshot() });
+    },
+    error: () => {
+      if (suppressError || suppressNextError) {
+        suppressNextError = false;
+        return;
+      }
+      emit({ type: "error", error: media.error, snapshot: createSnapshot() });
+    },
+  };
+
+  for (const eventName of MEDIA_EVENTS) {
+    media.addEventListener(eventName, handlers[eventName]);
+  }
+
+  const enqueue = (operation: () => void | Promise<void>): Promise<void> => {
+    const result = operationQueue.then(async () => {
+      assertActive();
+      await operation();
+    });
+    operationQueue = result.catch(() => undefined);
+    return result;
   };
 
   return {
-    clock,
-
-    async play(): Promise<void> {
-      await audioContext?.resume();
-      await media.play();
+    getSnapshot(): PlaybackSnapshot {
+      assertActive();
+      return createSnapshot();
     },
-
-    stop(): void {
-      media.pause();
-      seek(stopAtMs);
+    getPlaybackState(): PlaybackState {
+      assertActive();
+      return state;
     },
-
-    pause(): void {
-      media.pause();
+    getPositionMs(): number {
+      assertActive();
+      return mediaPositionMs(media);
     },
-
-    seek,
-
+    getDurationMs(): number | null {
+      assertActive();
+      return durationMs;
+    },
+    getPlaybackRate(): number {
+      assertActive();
+      return playbackRate;
+    },
+    getLoop(): boolean {
+      assertActive();
+      return loop;
+    },
+    play(): Promise<void> {
+      assertActive();
+      return enqueue(async () => {
+        if (state === "playing") return;
+        if (state === "ended") {
+          suppressSeekTargetMs = 0;
+          media.currentTime = 0;
+          loopIteration = 0;
+        }
+        suppressPlay = true;
+        suppressError = true;
+        try {
+          await options.audioContext?.resume();
+          await media.play();
+        } catch (error) {
+          suppressPlay = false;
+          suppressNextError = media.error !== null;
+          state = media.ended
+            ? "ended"
+            : media.paused
+              ? mediaPositionMs(media) === 0
+                ? "stopped"
+                : "paused"
+              : "playing";
+          throw error;
+        } finally {
+          suppressError = false;
+        }
+        state = "playing";
+        buffering = false;
+        lastObservedPositionMs = mediaPositionMs(media);
+        emit({ type: "play", snapshot: createSnapshot() });
+      });
+    },
+    pause(): Promise<void> {
+      assertActive();
+      return enqueue(() => {
+        if (state !== "playing") return;
+        suppressPause = true;
+        media.pause();
+        state = "paused";
+        buffering = false;
+        lastObservedPositionMs = mediaPositionMs(media);
+        emit({ type: "pause", snapshot: createSnapshot() });
+      });
+    },
+    stop(): Promise<void> {
+      assertActive();
+      return enqueue(() => {
+        if (state === "stopped" && mediaPositionMs(media) === 0) return;
+        if (!media.paused) {
+          suppressPause = true;
+          media.pause();
+        }
+        if (mediaPositionMs(media) !== 0) {
+          suppressSeekTargetMs = 0;
+          media.currentTime = 0;
+        }
+        state = "stopped";
+        buffering = false;
+        loopIteration = 0;
+        lastObservedPositionMs = 0;
+        emit({ type: "stop", snapshot: createSnapshot() });
+      });
+    },
+    seekMs(positionMs: number): Promise<void> {
+      assertActive();
+      if (!Number.isFinite(positionMs) || positionMs < 0) {
+        throw new RangeError("positionMs must be a finite, non-negative number.");
+      }
+      if (durationMs !== null && positionMs > durationMs) {
+        throw new RangeError("positionMs must not exceed the playback duration.");
+      }
+      return enqueue(() => {
+        const previousPositionMs = mediaPositionMs(media);
+        suppressSeekTargetMs = positionMs;
+        media.currentTime = positionMs / 1000;
+        updateStateAfterSeek();
+        lastObservedPositionMs = positionMs;
+        emit({ type: "seek", previousPositionMs, snapshot: createSnapshot() });
+      });
+    },
+    setPlaybackRate(rate: number): Promise<void> {
+      assertActive();
+      assertFinitePositive(rate, "playbackRate");
+      return enqueue(() => {
+        if (rate === playbackRate) return;
+        const previousPlaybackRate = playbackRate;
+        suppressRateTarget = rate;
+        media.playbackRate = rate;
+        playbackRate = rate;
+        emit({ type: "ratechange", previousPlaybackRate, snapshot: createSnapshot() });
+      });
+    },
+    setLoop(nextLoop: boolean): Promise<void> {
+      assertActive();
+      assertBoolean(nextLoop, "loop");
+      return enqueue(() => {
+        if (nextLoop === loop) return;
+        if (nextLoop && durationMs === null) {
+          throw new PlaybackError("DURATION_UNAVAILABLE");
+        }
+        const previousLoop = loop;
+        media.loop = nextLoop;
+        loop = nextLoop;
+        emit({ type: "loopchange", previousLoop, snapshot: createSnapshot() });
+      });
+    },
+    subscribe(listener: (event: PlaybackTransportEvent) => void): () => void {
+      assertActive();
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
     dispose(): void {
-      clock.dispose();
+      if (disposed) return;
+      const snapshot = createSnapshot();
+      disposed = true;
+      emit({ type: "dispose", snapshot });
+      listeners.clear();
+      for (const eventName of MEDIA_EVENTS) {
+        media.removeEventListener(eventName, handlers[eventName]);
+      }
     },
   };
 }
 
-/**
- * Creates a transport for an AudioBufferSourceNode playback graph.
- *
- * This is the preferred helper for seamless loops. The source node's loop
- * property handles loop boundaries; a new source node is created only for each
- * playback start or active seek because AudioBufferSourceNode instances are
- * one-shot after start().
- */
+/** Creates a PlaybackTransport backed by one-shot AudioBufferSourceNodes. */
 export function createAudioBufferTransport(
   audioContext: AudioContext,
   buffer: AudioBuffer,
   options: AudioBufferTransportOptions = {},
-): SequencerTransport {
-  const { destination = audioContext.destination, loop = false, stopAtMs = 0 } = options;
+): PlaybackTransport {
+  const durationMs = buffer.duration * 1000;
+  assertFinitePositive(durationMs, "buffer.duration");
+  assertBoolean(options.loop ?? false, "loop");
+
+  const clock: PlaybackClock = {
+    now: () => audioContext.currentTime * 1000,
+    setTimer: (callback, delayMs) => setTimeout(callback, Math.max(0, delayMs)),
+    clearTimer: (timerId) => clearTimeout(timerId as ReturnType<typeof setTimeout>),
+  };
+  const base = createClockTransport(clock, {
+    durationMs,
+    loop: options.loop,
+    onListenerError: options.onListenerError,
+  });
+  const destination = options.destination ?? audioContext.destination;
   let source: AudioBufferSourceNode | null = null;
-  let startCtxTime = 0;
-  let offsetMs = 0;
-  let playing = false;
-  let stopping = false;
+  let disposed = false;
+  let operationQueue = Promise.resolve();
 
-  const normalizeOffsetMs = (timeMs: number) => {
-    const safeMs = Math.max(0, timeMs);
-    if (!loop || buffer.duration <= 0) {
-      return safeMs;
-    }
-    const durationMs = buffer.duration * 1000;
-    return safeMs % durationMs;
-  };
-
-  const disconnectSource = () => {
-    if (!source) return;
-    stopping = true;
-    try {
-      source.stop();
-    } catch {
-      // Already stopped.
-    }
-    source.disconnect();
+  const stopSource = (): void => {
+    const previousSource = source;
     source = null;
-    stopping = false;
+    if (!previousSource) return;
+    previousSource.onended = null;
+    try {
+      previousSource.stop();
+    } catch {
+      // AudioBufferSourceNode is one-shot and may already have ended.
+    }
+    previousSource.disconnect();
   };
 
-  const startSource = (timeMs: number) => {
-    disconnectSource();
+  const startSource = (positionMs: number): void => {
+    stopSource();
     const nextSource = audioContext.createBufferSource();
-    const nextOffsetMs = normalizeOffsetMs(timeMs);
     nextSource.buffer = buffer;
-    nextSource.loop = loop;
+    nextSource.loop = base.getLoop();
+    nextSource.playbackRate.value = base.getPlaybackRate();
     nextSource.connect(destination);
     nextSource.onended = () => {
-      if (!stopping && source === nextSource) {
-        source = null;
-        playing = false;
-      }
+      if (source === nextSource && !nextSource.loop) source = null;
     };
-    startCtxTime = audioContext.currentTime;
-    offsetMs = nextOffsetMs;
-    playing = true;
     source = nextSource;
-    nextSource.start(0, nextOffsetMs / 1000);
+    try {
+      nextSource.start(0, positionMs / 1000);
+    } catch (error) {
+      source = null;
+      nextSource.onended = null;
+      nextSource.disconnect();
+      throw error;
+    }
   };
 
-  const clock = {
-    now(): number {
-      if (!playing) {
-        return offsetMs;
-      }
-      return offsetMs + (audioContext.currentTime - startCtxTime) * 1000;
-    },
+  const assertActive = (): void => {
+    if (disposed) throw new PlaybackError("TRANSPORT_DISPOSED");
+  };
 
-    setTimer(callback: () => void, delayMs: number): unknown {
-      return setTimeout(callback, Math.max(0, delayMs));
-    },
-
-    clearTimer(timerId: unknown): void {
-      clearTimeout(timerId as ReturnType<typeof setTimeout>);
-    },
+  const enqueue = (operation: () => void | Promise<void>): Promise<void> => {
+    const result = operationQueue.then(async () => {
+      assertActive();
+      await operation();
+    });
+    operationQueue = result.catch(() => undefined);
+    return result;
   };
 
   return {
-    clock,
-
-    async play(): Promise<void> {
-      await audioContext.resume();
-      startSource(offsetMs);
+    getSnapshot: () => base.getSnapshot(),
+    getPlaybackState: () => base.getPlaybackState(),
+    getPositionMs: () => base.getPositionMs(),
+    getDurationMs: () => base.getDurationMs(),
+    getPlaybackRate: () => base.getPlaybackRate(),
+    getLoop: () => base.getLoop(),
+    play(): Promise<void> {
+      assertActive();
+      return enqueue(async () => {
+        if (base.getPlaybackState() === "playing") return;
+        await audioContext.resume();
+        const positionMs = base.getPlaybackState() === "ended" ? 0 : base.getPositionMs();
+        startSource(positionMs);
+        try {
+          await base.play();
+        } catch (error) {
+          stopSource();
+          throw error;
+        }
+      });
     },
-
-    stop(): void {
-      disconnectSource();
-      playing = false;
-      offsetMs = normalizeOffsetMs(stopAtMs);
+    pause(): Promise<void> {
+      assertActive();
+      return enqueue(async () => {
+        if (base.getPlaybackState() !== "playing") return;
+        stopSource();
+        await base.pause();
+      });
     },
-
-    pause(): void {
-      offsetMs = clock.now();
-      disconnectSource();
-      playing = false;
+    stop(): Promise<void> {
+      assertActive();
+      return enqueue(async () => {
+        if (base.getPlaybackState() === "stopped" && base.getPositionMs() === 0) return;
+        stopSource();
+        await base.stop();
+      });
     },
-
-    seek(timeMs: number): void {
-      const nextOffsetMs = normalizeOffsetMs(timeMs);
-      offsetMs = nextOffsetMs;
-      if (playing) {
-        startSource(nextOffsetMs);
+    seekMs(positionMs: number): Promise<void> {
+      assertActive();
+      if (!Number.isFinite(positionMs) || positionMs < 0 || positionMs > durationMs) {
+        throw new RangeError("positionMs must be finite, non-negative, and within the buffer duration.");
       }
+      return enqueue(async () => {
+        const playing = base.getPlaybackState() === "playing";
+        if (playing) startSource(positionMs);
+        await base.seekMs(positionMs);
+      });
     },
-
+    setPlaybackRate(rate: number): Promise<void> {
+      assertActive();
+      assertFinitePositive(rate, "playbackRate");
+      return enqueue(async () => {
+        if (rate === base.getPlaybackRate()) return;
+        if (source) source.playbackRate.value = rate;
+        await base.setPlaybackRate(rate);
+      });
+    },
+    setLoop(nextLoop: boolean): Promise<void> {
+      assertActive();
+      assertBoolean(nextLoop, "loop");
+      return enqueue(async () => {
+        if (nextLoop === base.getLoop()) return;
+        if (source) source.loop = nextLoop;
+        await base.setLoop(nextLoop);
+      });
+    },
+    subscribe: (listener) => base.subscribe(listener),
     dispose(): void {
-      disconnectSource();
-      playing = false;
-    },
-  };
-}
-
-/**
- * Creates a SequencerClock driven by an AudioContext's monotonic clock.
- *
- * Designed for use with AudioBufferSourceNode (Web Audio graph) where there is
- * no HTMLMediaElement. Provides sample-accurate, gap-free timing.
- *
- * Usage:
- *   const clock = createAudioContextClock(ctx);
- *   await ctx.resume();        // must be inside a user-gesture handler
- *   clock.start();             // anchor to ctx.currentTime
- *   source.start(0);           // start audio at the same moment
- *   // ... later:
- *   source.stop();
- *   clock.stop();              // now() returns 0 until next start()
- *
- * The AudioContext lifecycle (creation, resume, close) is the caller's responsibility.
- */
-export function createAudioContextClock(ctx: AudioContext): AudioContextClock {
-  let startTime = 0;
-  let playing = false;
-
-  return {
-    start(): void {
-      startTime = ctx.currentTime;
-      playing = true;
-    },
-
-    stop(): void {
-      playing = false;
-    },
-
-    now(): number {
-      return playing ? (ctx.currentTime - startTime) * 1000 : 0;
-    },
-
-    setTimer(callback: () => void, delayMs: number): unknown {
-      return setTimeout(callback, Math.max(0, delayMs));
-    },
-
-    clearTimer(timerId: unknown): void {
-      clearTimeout(timerId as ReturnType<typeof setTimeout>);
+      if (disposed) return;
+      disposed = true;
+      base.dispose();
+      stopSource();
     },
   };
 }

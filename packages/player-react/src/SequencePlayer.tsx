@@ -9,7 +9,7 @@ import {
   setTrackEnabled,
   toggleStep,
   type SequenceProject,
-  type SequencerClock,
+  type PlaybackClock,
   type SequencerEngine,
   type SequencerTransport,
   type StepEvent,
@@ -85,7 +85,7 @@ type SequencePlayerBaseProps = {
 
 export type SequencePlayerProps =
   | (SequencePlayerBaseProps & {
-      clock?: SequencerClock;
+      clock?: PlaybackClock;
       transport?: never;
     })
   | (SequencePlayerBaseProps & {
@@ -97,7 +97,7 @@ export type StandaloneSequencePlayerProps =
   | (Omit<SequencePlayerBaseProps, "project" | "onProjectChange"> & {
       defaultProject?: SequenceProject;
       onProjectChange?: (change: SequencePlayerProjectChange) => void;
-      clock?: SequencerClock;
+      clock?: PlaybackClock;
       transport?: never;
     })
   | (Omit<SequencePlayerBaseProps, "project" | "onProjectChange"> & {

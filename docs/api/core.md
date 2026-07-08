@@ -20,7 +20,8 @@ Gaps are valid and output zero. Sections restart their pattern at step 0. Missin
 
 ## Timing, audio, and values
 
-- `browserClock`, `createAudioClock`, `createAudioContextClock`, `createMediaElementTransport`, `createAudioBufferTransport`.
+- `browserClock`, `createClockTransport`, `createMediaElementTransport`, `createAudioBufferTransport`.
+- Playback v2 adds `PlaybackClock`, `PlaybackTransport`, `PlaybackSnapshot`, `PlaybackError`, and clock, media-element, and AudioBuffer transport factories. Engine integration follows in P3/P4.
 - `createEnvelope`, `createDecayEnvelope`, smoothing helpers, easing functions, `lerp`.
 - Timeline exports provide beat/time conversion and event queries for tempo-variable data.
 

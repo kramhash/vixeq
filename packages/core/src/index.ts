@@ -27,11 +27,25 @@ export { createDecayEnvelope, createEnvelope } from "./envelope";
 export type { CreateEnvelopeOptions, Envelope } from "./envelope";
 export {
   createAudioBufferTransport,
-  createAudioClock,
-  createAudioContextClock,
   createMediaElementTransport,
 } from "./audioClock";
+export type {
+  AudioBufferTransportOptions,
+  MediaElementTransportOptions,
+} from "./audioClock";
 export { browserClock } from "./clock";
+export { createClockTransport, PlaybackError } from "./playbackTransport";
+export type {
+  ClockTransportOptions,
+  ListenerErrorContext,
+  PlaybackErrorCode,
+  PlaybackOperation,
+  PlaybackSnapshot,
+  PlaybackState,
+  PlaybackTransport,
+  PlaybackTransportBaseOptions,
+  PlaybackTransportEvent,
+} from "./playbackTransport";
 export {
   easeInCubic,
   easeInOutCubic,
@@ -65,15 +79,11 @@ export * from "./timeline";
 export { normalizeProject, validateProject } from "./validation";
 export type { SmoothingConfig } from "./smoothing";
 export type {
-  AudioClock,
-  AudioClockOptions,
-  AudioBufferTransportOptions,
-  AudioContextClock,
   ChannelSource,
   MissedStepPolicy,
   ProjectEvent,
   SequenceProject,
-  SequencerClock,
+  PlaybackClock,
   SequencerEngineOptions,
   SequencerEventMap,
   SequencerEventName,
@@ -86,7 +96,6 @@ export type {
   Unsubscribe,
   ValidationIssue,
   ValidationResult,
-  MediaElementTransportOptions,
 } from "./types";
 export type { CreateProjectOptions, RandomizeTrackOptions } from "./project";
 export type { EasingFunction } from "./easing";

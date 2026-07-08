@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { SequencerEngine } from "./SequencerEngine";
 import { createProject, setStepValue } from "./project";
 import { easeOutQuad } from "./easing";
-import type { SequencerClock, StepEvent } from "./types";
+import type { PlaybackClock, StepEvent } from "./types";
 
-class FakeClock implements SequencerClock {
+class FakeClock implements PlaybackClock {
   currentTime = 0;
   timers: Array<{ id: number; callback: () => void; dueAt: number }> = [];
   private nextId = 1;

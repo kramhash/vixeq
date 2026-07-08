@@ -9,7 +9,7 @@ import {
   unionTrackIds,
   type ResolvedArrangementStep,
 } from "./resolve";
-import type { SequencerClock, StepEvent, Unsubscribe } from "../types";
+import type { PlaybackClock, StepEvent, Unsubscribe } from "../types";
 import type {
   ArrangementEventHandler,
   ArrangementEventMap,
@@ -19,7 +19,7 @@ import type {
 } from "./types";
 
 export type ArrangementEngineOptions = {
-  clock?: SequencerClock;
+  clock?: PlaybackClock;
   /** Max ms between polls while playing. Default 25. */
   lookaheadMs?: number;
   /** Absolute ms that corresponds to beat 0. Omit to anchor on first start(). */
@@ -46,7 +46,7 @@ export type ArrangementEngineOptions = {
 export class ArrangementEngine {
   private arrangement: ArrangementProject;
   private trackIds: string[];
-  private readonly clock: SequencerClock;
+  private readonly clock: PlaybackClock;
   private readonly lookaheadMs: number;
   private msPerBeat: number;
   private readonly loop: boolean;
