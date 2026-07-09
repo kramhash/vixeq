@@ -69,14 +69,19 @@ None.
       valid `seekBeat` updates position/emits a `playback` `"seek"` event but
       no `cue` event — confirmed by the "seekBeat emits playback seek without
       cue events" test.
-- [ ] Natural playback delayed-dispatch policy branches correctly
-      (`TL-EN-004`/`005`) — **`"emit"` confirmed correct, `"skip"` is
-      confirmed broken; see B1.** `"emit"` mode dispatches every crossed
-      event in beat order via `getEventsInBeatRangeInclusiveEnd`, each with
-      its own `lateByMs` — verified by reading `emitDueCuesForIteration`
-      and by the "dispatches cue events from play and natural ticks" test,
-      which crosses two events in a single big tick jump and gets both, in
-      order.
+- [x] Natural playback delayed-dispatch policy branches correctly
+      (`TL-EN-004`/`005`) — **at the time of this original pass, `"emit"`
+      was confirmed correct but `"skip"` was confirmed broken; see B1 below.
+      B1 was subsequently fixed and independently re-verified — see
+      "Re-review (fixes verification)" → "B1 (blocking) — RESOLVED" at the
+      bottom of this file.** `"emit"` mode dispatches every crossed event in
+      beat order via `getEventsInBeatRangeInclusiveEnd`, each with its own
+      `lateByMs` — verified by reading `emitDueCuesForIteration` and by the
+      "dispatches cue events from play and natural ticks" test, which
+      crosses two events in a single big tick jump and gets both, in order.
+      `"skip"` now also branches correctly post-fix (see the re-review
+      section for the corrected trace and the two discriminating regression
+      tests).
 - [x] Explicit seek never invokes the delayed-dispatch policy and always
       emits zero cues for the traversed range (`TL-EN-006`). Same code path
       as the `TL-EN-002` check above — the `"seek"` transport-event branch
