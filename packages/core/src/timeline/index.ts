@@ -5,6 +5,7 @@ export {
   normalizeTempoEvent,
   normalizeTempos,
   normalizeTimingMap,
+  validateTimingMap,
 } from "./timing";
 export {
   addTimelineEvent,

@@ -13,22 +13,22 @@ Status values: `planned`, `covered`, `blocked`.
 
 | ID | Scenario | Expected result | Status |
 | --- | --- | --- | --- |
-| TM-001 | createTimingMap with single bpm | one tempo at beat 0; startPositionMs 0 | planned |
-| TM-002 | createTimingMap with tempos list missing beat 0 | normalize synthesizes a beat-0 tempo | planned |
-| TM-003 | createTimingMap with negative/non-finite startPositionMs option | normalize clamps/defaults to 0 | planned |
-| TM-004 | normalizeTimingMap with out-of-range bpm | clamps into [minBpm, maxBpm] | planned |
-| TM-005 | normalizeTimingMap with unsorted/duplicate tempo beats | sorts and repairs to strictly increasing beats | planned |
-| TM-006 | validateTimingMap with valid map | returns without throwing | planned |
-| TM-007 | validateTimingMap missing beat-0 tempo | throws RangeError | planned |
-| TM-008 | validateTimingMap with non-increasing or duplicate beats | throws RangeError | planned |
-| TM-009 | validateTimingMap with out-of-range bpm | throws RangeError | planned |
-| TM-010 | validateTimingMap with negative/non-finite startPositionMs | throws RangeError | planned |
-| TM-011 | validateTimingMap with wrong-typed field | throws TypeError | planned |
-| TM-012 | beatToMs across a single-tempo map | linear conversion from startPositionMs | planned |
-| TM-013 | beatToMs across multiple tempo segments | segment-accumulated conversion at each boundary | planned |
-| TM-014 | msToBeat is the inverse of beatToMs | round-trip beat -> ms -> beat within floating tolerance | planned |
-| TM-015 | msToBeat before startPositionMs | returns beat 0 | planned |
-| TM-016 | beatToMs/msToBeat never receive or return a clock timestamp | pure functions of TimingMap + transport-relative value only | planned |
+| TM-001 | createTimingMap with single bpm | one tempo at beat 0; startPositionMs 0 | covered |
+| TM-002 | createTimingMap with tempos list missing beat 0 | normalize synthesizes a beat-0 tempo | covered |
+| TM-003 | createTimingMap with negative/non-finite startPositionMs option | normalize clamps/defaults to 0 | covered |
+| TM-004 | normalizeTimingMap with out-of-range bpm | clamps into [minBpm, maxBpm] | covered |
+| TM-005 | normalizeTimingMap with unsorted/duplicate tempo beats | sorts and repairs to strictly increasing beats | covered |
+| TM-006 | validateTimingMap with valid map | returns without throwing | covered |
+| TM-007 | validateTimingMap missing beat-0 tempo | throws RangeError | covered |
+| TM-008 | validateTimingMap with non-increasing or duplicate beats | throws RangeError | covered |
+| TM-009 | validateTimingMap with out-of-range bpm | throws RangeError | covered |
+| TM-010 | validateTimingMap with negative/non-finite startPositionMs | throws RangeError | covered |
+| TM-011 | validateTimingMap with wrong-typed field | throws TypeError | covered |
+| TM-012 | beatToMs across a single-tempo map | linear conversion from startPositionMs | covered |
+| TM-013 | beatToMs across multiple tempo segments | segment-accumulated conversion at each boundary | covered |
+| TM-014 | msToBeat is the inverse of beatToMs | round-trip beat -> ms -> beat within floating tolerance | covered |
+| TM-015 | msToBeat before startPositionMs | returns beat 0 | covered |
+| TM-016 | beatToMs/msToBeat never receive or return a clock timestamp | pure functions of TimingMap + transport-relative value only | covered |
 
 ## TimelineProject v2 schema and validation (`TL-*`)
 

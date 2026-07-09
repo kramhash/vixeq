@@ -5,7 +5,7 @@ export type TempoEvent = {
 
 export type TimingMap = {
   tempos: TempoEvent[];
-  offsetMs: number;
+  startPositionMs: number;
 };
 
 export type TimelineTrack = {
@@ -36,11 +36,11 @@ export type TimelineProject = {
 export type CreateTimingMapOptions =
   | {
       bpm: number;
-      offsetMs?: number;
+      startPositionMs?: number;
     }
   | {
       tempos: TempoEvent[];
-      offsetMs?: number;
+      startPositionMs?: number;
     };
 
 export type CreateTimelineProjectOptions = {

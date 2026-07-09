@@ -26,6 +26,7 @@ Gaps are valid and output zero. Sections restart their pattern at step 0. Missin
 - Playback v2 adds `PlaybackClock`, `PlaybackTransport`, `PlaybackSnapshot`, `PlaybackError`, and clock, media-element, and AudioBuffer transport factories. `SequencerEngine` and `ArrangementEngine` use `PlaybackTransport`.
 - `createEnvelope`, `createDecayEnvelope`, smoothing helpers, easing functions, `lerp`. Envelopes expose `trigger(positionMs)`, `sample(positionMs)`, and `reset()` using logical transport positions.
 - Timeline exports provide beat/time conversion and event queries for tempo-variable data.
+- `TimingMap` (0.8, v2) uses `startPositionMs`. `createTimingMap`/`normalizeTimingMap` repair input; `validateTimingMap(timing)` throws `TypeError`/`RangeError` on structurally invalid input without repairing it.
 
 ## DOM subpath
 

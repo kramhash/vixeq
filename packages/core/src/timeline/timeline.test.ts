@@ -2,41 +2,14 @@ import { describe, expect, it } from "vitest";
 import { createProject, setStepValue } from "../project";
 import {
   addTimelineEvent,
-  beatToMs,
   createTimelineProject,
-  createTimingMap,
   getEventsAtBeat,
   getEventsInBeatRange,
   getNextEvents,
-  msToBeat,
   sequenceProjectToTimeline,
   setTimelineTrackEnabled,
   updateTimelineEvent,
 } from "./index";
-
-describe("timeline timing", () => {
-  it("converts beats and milliseconds with a single BPM", () => {
-    const timing = createTimingMap({ bpm: 120, offsetMs: 250 });
-
-    expect(beatToMs(timing, 0)).toBe(250);
-    expect(beatToMs(timing, 2)).toBe(1250);
-    expect(msToBeat(timing, 1250)).toBe(2);
-  });
-
-  it("converts beats and milliseconds across tempo changes", () => {
-    const timing = createTimingMap({
-      tempos: [
-        { beat: 0, bpm: 120 },
-        { beat: 4, bpm: 60 },
-      ],
-      offsetMs: 0,
-    });
-
-    expect(beatToMs(timing, 4)).toBe(2000);
-    expect(beatToMs(timing, 5)).toBe(3000);
-    expect(msToBeat(timing, 3000)).toBe(5);
-  });
-});
 
 describe("timeline project and query", () => {
   it("keeps events sorted and queries half-open beat ranges", () => {
