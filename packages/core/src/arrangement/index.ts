@@ -6,9 +6,11 @@ export type {
   ArrangementEventHandler,
   ArrangementEventMap,
   ArrangementEventName,
+  ArrangementPlaybackEvent,
+  ArrangementPlaybackSnapshot,
   ArrangementProject,
+  ArrangementProjectEvent,
   ArrangementSection,
   ArrangementSectionEvent,
-  ArrangementTransportEvent,
   CreateArrangementOptions,
 } from "./types";

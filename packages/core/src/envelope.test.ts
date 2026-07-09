@@ -91,6 +91,17 @@ describe("createEnvelope", () => {
     env.trigger(500, 1);
     expect(env.sample(400)).toBe(0);
   });
+
+  it("resets to rest and clears the trigger", () => {
+    const env = createEnvelope({ decay: 100 });
+    env.trigger(0, 1);
+    expect(env.sample(0)).toBe(1);
+
+    env.reset();
+
+    expect(env.sample(0)).toBe(0);
+    expect(env.sample(50)).toBe(0);
+  });
 });
 
 // ─── createDecayEnvelope ───────────────────────────────────────────────────
@@ -176,5 +187,29 @@ describe("createDecayEnvelope", () => {
     const v2 = env.sample(1000); // 0.5s of decay from t=500, not 0.75s from t=250
     const expected = decaySmoothedValue(v1, 0.5, config);
     expect(v2).toBeCloseTo(expected, 4);
+  });
+
+  it("resets current value and sample baseline", () => {
+    const env = createDecayEnvelope(config);
+    env.trigger(0, 1);
+    expect(env.sample(0)).toBeGreaterThan(0);
+
+    env.reset();
+
+    expect(env.sample(0)).toBe(0);
+    expect(env.sample(1000)).toBe(0);
+  });
+
+  it("does not leak old decay state after reset and backward sampling", () => {
+    const env = createDecayEnvelope(config);
+    env.trigger(500, 1);
+    expect(env.sample(500)).toBeGreaterThan(0);
+
+    env.reset();
+    expect(env.sample(250)).toBe(0);
+    env.trigger(300, 0.5);
+
+    const expected = exciteSmoothedValue(0, 0.5, config);
+    expect(env.sample(300)).toBeCloseTo(expected, 5);
   });
 });

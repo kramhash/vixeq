@@ -132,7 +132,7 @@ engine.on("step", (e) => {
 const value = beatEnv.sample(engine.getPosition().positionMs); // 0–1
 ```
 
-Both implement `Envelope`: `trigger(timeMs, value?)` and `sample(timeMs)`.
+Both implement `Envelope`: `trigger(positionMs, value?)`, `sample(positionMs)`, and `reset()`. Envelope positions are logical transport positions, not wall-clock timestamps.
 
 ## DOM Bindings
 
@@ -171,12 +171,13 @@ const engine = new ArrangementEngine(arrangement, { loop: false });
 engine.on("step", (event) => console.log(event.stepIndex, event.tracks));
 engine.on("section", (event) => console.log(event.section?.id ?? "(gap)"));
 
-engine.start();
-engine.seek(16); // jump to the chorus
-engine.reset();  // rewind to beat 0
+await engine.play();
+await engine.seekBeat(16); // jump to the chorus
+await engine.seekPositionMs(8_000); // or seek by transport-relative milliseconds
+await engine.stop();       // stop and return to beat 0
 ```
 
-Gaps between sections (or past the end, when not looping) output `0` on every channel. `ArrangementEngine` is always time-driven — position is derived from the clock, so `seek`/scrub/audio-sync are correct by construction — and implements the same `on("step", ...)` / `sampleChannels()` shape as `SequencerEngine` (see the `ChannelSource` type), so it works with `useAnimatedChannels` and `bindChannelsToElement` unmodified.
+Gaps between sections (or past the end, when not looping) output `0` on every channel. `ArrangementEngine` is always time-driven from `PlaybackTransport`, so seek/scrub/audio-sync are correct by construction. Its local `loop` / `setLoop()` state is independent of the transport's own loop flag. It implements the same `on("step", ...)` / `on("playback", ...)` / `on("project", ...)` / `sampleChannels()` shape as `SequencerEngine` (see the `ChannelSource` type), plus an Arrangement-specific `section` event.
 
 Use `validateArrangement` / `normalizeArrangement` the same way as their `SequenceProject` counterparts. The pure functions behind the engine (`resolveArrangementStep`, `sampleArrangement`, `sectionAtBeat`, `arrangementDurationBeats`, `unionTrackIds`) are also exported for custom playback loops.
 

@@ -50,6 +50,7 @@ h2 { margin-bottom: 0; font-size: 26px; letter-spacing: -.035em; }
 .icon-button { width: 42px; padding: 0; }
 .text-button { padding: 0 14px; }
 .next-up { min-height: 20px; margin: 16px 0 0; color: #707772; text-align: center; font-size: 13px; }
+.transport-error { margin: 14px 0 0; color: #9a2f2f; text-align: center; font-size: 13px; }
 .editor-help { margin: 10px 0 24px; color: #737a75; }
 .interval-list { display: grid; gap: 10px; }
 .interval-editor { padding: 16px; border: 1px solid #dedbd3; border-radius: 13px; background: #fbfaf6; }

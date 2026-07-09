@@ -24,7 +24,7 @@ function Sequencer() {
   return (
     <>
       <button type="button" onClick={() => void player.toggle()}>
-        {player.isPlaying ? "Stop" : "Play"}
+        {player.playbackState === "playing" ? "Pause" : "Play"}
       </button>
       <button type="button" onClick={() => setProject(toggleStep(project, trackId, 0))}>
         Toggle first step
@@ -35,6 +35,12 @@ function Sequencer() {
 ```
 
 The hook owns the `SequencerEngine` lifecycle and updates the engine when `project` changes.
+Continuous transport progress is exposed through `positionRef.current` and
+`onPosition` instead of per-frame React state. `pendingOperation` is the queued
+command head, and `isBusy` is true while a command is queued or running.
+Both sequencer and arrangement hooks expose transport-level controls:
+`seekPositionMs`, `setPlaybackRate`, and `setTransportLoop`. Arrangement also
+exposes `setLoop` for its local project loop behavior.
 
 ## Audio-Synced Usage
 
@@ -52,11 +58,11 @@ function AudioSequencer() {
     audio.loop = true;
     return createMediaElementTransport(audio);
   }, []);
-  const player = useSequencerEngine({ project, transport, timeDriven: true });
+  const player = useSequencerEngine({ project, transport });
 
   return (
-    <button type="button" disabled={player.isStarting} onClick={() => void player.toggle()}>
-      {player.isStarting ? "Starting..." : player.isPlaying ? "Stop" : "Play"}
+    <button type="button" disabled={player.isBusy} onClick={() => void player.toggle()}>
+      {player.pendingOperation ? "Working..." : player.playbackState === "playing" ? "Pause" : "Play"}
     </button>
   );
 }
@@ -74,24 +80,26 @@ function Song() {
   const [arrangement] = useState(() =>
     createArrangement({ bpm: 120, patterns, sections }),
   );
-  const { engine, currentSection, isPlaying, toggle, seek } = useArrangement({ arrangement });
+  const player = useArrangement({ arrangement });
 
   // engine satisfies ChannelSource, so it composes directly with useAnimatedChannels
-  useAnimatedChannels(engine, {
+  useAnimatedChannels(player.engine, {
     onFrame: (values) => { /* write to DOM */ },
   });
 
   return (
     <>
-      <button type="button" onClick={toggle}>{isPlaying ? "Stop" : "Play"}</button>
-      <button type="button" onClick={() => seek(16)}>Jump to chorus</button>
-      <span>{currentSection?.id ?? "(gap)"}</span>
+      <button type="button" disabled={player.isBusy} onClick={() => void player.toggle()}>
+        {player.playbackState === "playing" ? "Pause" : "Play"}
+      </button>
+      <button type="button" onClick={() => void player.seekBeat(16)}>Jump to chorus</button>
+      <span>{player.currentSection?.id ?? "(gap)"}</span>
     </>
   );
 }
 ```
 
-`error` on the returned state captures constructor/hot-swap failures (e.g. an invalid arrangement) without throwing during render.
+`projectError` captures constructor/hot-swap failures (e.g. an invalid arrangement) without throwing during render. `transportError` captures playback command failures and command promises still reject.
 
 ## Animated Channels
 
@@ -135,7 +143,7 @@ function PulseScene() {
 
 ### Interpolation mode
 
-Without `envelopes`, the hook calls `engine.sampleChannels(now, easing)` each frame for smooth step-to-step morphing:
+Without `envelopes`, the hook calls `engine.sampleChannels(easing)` each frame for smooth step-to-step morphing:
 
 ```tsx
 import { easeOutCubic } from "@vixeq/core";
@@ -151,29 +159,21 @@ function MorphScene() {
 }
 ```
 
-### `reducedMotion`
+### `motionPreference`
 
-Pass `reducedMotion: true` to pause the rAF loop. This is opt-in — the hook does not read `window.matchMedia` on its own. Compose it with `usePrefersReducedMotion()` to follow the OS setting:
-
-```tsx
-import { useAnimatedChannels, usePrefersReducedMotion } from "@vixeq/react";
-
-useAnimatedChannels(engine, { reducedMotion: usePrefersReducedMotion() });
-```
-
-### `latestEvent`
-
-When you don't have direct access to the engine (e.g., you're using `SequencePlayer`), pass `latestEvent` from an `onStep` callback to trigger envelopes:
+The hook follows `prefers-reduced-motion` by default. Pass `motionPreference: "reduce"` to stop the rAF loop and use static samples, or `"no-preference"` to keep the rAF loop running regardless of the OS setting:
 
 ```tsx
-const [latestEvent, setLatestEvent] = useState<StepEvent | null>(null);
+import { useAnimatedChannels } from "@vixeq/react";
 
-useAnimatedChannels(null, {
-  envelopes,
-  latestEvent,
-  onFrame: (values) => { /* ... */ },
-});
+useAnimatedChannels(engine, { motionPreference: "reduce" });
 ```
+
+Envelope mode requires a `ChannelSource`. It triggers envelopes from
+`StepEvent.scheduledPositionMs`, samples with `engine.getPosition().positionMs`,
+and resets envelopes on seek, stop, and affected Project changes. In reduced
+motion, ordinary step ticks are ignored, but explicit seek, stop, and Project
+changes still produce one fresh static sample.
 
 ---
 

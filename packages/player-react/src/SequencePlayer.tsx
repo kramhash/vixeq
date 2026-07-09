@@ -8,14 +8,15 @@ import {
   setStepValue,
   setTrackEnabled,
   toggleStep,
+  type ChannelPosition,
+  type PlaybackState,
+  type PlaybackTransport,
   type SequenceProject,
-  type PlaybackClock,
   type SequencerEngine,
-  type SequencerTransport,
+  type SequencerPlaybackEvent,
   type StepEvent,
-  type TransportEvent,
 } from "@vixeq/core";
-import { useSequencePlayer } from "@vixeq/react";
+import { useSequencePlayer, type SequencerEngineLatestEvent, type SequencerEnginePendingOperation } from "@vixeq/react";
 import {
   forwardRef,
   useCallback,
@@ -24,6 +25,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type MutableRefObject,
   type PointerEvent,
 } from "react";
 
@@ -50,64 +52,72 @@ export type SequencePlayerProjectChange = {
 };
 
 export type SequencePlayerTransportState = {
-  currentStep: number;
-  isPlaying: boolean;
-  isStarting: boolean;
-  latestEvent: StepEvent | null;
+  playbackState: PlaybackState;
+  positionRef: MutableRefObject<ChannelPosition>;
+  pendingOperation: SequencerEnginePendingOperation | null;
+  isBusy: boolean;
+  latestEvent: SequencerEngineLatestEvent | null;
+  projectError: Error | null;
   transportError: unknown | null;
 };
 
 export type SequencePlayerRef = {
   play: () => Promise<void>;
+  pause: () => Promise<void>;
   stop: () => Promise<void>;
   toggle: () => Promise<void>;
-  reset: (stepIndex?: number) => Promise<void>;
+  seekStep: (stepIndex: number) => Promise<void>;
+  seekPositionMs: (positionMs: number) => Promise<void>;
+  setPlaybackRate: (rate: number) => Promise<void>;
+  setTransportLoop: (loop: boolean) => Promise<void>;
 };
 
 type SequencePlayerBaseProps = {
   project: SequenceProject;
   onProjectChange: (change: SequencePlayerProjectChange) => void;
   onStep?: (event: StepEvent) => void;
-  onTransportChange?: (event: TransportEvent) => void;
+  onPlaybackChange?: (event: SequencerPlaybackEvent) => void;
   onSelectedStepChange?: (selectedStep: SelectedStep | null) => void;
   /**
    * Called with the underlying SequencerEngine when it becomes available, and
-   * with null when it is disposed (unmount or clock/transport change).
+   * with null when it is disposed (unmount or transport/project lifecycle change).
    * Pass the received engine to useAnimatedChannels for zero-re-render animation.
    */
   onEngineChange?: (engine: SequencerEngine | null) => void;
-  timeDriven?: boolean;
-  originMs?: number;
+  transport?: PlaybackTransport;
   showTransportControls?: boolean;
   className?: string;
   style?: CSSProperties;
 };
 
-export type SequencePlayerProps =
-  | (SequencePlayerBaseProps & {
-      clock?: PlaybackClock;
-      transport?: never;
-    })
-  | (SequencePlayerBaseProps & {
-      clock?: never;
-      transport: SequencerTransport;
-    });
+export type SequencePlayerProps = SequencePlayerBaseProps;
 
-export type StandaloneSequencePlayerProps =
-  | (Omit<SequencePlayerBaseProps, "project" | "onProjectChange"> & {
-      defaultProject?: SequenceProject;
-      onProjectChange?: (change: SequencePlayerProjectChange) => void;
-      clock?: PlaybackClock;
-      transport?: never;
-    })
-  | (Omit<SequencePlayerBaseProps, "project" | "onProjectChange"> & {
-      defaultProject?: SequenceProject;
-      onProjectChange?: (change: SequencePlayerProjectChange) => void;
-      clock?: never;
-      transport: SequencerTransport;
-    });
+export type StandaloneSequencePlayerProps = Omit<SequencePlayerBaseProps, "project" | "onProjectChange"> & {
+  defaultProject?: SequenceProject;
+  onProjectChange?: (change: SequencePlayerProjectChange) => void;
+};
 
 const formatValue = (value: number): string => value.toFixed(2);
+
+const hasStepIndex = (event: SequencerEngineLatestEvent | null): event is StepEvent | Extract<SequencerEngineLatestEvent, { stepIndex: number }> =>
+  event !== null && "stepIndex" in event;
+
+const deriveCurrentStep = (
+  project: SequenceProject,
+  latestEvent: SequencerEngineLatestEvent | null,
+  position: ChannelPosition,
+): number => {
+  const stepCount = Math.max(1, project.stepCount);
+  if (hasStepIndex(latestEvent)) {
+    return ((latestEvent.stepIndex % stepCount) + stepCount) % stepCount;
+  }
+  if (latestEvent && "snapshot" in latestEvent && "stepIndex" in latestEvent.snapshot) {
+    return ((latestEvent.snapshot.stepIndex % stepCount) + stepCount) % stepCount;
+  }
+
+  const stepDurationMs = 60_000 / project.bpm / project.stepsPerBeat;
+  return Math.min(stepCount - 1, Math.max(0, Math.floor(position.positionMs / stepDurationMs) % stepCount));
+};
 
 const readPointerValue = (event: PointerEvent<HTMLElement>): number => {
   const rect = event.currentTarget.getBoundingClientRect();
@@ -120,13 +130,10 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
     project,
     onProjectChange,
     onStep,
-    onTransportChange,
+    onPlaybackChange,
     onSelectedStepChange,
     onEngineChange,
-    clock,
     transport,
-    timeDriven,
-    originMs,
     showTransportControls = true,
     className,
     style,
@@ -136,35 +143,39 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
   const [selected, setSelected] = useState<SelectedStep | null>(null);
   const draggingRef = useRef(false);
   const pointerStartRef = useRef<{ x: number; y: number; trackId: string; stepIndex: number } | null>(null);
-  const player = useSequencePlayer(
-    transport
-      ? {
-          project,
-          onStep,
-          onTransportChange,
-          transport,
-          timeDriven,
-          originMs,
-        }
-      : {
-          project,
-          onStep,
-          onTransportChange,
-          clock,
-          timeDriven,
-          originMs,
-        },
-  );
+  const player = useSequencePlayer({ project, onStep, onPlaybackChange, transport });
+  const currentStep = deriveCurrentStep(project, player.latestEvent, player.positionRef.current);
+  const isPlaying = player.playbackState === "playing";
+  const primaryLabel = player.pendingOperation
+    ? "Working..."
+    : isPlaying
+      ? "Pause"
+      : player.positionRef.current.positionMs > 0
+        ? "Resume"
+        : "Play";
 
   useImperativeHandle(
     ref,
     () => ({
       play: player.play,
+      pause: player.pause,
       stop: player.stop,
       toggle: player.toggle,
-      reset: player.reset,
+      seekStep: player.seekStep,
+      seekPositionMs: player.seekPositionMs,
+      setPlaybackRate: player.setPlaybackRate,
+      setTransportLoop: player.setTransportLoop,
     }),
-    [player.play, player.reset, player.stop, player.toggle],
+    [
+      player.pause,
+      player.play,
+      player.seekPositionMs,
+      player.seekStep,
+      player.setPlaybackRate,
+      player.setTransportLoop,
+      player.stop,
+      player.toggle,
+    ],
   );
 
   // Forward the engine instance to the caller so they can pass it to
@@ -212,7 +223,7 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
     <section
       className={rootClassName}
       style={{ ...style, "--vixeq-step-count": project.stepCount } as CSSProperties}
-      data-playing={player.isPlaying ? "true" : "false"}
+      data-playing={isPlaying ? "true" : "false"}
     >
       <header className="vixeq-player__transport">
         {showTransportControls && (
@@ -220,21 +231,21 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
             <button
               className="vixeq-player__play"
               type="button"
-              disabled={player.isStarting}
+              disabled={player.isBusy}
               onClick={() => {
-                void player.toggle();
+                void player.toggle().catch(() => undefined);
               }}
             >
-              {player.isStarting ? "Starting..." : player.isPlaying ? "Stop" : "Play"}
+              {primaryLabel}
             </button>
             <button
               type="button"
-              disabled={player.isStarting}
+              disabled={player.isBusy}
               onClick={() => {
-                void player.reset(0);
+                void player.stop().catch(() => undefined);
               }}
             >
-              Reset
+              Stop
             </button>
             <label className="vixeq-player__number-field">
               BPM
@@ -255,11 +266,16 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
           </div>
         )}
         <div className="vixeq-player__readout">
-          <span>Step {player.currentStep + 1}</span>
+          <span>Step {currentStep + 1}</span>
           <span>{project.stepCount} Steps</span>
           <span>{project.tracks.length} Lanes</span>
         </div>
       </header>
+      {player.projectError !== null && (
+        <p className="vixeq-player__error" role="alert">
+          Project failed to load. Check the sequence data.
+        </p>
+      )}
       {player.transportError !== null && (
         <p className="vixeq-player__error" role="alert">
           Transport failed. Check the audio source and browser playback permission.
@@ -285,7 +301,7 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
             </div>
             <div className="vixeq-player__step-heading">
               {Array.from({ length: project.stepCount }, (_, index) => (
-                <span key={index} className={index === player.currentStep ? "is-active" : ""}>
+                <span key={index} className={index === currentStep ? "is-active" : ""}>
                   {index + 1}
                 </span>
               ))}
@@ -338,7 +354,7 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
                 <div className="vixeq-player__step-grid">
                   {track.steps.map((value, stepIndex) => {
                     const isSelected = selected?.trackId === track.id && selected?.stepIndex === stepIndex;
-                    const isCurrent = player.currentStep === stepIndex;
+                    const isCurrent = currentStep === stepIndex;
 
                     return (
                       <button

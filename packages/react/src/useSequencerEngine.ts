@@ -1,46 +1,75 @@
 import {
+  browserClock,
+  createClockTransport,
   SequencerEngine,
+  type ChannelPosition,
+  type MissedStepPolicy,
+  type PlaybackState,
+  type PlaybackTransport,
+  type ProjectEvent,
   type SequenceProject,
-  type PlaybackClock,
-  type SequencerTransport,
+  type SequencerPlaybackEvent,
   type StepEvent,
-  type TransportEvent,
 } from "@vixeq/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 
-type SequencerEngineHookBaseOptions = {
+export type SequencerEnginePendingOperation =
+  | "play"
+  | "pause"
+  | "stop"
+  | "toggle"
+  | "seekPositionMs"
+  | "seekStep"
+  | "setPlaybackRate"
+  | "setTransportLoop";
+
+export type SequencerEngineLatestEvent =
+  | StepEvent
+  | SequencerPlaybackEvent
+  | ProjectEvent;
+
+export type SequencerEngineHookOptions = {
   project: SequenceProject;
+  transport?: PlaybackTransport;
+  lookaheadMs?: number;
+  missedStepPolicy?: MissedStepPolicy;
   onStep?: (event: StepEvent) => void;
-  onTransportChange?: (event: TransportEvent) => void;
-  timeDriven?: boolean;
-  originMs?: number;
+  onPlaybackChange?: (event: SequencerPlaybackEvent) => void;
+  onPosition?: (position: ChannelPosition) => void;
+  onProjectError?: (error: Error) => void;
+  onTransportError?: (error: unknown) => void;
 };
 
-export type SequencerEngineHookOptions =
-  | (SequencerEngineHookBaseOptions & {
-      clock?: PlaybackClock;
-      transport?: never;
-    })
-  | (SequencerEngineHookBaseOptions & {
-      clock?: never;
-      transport: SequencerTransport;
-    });
-
 export type SequencerEngineHookState = {
-  /** The underlying SequencerEngine instance, or null while unmounted. */
+  /** The underlying SequencerEngine instance, or null when construction fails. */
   engine: SequencerEngine | null;
-  currentStep: number;
-  isPlaying: boolean;
-  isStarting: boolean;
-  latestEvent: StepEvent | null;
+  playbackState: PlaybackState;
+  positionRef: MutableRefObject<ChannelPosition>;
+  latestEvent: SequencerEngineLatestEvent | null;
+  projectError: Error | null;
   transportError: unknown | null;
+  pendingOperation: SequencerEnginePendingOperation | null;
+  isBusy: boolean;
   play: () => Promise<void>;
+  pause: () => Promise<void>;
   stop: () => Promise<void>;
   toggle: () => Promise<void>;
-  reset: (stepIndex?: number) => Promise<void>;
+  seekPositionMs: (positionMs: number) => Promise<void>;
+  seekStep: (stepIndex: number) => Promise<void>;
+  setPlaybackRate: (rate: number) => Promise<void>;
+  setTransportLoop: (loop: boolean) => Promise<void>;
 };
 
 export type SequencePlayerHookState = SequencerEngineHookState;
+
+class MissingEngineError extends Error {
+  constructor() {
+    super("SequencerEngine is not available.");
+    this.name = "MissingEngineError";
+  }
+}
+
+const toError = (cause: unknown): Error => cause instanceof Error ? cause : new Error(String(cause));
 
 const useLatestRef = <TValue>(value: TValue) => {
   const ref = useRef(value);
@@ -50,165 +79,297 @@ const useLatestRef = <TValue>(value: TValue) => {
   return ref;
 };
 
+const scheduleAnimationFrame = (callback: () => void): ReturnType<typeof setTimeout> | number => {
+  if (typeof requestAnimationFrame === "function") {
+    return requestAnimationFrame(callback);
+  }
+  return setTimeout(callback, 16);
+};
+
+const cancelScheduledFrame = (frameId: ReturnType<typeof setTimeout> | number): void => {
+  if (typeof cancelAnimationFrame === "function" && typeof frameId === "number") {
+    cancelAnimationFrame(frameId);
+    return;
+  }
+  clearTimeout(frameId as ReturnType<typeof setTimeout>);
+};
+
 export function useSequencerEngine(options: SequencerEngineHookOptions): SequencerEngineHookState {
-  const { project } = options;
-  const clock = (options as { clock?: PlaybackClock }).clock;
-  const transport = (options as { transport?: SequencerTransport }).transport;
-  const activeClock = transport?.clock ?? clock;
-  const { timeDriven, originMs } = options;
+  const { project, transport, lookaheadMs, missedStepPolicy } = options;
   const onStepRef = useLatestRef(options.onStep);
-  const onTransportChangeRef = useLatestRef(options.onTransportChange);
+  const onPlaybackChangeRef = useLatestRef(options.onPlaybackChange);
+  const onPositionRef = useLatestRef(options.onPosition);
+  const onProjectErrorRef = useLatestRef(options.onProjectError);
+  const onTransportErrorRef = useLatestRef(options.onTransportError);
+
   const engineRef = useRef<SequencerEngine | null>(null);
-  const projectRef = useRef(project);
-  const isStartingRef = useRef(false);
+  const transportRef = useRef<PlaybackTransport | null>(null);
+  const positionRef = useRef<ChannelPosition>({ positionMs: 0, beat: 0 });
+  const mountedRef = useRef(false);
+  const pendingQueueRef = useRef<SequencerEnginePendingOperation[]>([]);
+  const commandQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const rafRef = useRef<ReturnType<typeof setTimeout> | number | null>(null);
+  const failedConstructionProjectRef = useRef<SequenceProject | null>(null);
+
   const [engine, setEngine] = useState<SequencerEngine | null>(null);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isStarting, setIsStarting] = useState(false);
-  const [latestEvent, setLatestEvent] = useState<StepEvent | null>(null);
+  const [playbackState, setPlaybackState] = useState<PlaybackState>("stopped");
+  const [latestEvent, setLatestEvent] = useState<SequencerEngineLatestEvent | null>(null);
+  const [projectError, setProjectError] = useState<Error | null>(null);
   const [transportError, setTransportError] = useState<unknown | null>(null);
+  const [pendingOperation, setPendingOperation] = useState<SequencerEnginePendingOperation | null>(null);
+  const [constructionAttempt, setConstructionAttempt] = useState(0);
 
-  useEffect(() => {
-    if (clock && transport && typeof console !== "undefined") {
-      console.warn("[vixeq] useSequencerEngine received both clock and transport. Use one clock source.");
-    }
-  }, [clock, transport]);
+  const syncPosition = useCallback(() => {
+    const currentEngine = engineRef.current;
+    if (!currentEngine) return;
+    const position = currentEngine.getPosition();
+    positionRef.current = position;
+    onPositionRef.current?.(position);
+  }, [onPositionRef]);
 
-  useEffect(() => {
-    const newEngine = new SequencerEngine(projectRef.current, {
-      clock: activeClock,
-      timeDriven,
-      originMs,
+  const refreshPendingOperation = useCallback(() => {
+    if (!mountedRef.current) return;
+    setPendingOperation(pendingQueueRef.current[0] ?? null);
+  }, []);
+
+  const enqueueCommand = useCallback((
+    operation: SequencerEnginePendingOperation,
+    command: () => Promise<void>,
+  ): Promise<void> => {
+    pendingQueueRef.current.push(operation);
+    refreshPendingOperation();
+
+    const task = commandQueueRef.current.then(async () => {
+      try {
+        await command();
+        if (mountedRef.current) {
+          setTransportError(null);
+        }
+        syncPosition();
+      } catch (error) {
+        if (mountedRef.current && !(error instanceof MissingEngineError)) {
+          setTransportError(error);
+          onTransportErrorRef.current?.(error);
+        }
+        throw error;
+      } finally {
+        pendingQueueRef.current.shift();
+        refreshPendingOperation();
+      }
     });
+
+    commandQueueRef.current = task.catch(() => undefined);
+    return task;
+  }, [onTransportErrorRef, refreshPendingOperation, syncPosition]);
+
+  const enqueueEngineCommand = useCallback((
+    operation: SequencerEnginePendingOperation,
+    command: (engine: SequencerEngine) => Promise<void>,
+  ): Promise<void> => {
+    if (!engineRef.current) {
+      return Promise.reject(new MissingEngineError());
+    }
+
+    return enqueueCommand(operation, () => {
+      const currentEngine = engineRef.current;
+      if (!currentEngine) {
+        throw new MissingEngineError();
+      }
+      return command(currentEngine);
+    });
+  }, [enqueueCommand]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let newEngine: SequencerEngine;
+    const activeTransport = transport ?? createClockTransport(browserClock);
+    const ownsTransport = transport === undefined;
+    try {
+      newEngine = new SequencerEngine(project, {
+        transport: activeTransport,
+        lookaheadMs,
+        missedStepPolicy,
+      });
+    } catch (cause) {
+      const nextError = toError(cause);
+      failedConstructionProjectRef.current = project;
+      if (ownsTransport) {
+        activeTransport.dispose();
+      }
+      engineRef.current = null;
+      transportRef.current = null;
+      setEngine(null);
+      setProjectError(nextError);
+      onProjectErrorRef.current?.(nextError);
+      return;
+    }
+
     engineRef.current = newEngine;
+    transportRef.current = activeTransport;
+    failedConstructionProjectRef.current = null;
     setEngine(newEngine);
+    setPlaybackState(newEngine.getPlaybackState());
+    positionRef.current = newEngine.getPosition();
+    setProjectError(null);
 
     const offStep = newEngine.on("step", (event) => {
-      setCurrentStep(event.stepIndex);
       setLatestEvent(event);
       onStepRef.current?.(event);
     });
-    const offTransport = newEngine.on("transport", (event) => {
-      if (event.type === "start") {
-        setIsPlaying(true);
+    const offPlayback = newEngine.on("playback", (event) => {
+      setPlaybackState(event.snapshot.state);
+      setLatestEvent(event);
+      positionRef.current = newEngine.getPosition();
+      onPositionRef.current?.(positionRef.current);
+      if (event.type === "error") {
+        setTransportError(event.error);
+        onTransportErrorRef.current?.(event.error);
       }
-      if (event.type === "stop") {
-        setIsPlaying(false);
-      }
-      if (event.type === "reset") {
-        setCurrentStep(event.stepIndex);
-      }
-      if (event.type === "bpm") {
-        setCurrentStep(event.stepIndex);
-      }
-      onTransportChangeRef.current?.(event);
+      onPlaybackChangeRef.current?.(event);
+    });
+    const offProject = newEngine.on("project", (event) => {
+      setLatestEvent(event);
+      positionRef.current = newEngine.getPosition();
+      onPositionRef.current?.(positionRef.current);
     });
 
     return () => {
+      if (rafRef.current !== null) {
+        cancelScheduledFrame(rafRef.current);
+        rafRef.current = null;
+      }
       offStep();
-      offTransport();
+      offPlayback();
+      offProject();
       newEngine.dispose();
-      engineRef.current = null;
-      setEngine(null);
+      if (ownsTransport) {
+        activeTransport.dispose();
+      }
+      if (engineRef.current === newEngine) {
+        engineRef.current = null;
+        transportRef.current = null;
+        setEngine(null);
+      }
     };
-  }, [activeClock, originMs, onStepRef, onTransportChangeRef, timeDriven]);
+  }, [constructionAttempt, lookaheadMs, missedStepPolicy, onPlaybackChangeRef, onPositionRef, onProjectErrorRef, onStepRef, onTransportErrorRef, transport]);
 
   useEffect(() => {
-    const previousProject = projectRef.current;
-    projectRef.current = project;
-
-    const engine = engineRef.current;
-    if (!engine) {
+    const currentEngine = engineRef.current;
+    if (!currentEngine) {
+      if (failedConstructionProjectRef.current !== project) {
+        setConstructionAttempt((attempt) => attempt + 1);
+      }
       return;
     }
-
-    if (previousProject.bpm !== project.bpm) {
-      engine.setBpm(project.bpm);
-    }
-    engine.setProject(project);
-  }, [project]);
-
-  const play = useCallback(async () => {
-    const engine = engineRef.current;
-    if (!engine) {
-      return;
-    }
-
-    if (isStartingRef.current) {
-      return;
-    }
-
-    isStartingRef.current = true;
-    setIsStarting(true);
-    setTransportError(null);
-
     try {
-      await transport?.play();
-      engine.start();
-    } catch (error) {
-      engine.stop();
-      setTransportError(error);
-      throw error;
-    } finally {
-      isStartingRef.current = false;
-      setIsStarting(false);
+      currentEngine.setProject(project);
+      setProjectError(null);
+      syncPosition();
+    } catch (cause) {
+      const nextError = toError(cause);
+      setProjectError(nextError);
+      onProjectErrorRef.current?.(nextError);
     }
-  }, [transport]);
+  }, [onProjectErrorRef, project, syncPosition]);
 
-  const stop = useCallback(async () => {
-    const engine = engineRef.current;
-    engine?.stop();
-
-    try {
-      await transport?.stop();
-    } catch (error) {
-      setTransportError(error);
-      throw error;
-    }
-  }, [transport]);
-
-  const toggle = useCallback(async () => {
-    const engine = engineRef.current;
-    if (!engine) {
+  useEffect(() => {
+    if (playbackState !== "playing") {
+      if (rafRef.current !== null) {
+        cancelScheduledFrame(rafRef.current);
+        rafRef.current = null;
+      }
       return;
     }
 
-    if (engine.isPlaying()) {
-      await stop();
-      return;
+    const tick = () => {
+      syncPosition();
+      if (engineRef.current?.getPlaybackState() === "playing") {
+        rafRef.current = scheduleAnimationFrame(tick);
+      }
+    };
+
+    rafRef.current = scheduleAnimationFrame(tick);
+    return () => {
+      if (rafRef.current !== null) {
+        cancelScheduledFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [playbackState, syncPosition]);
+
+  const play = useCallback(() => enqueueEngineCommand("play", (currentEngine) => currentEngine.play()), [enqueueEngineCommand]);
+
+  const pause = useCallback(() => enqueueEngineCommand("pause", (currentEngine) => currentEngine.pause()), [enqueueEngineCommand]);
+
+  const stop = useCallback(() => enqueueEngineCommand("stop", (currentEngine) => currentEngine.stop()), [enqueueEngineCommand]);
+
+  const toggle = useCallback(() => {
+    if (!engineRef.current) {
+      return Promise.reject(new MissingEngineError());
     }
 
-    await play();
-  }, [play, stop]);
+    return enqueueCommand("toggle", () => {
+      const currentEngine = engineRef.current;
+      if (!currentEngine) {
+        throw new MissingEngineError();
+      }
+      return currentEngine.getPlaybackState() === "playing"
+        ? currentEngine.pause()
+        : currentEngine.play();
+    });
+  }, [enqueueCommand]);
 
-  const reset = useCallback(async (stepIndex = 0) => {
-    const currentProject = projectRef.current;
-    const stepCount = Math.max(1, currentProject.stepCount);
-    const normalizedStepIndex = ((Math.trunc(stepIndex) % stepCount) + stepCount) % stepCount;
-    const stepDurationMs = 60_000 / currentProject.bpm / currentProject.stepsPerBeat;
+  const seekStep = useCallback((stepIndex: number) => (
+    enqueueEngineCommand("seekStep", (currentEngine) => currentEngine.seekStep(stepIndex))
+  ), [enqueueEngineCommand]);
 
-    try {
-      await transport?.seek?.(normalizedStepIndex * stepDurationMs);
-    } catch (error) {
-      setTransportError(error);
-      throw error;
-    }
+  const seekPositionMs = useCallback((positionMs: number) => (
+    enqueueEngineCommand("seekPositionMs", (currentEngine) => currentEngine.seekPositionMs(positionMs))
+  ), [enqueueEngineCommand]);
 
-    engineRef.current?.reset(stepIndex);
-    setCurrentStep(normalizedStepIndex);
-  }, [transport]);
+  const setPlaybackRate = useCallback((rate: number) => (
+    enqueueEngineCommand("setPlaybackRate", () => {
+      const currentTransport = transportRef.current;
+      if (!currentTransport) {
+        throw new MissingEngineError();
+      }
+      return currentTransport.setPlaybackRate(rate);
+    })
+  ), [enqueueEngineCommand]);
+
+  const setTransportLoop = useCallback((loop: boolean) => (
+    enqueueEngineCommand("setTransportLoop", () => {
+      const currentTransport = transportRef.current;
+      if (!currentTransport) {
+        throw new MissingEngineError();
+      }
+      return currentTransport.setLoop(loop);
+    })
+  ), [enqueueEngineCommand]);
 
   return {
     engine,
-    currentStep,
-    isPlaying,
-    isStarting,
+    playbackState,
+    positionRef,
     latestEvent,
+    projectError,
     transportError,
+    pendingOperation,
+    isBusy: pendingOperation !== null,
     play,
+    pause,
     stop,
     toggle,
-    reset,
+    seekPositionMs,
+    seekStep,
+    setPlaybackRate,
+    setTransportLoop,
   };
 }
 

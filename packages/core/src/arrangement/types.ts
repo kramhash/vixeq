@@ -1,4 +1,11 @@
-import type { SequenceProject, StepEvent, Unsubscribe } from "../types";
+import type {
+  EnginePlaybackEvent,
+  EnginePlaybackSnapshot,
+  SequenceProject,
+  StepEvent,
+  StepEventCause,
+  Unsubscribe,
+} from "../types";
 
 /**
  * A single region on the arrangement's beat timeline: play `patternId`
@@ -36,22 +43,38 @@ export type CreateArrangementOptions = {
   sections?: ArrangementSection[];
 };
 
+export type ArrangementPlaybackSnapshot = EnginePlaybackSnapshot & {
+  section: ArrangementSection | null;
+};
+
+export type ArrangementPlaybackEvent = Omit<EnginePlaybackEvent, "snapshot"> & {
+  snapshot: ArrangementPlaybackSnapshot;
+};
+
+export type ArrangementProjectEvent = {
+  arrangement: ArrangementProject;
+  previousArrangement: ArrangementProject;
+  changedChannelIds: string[];
+  previousChannels: Record<string, number>;
+  channels: Record<string, number>;
+  positionMs: number;
+  beat: number;
+};
+
 /** Emitted whenever the active section changes (including transitions to/from a gap, represented as `null`). */
 export type ArrangementSectionEvent = {
   section: ArrangementSection | null;
-  timestamp: number;
+  beat: number;
+  positionMs: number;
+  transportPositionMs: number;
+  lateByMs: number;
+  cause: StepEventCause;
 };
-
-export type ArrangementTransportEvent =
-  | { type: "start"; timestamp: number }
-  | { type: "stop"; timestamp: number }
-  | { type: "reset"; beat: 0; timestamp: number }
-  | { type: "seek"; beat: number; timestamp: number }
-  | { type: "end"; timestamp: number };
 
 export type ArrangementEventMap = {
   step: StepEvent;
-  transport: ArrangementTransportEvent;
+  playback: ArrangementPlaybackEvent;
+  project: ArrangementProjectEvent;
   section: ArrangementSectionEvent;
 };
 

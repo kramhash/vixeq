@@ -5,6 +5,7 @@ import {
   easeInOutCubic,
   exciteSmoothedValue,
   lerp,
+  type SequencerEngine,
   type StepEvent,
 } from "@vixeq/core";
 
@@ -26,6 +27,7 @@ const makeChannels = (): Channels => ({ ring: 0, inner: 0, stroke: 0, arm: 0 });
 export type SmoothedSvgValues = Channels;
 
 export const useSmoothedChannels = (
+  engine: SequencerEngine | null,
   latestEvent: StepEvent | null,
   reducedMotion: boolean,
   onFrame: (values: SmoothedSvgValues) => void,
@@ -70,10 +72,12 @@ export const useSmoothedChannels = (
         stroke: clamp01(decaySmoothedValue(env.stroke, dt, CONFIGS.stroke)),
         // arm: continuous interpolation from value → nextValue using easeInOutCubic
         arm: (() => {
-          if (!event) return env.arm;
+          if (!engine || !event) return env.arm;
           const track = event.tracks[3];
           if (!track || !track.enabled) return 0;
-          const phase = clamp01((now - event.timestamp) / event.durationMs);
+          const phase = clamp01(
+            (engine.getPosition().positionMs - event.scheduledPositionMs) / event.durationMs,
+          );
           return lerp(track.value, track.nextValue, easeInOutCubic(phase));
         })(),
       };
@@ -84,5 +88,5 @@ export const useSmoothedChannels = (
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [reducedMotion]);
+  }, [engine, reducedMotion]);
 };

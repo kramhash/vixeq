@@ -50,6 +50,8 @@
   },
   "devDependencies": {
     "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.2.3",
+    "react-dom": "^19.2.7",
     "tsup": "^8.5.0"
   }
 }

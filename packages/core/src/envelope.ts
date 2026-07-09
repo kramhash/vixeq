@@ -2,12 +2,14 @@ import { lerp, linear, type EasingFunction } from "./easing";
 import { clamp01, decaySmoothedValue, exciteSmoothedValue } from "./smoothing";
 import type { SmoothingConfig } from "./smoothing";
 
-/** Stateful envelope: trigger on a step event, sample at any timestamp. */
+/** Stateful envelope: trigger and sample at logical transport positions. */
 export type Envelope = {
-  /** Excite the envelope at the given absolute time (ms). value 0–1, default 1. */
+  /** Excite the envelope at the given logical transport position (ms). value 0-1, default 1. */
   trigger(timeMs: number, value?: number): void;
-  /** Return the current 0–1 envelope value at the given absolute time (ms). */
+  /** Return the current 0-1 envelope value at the given logical transport position (ms). */
   sample(timeMs: number): number;
+  /** Clear any active trigger and return the envelope to rest. */
+  reset(): void;
 };
 
 export type CreateEnvelopeOptions = {
@@ -56,6 +58,11 @@ export const createEnvelope = (options: CreateEnvelopeOptions = {}): Envelope =>
       // Decay phase: peak → 0
       return lerp(triggerPeak, 0, curve(decayElapsed / decay));
     },
+
+    reset(): void {
+      triggerTime = null;
+      triggerPeak = peakScale;
+    },
   };
 };
 
@@ -72,6 +79,7 @@ export const createDecayEnvelope = (config: SmoothingConfig): Envelope => {
     trigger(_timeMs: number, value?: number): void {
       const input = value !== undefined ? clamp01(value) : 1;
       current = exciteSmoothedValue(current, input, config);
+      lastSampleTime = _timeMs;
     },
 
     sample(timeMs: number): number {
@@ -87,6 +95,11 @@ export const createDecayEnvelope = (config: SmoothingConfig): Envelope => {
         lastSampleTime = timeMs;
       }
       return clamp01(current);
+    },
+
+    reset(): void {
+      current = 0;
+      lastSampleTime = null;
     },
   };
 };

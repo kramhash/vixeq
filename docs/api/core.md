@@ -12,19 +12,19 @@
 
 ## Arrangement
 
-- `new ArrangementEngine(arrangement, options?)` — plays multiple patterns on a shared beat timeline. Options include `clock`, `originMs`, `lookaheadMs`, and `loop`.
+- `new ArrangementEngine(arrangement, options?)` — plays multiple patterns on a shared beat timeline. Options include `transport`, `lookaheadMs`, `loop`, `missedStepPolicy`, `onStep`, `onSection`, and `onListenerError`. Omitting `transport` creates an Engine-owned browser-clock transport.
 - `createArrangement(options?)` — creates an `ArrangementProject` with one BPM, a pattern map, and non-overlapping sections.
 - `validateArrangement(input)`, `normalizeArrangement(input)` — validate strict input or normalize import data.
 - `sectionAtBeat`, `resolveArrangementStep`, `sampleArrangement`, `unionTrackIds`, `arrangementDurationBeats` — pure arrangement queries.
-- Engine controls: `start()`, `stop()`, `reset()`, `seek(beat)`, `setArrangement(next)`, `sampleChannels(timeMs)`, `dispose()`.
+- Engine controls: `play()`, `pause()`, `stop()`, `seekBeat(beat)`, `seekPositionMs(positionMs)`, `setLoop(loop)`, `setArrangement(next)`, `sampleChannels()`, `sampleChannelsAt(positionMs)`, `getPlaybackState()`, `getPosition()`, `dispose()`.
 
-Gaps are valid and output zero. Sections restart their pattern at step 0. Missing tracks output zero. `setArrangement` validates atomically and preserves the current beat.
+Gaps are valid and output zero. Sections restart their pattern at step 0. Missing tracks output zero. `setArrangement` validates atomically, preserves the current fractional beat, and does not seek a supplied transport. Arrangement end and loop behavior are local Engine state; transport loop remains independent.
 
 ## Timing, audio, and values
 
 - `browserClock`, `createClockTransport`, `createMediaElementTransport`, `createAudioBufferTransport`.
-- Playback v2 adds `PlaybackClock`, `PlaybackTransport`, `PlaybackSnapshot`, `PlaybackError`, and clock, media-element, and AudioBuffer transport factories. `SequencerEngine` uses `PlaybackTransport`; Arrangement integration follows in P4.
-- `createEnvelope`, `createDecayEnvelope`, smoothing helpers, easing functions, `lerp`.
+- Playback v2 adds `PlaybackClock`, `PlaybackTransport`, `PlaybackSnapshot`, `PlaybackError`, and clock, media-element, and AudioBuffer transport factories. `SequencerEngine` and `ArrangementEngine` use `PlaybackTransport`.
+- `createEnvelope`, `createDecayEnvelope`, smoothing helpers, easing functions, `lerp`. Envelopes expose `trigger(positionMs)`, `sample(positionMs)`, and `reset()` using logical transport positions.
 - Timeline exports provide beat/time conversion and event queries for tempo-variable data.
 
 ## DOM subpath

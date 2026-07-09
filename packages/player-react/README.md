@@ -45,7 +45,7 @@ function App() {
 
 ## Audio-Synced Usage
 
-`SequencePlayer` can follow any `SequencerTransport`. The built-in controls will start and stop the transport before updating the sequencer.
+`SequencePlayer` can follow any `PlaybackTransport`. The built-in controls provide Play/Pause and a separate Stop action that returns playback to position 0.
 
 ```tsx
 import { createMediaElementTransport, createProject } from "@vixeq/core";
@@ -65,13 +65,12 @@ function SyncedPlayer() {
     <SequencePlayer
       project={project}
       transport={transport}
-      timeDriven={true}
       onProjectChange={({ project: nextProject }) => setProject(nextProject)}
     />
   );
 }
 ```
 
-Set `showTransportControls={false}` when the host app provides its own Play/Stop buttons and uses the component ref to control playback.
+Set `showTransportControls={false}` when the host app provides its own controls. The component ref exposes `play`, `pause`, `stop`, `toggle`, `seekStep`, `seekPositionMs`, `setPlaybackRate`, and `setTransportLoop`.
 
 This package includes the editable player surface and styles for `SequenceProject` values. It does not include a visualizer, shader, app shell, storage, MIDI, or audio engine.

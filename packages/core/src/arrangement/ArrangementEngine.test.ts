@@ -1,22 +1,27 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createClockTransport, type PlaybackTransport } from "../playbackTransport";
 import { createProject, setStepValue } from "../project";
-import type { PlaybackClock, StepEvent } from "../types";
+import type { ChannelSource, EnginePlaybackEvent, PlaybackClock, StepEvent } from "../types";
 import { ArrangementEngine } from "./ArrangementEngine";
 import { createArrangement } from "./project";
-import type { ArrangementSectionEvent, ArrangementProject } from "./types";
+import type {
+  ArrangementProject,
+  ArrangementProjectEvent,
+  ArrangementSectionEvent,
+} from "./types";
 
 class FakeClock implements PlaybackClock {
   currentTime = 0;
-  timers: Array<{ id: number; callback: () => void; dueAt: number }> = [];
-  private nextId = 1;
+  private nextTimerId = 1;
+  private timers: Array<{ id: number; callback: () => void; dueAt: number }> = [];
 
   now(): number {
     return this.currentTime;
   }
 
   setTimer(callback: () => void, delayMs: number): unknown {
-    const id = this.nextId;
-    this.nextId += 1;
+    const id = this.nextTimerId;
+    this.nextTimerId += 1;
     this.timers.push({ id, callback, dueAt: this.currentTime + delayMs });
     return id;
   }
@@ -27,29 +32,24 @@ class FakeClock implements PlaybackClock {
 
   advance(ms: number): void {
     const target = this.currentTime + ms;
-
     while (true) {
-      this.timers.sort((a, b) => a.dueAt - b.dueAt);
-      const nextTimer = this.timers[0];
-      if (!nextTimer || nextTimer.dueAt > target) {
-        break;
-      }
-
+      this.timers.sort((left, right) => left.dueAt - right.dueAt);
+      const timer = this.timers[0];
+      if (!timer || timer.dueAt > target) break;
       this.timers.shift();
-      this.currentTime = nextTimer.dueAt;
-      nextTimer.callback();
+      this.currentTime = timer.dueAt;
+      timer.callback();
     }
-
     this.currentTime = target;
-  }
-
-  jumpTo(ms: number): void {
-    this.currentTime = ms;
   }
 }
 
-// bpm=120 -> msPerBeat = 500ms. Every pattern below uses stepsPerBeat=1, so 1 step = 1 beat = 500ms.
 const BEAT_MS = 500;
+
+const buildTransport = (): { clock: FakeClock; transport: PlaybackTransport } => {
+  const clock = new FakeClock();
+  return { clock, transport: createClockTransport(clock) };
+};
 
 const buildArrangement = (): ArrangementProject => {
   let intro = createProject({ bpm: 999, stepCount: 2, stepsPerBeat: 1, trackCount: 1, trackNames: ["intro"] });
@@ -66,221 +66,275 @@ const buildArrangement = (): ArrangementProject => {
     bpm: 120,
     patterns: { intro, chorus },
     sections: [
-      { id: "s1", patternId: "intro", startBeat: 0, endBeat: 2 }, // 0-1000ms
-      // gap: beat 2-4 (1000-2000ms)
-      { id: "s2", patternId: "chorus", startBeat: 4, endBeat: 6 }, // 2000-3000ms
+      { id: "s1", patternId: "intro", startBeat: 0, endBeat: 2 },
+      { id: "s2", patternId: "chorus", startBeat: 4, endBeat: 6 },
     ],
   });
 };
 
-describe("ArrangementEngine — step/section events", () => {
-  it("emits section + step 0 immediately on start", () => {
-    const clock = new FakeClock();
-    const engine = new ArrangementEngine(buildArrangement(), { clock, lookaheadMs: 50 });
-    const steps: StepEvent[] = [];
+describe("ArrangementEngine — Playback v2", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("PB-EN-001 plays through a PlaybackTransport and emits section + step 0", async () => {
+    const { transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+    const playback: EnginePlaybackEvent[] = [];
     const sections: ArrangementSectionEvent[] = [];
-    engine.on("step", (e) => steps.push(e));
-    engine.on("section", (e) => sections.push(e));
-
-    engine.start();
-
-    expect(sections).toHaveLength(1);
-    expect(sections[0].section?.id).toBe("s1");
-    expect(steps).toHaveLength(1);
-    expect(steps[0].stepIndex).toBe(0);
-  });
-
-  it("emits a new step at each beat boundary within the same section", () => {
-    const clock = new FakeClock();
-    const engine = new ArrangementEngine(buildArrangement(), { clock, lookaheadMs: 50 });
     const steps: StepEvent[] = [];
-    engine.on("step", (e) => steps.push(e));
-    engine.start();
+    engine.on("playback", (event) => playback.push(event));
+    engine.on("section", (event) => sections.push(event));
+    engine.on("step", (event) => steps.push(event));
 
-    clock.advance(BEAT_MS); // beat 1, still in s1
-    expect(steps.map((e) => e.stepIndex)).toEqual([0, 1]);
+    await engine.play();
+
+    expect(playback).toMatchObject([
+      { type: "play", cause: "command", previousState: "stopped" },
+    ]);
+    expect(sections).toMatchObject([{ section: { id: "s1" }, beat: 0, cause: "play" }]);
+    expect(steps).toMatchObject([
+      {
+        stepIndex: 0,
+        cause: "play",
+        scheduledPositionMs: 0,
+        transportPositionMs: 0,
+        lateByMs: 0,
+      },
+    ]);
+    expect(engine.getPlaybackState()).toBe("playing");
   });
 
-  it("emits a section:null event when entering a gap, and stops emitting steps", () => {
-    const clock = new FakeClock();
-    const engine = new ArrangementEngine(buildArrangement(), { clock, lookaheadMs: 50 });
-    const steps: StepEvent[] = [];
-    const sections: ArrangementSectionEvent[] = [];
-    engine.on("step", (e) => steps.push(e));
-    engine.on("section", (e) => sections.push(e));
-    engine.start();
-
-    clock.advance(BEAT_MS * 2); // beat 2 -> gap starts
-    expect(sections[sections.length - 1].section).toBeNull();
-    const stepCountAtGap = steps.length;
-
-    clock.advance(BEAT_MS); // still in the gap (beat 3)
-    expect(steps.length).toBe(stepCountAtGap); // no new step events while in a gap
-  });
-
-  it("resets to the next pattern's step 0 exactly at the next section boundary", () => {
-    const clock = new FakeClock();
-    const engine = new ArrangementEngine(buildArrangement(), { clock, lookaheadMs: 50 });
-    const steps: StepEvent[] = [];
-    const sections: ArrangementSectionEvent[] = [];
-    engine.on("step", (e) => steps.push(e));
-    engine.on("section", (e) => sections.push(e));
-    engine.start();
-
-    clock.advance(BEAT_MS * 4); // beat 4 -> s2 starts
-    expect(sections[sections.length - 1].section?.id).toBe("s2");
-    expect(steps[steps.length - 1].stepIndex).toBe(0);
-  });
-
-  it("lands on the correct section/step after a forward seek (jump)", () => {
-    const clock = new FakeClock();
-    const engine = new ArrangementEngine(buildArrangement(), { clock, lookaheadMs: 50 });
-    const sections: ArrangementSectionEvent[] = [];
-    engine.on("section", (e) => sections.push(e));
-    engine.start();
-
-    clock.jumpTo(BEAT_MS * 5); // beat 5 -> mid s2
-    clock.timers.shift()?.callback();
-
-    expect(sections[sections.length - 1].section?.id).toBe("s2");
-  });
-});
-
-describe("ArrangementEngine — sampleChannels", () => {
-  it("returns the full track-id union with 0 for inactive-pattern tracks", () => {
-    const clock = new FakeClock();
+  it("PB-CH-003 pauses and samples the frozen logical position", async () => {
+    const { clock, transport } = buildTransport();
     const arrangement = buildArrangement();
-    const engine = new ArrangementEngine(arrangement, { clock });
+    const engine = new ArrangementEngine(arrangement, { transport });
+    const introId = arrangement.patterns.intro.tracks[0].id;
+
+    await engine.play();
+    clock.advance(BEAT_MS / 2);
+    await engine.pause();
+    const pausedValue = engine.sampleChannels()[introId];
+    clock.advance(BEAT_MS * 10);
+
+    expect(engine.getPlaybackState()).toBe("paused");
+    expect(engine.sampleChannels()[introId]).toBeCloseTo(pausedValue);
+  });
+
+  it("PB-EN-006 PB-EN-010 seekBeat maps beat to transport position and emits only destination steps", async () => {
+    const { transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+    const playback: EnginePlaybackEvent[] = [];
+    const sections: ArrangementSectionEvent[] = [];
+    const steps: StepEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+    engine.on("section", (event) => sections.push(event));
+    engine.on("step", (event) => steps.push(event));
+
+    await engine.play();
+    await engine.seekBeat(4);
+    await engine.seekBeat(1);
+
+    expect(transport.getPositionMs()).toBe(BEAT_MS);
+    expect(playback.at(-1)).toMatchObject({ type: "seek", cause: "command" });
+    expect(sections.at(-1)).toMatchObject({ section: { id: "s1" }, beat: 1, cause: "seek" });
+    expect(steps.map((event) => `${event.cause}:${event.stepIndex}`)).toEqual(["play:0", "seek:0", "seek:1"]);
+  });
+
+  it("PB-EN-005 rejects invalid beat seeks synchronously", () => {
+    const { transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+
+    expect(() => engine.seekBeat(-1)).toThrow(RangeError);
+    expect(() => engine.seekBeat(Number.NaN)).toThrow(RangeError);
+    expect(() => engine.seekBeat(7)).toThrow(RangeError);
+  });
+
+  it("seekPositionMs maps transport-relative milliseconds through Arrangement playback", async () => {
+    const { transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+    const playback: EnginePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+
+    await engine.seekPositionMs(BEAT_MS * 2);
+
+    expect(transport.getPositionMs()).toBe(BEAT_MS * 2);
+    expect(engine.getPosition()).toMatchObject({ positionMs: BEAT_MS * 2, beat: 2 });
+    expect(playback.at(-1)).toMatchObject({ type: "seek", cause: "command" });
+    expect(() => engine.seekPositionMs(-1)).toThrow(RangeError);
+    expect(() => engine.seekPositionMs(BEAT_MS * 7)).toThrow(RangeError);
+  });
+
+  it("PB-CH-004 sampleChannelsAt evaluates project-relative milliseconds", () => {
+    const { transport } = buildTransport();
+    const arrangement = buildArrangement();
+    const engine = new ArrangementEngine(arrangement, { transport });
     const introId = arrangement.patterns.intro.tracks[0].id;
     const chorusId = arrangement.patterns.chorus.tracks[0].id;
 
-    const values = engine.sampleChannels(0); // beat 0, in s1 (intro)
-    expect(Object.keys(values).sort()).toEqual([introId, chorusId].sort());
-    expect(values[chorusId]).toBe(0);
+    const start = engine.sampleChannelsAt(0);
+    const gap = engine.sampleChannelsAt(BEAT_MS * 3);
+    const interpolated = engine.sampleChannelsAt(BEAT_MS / 2);
+
+    expect(Object.keys(start).sort()).toEqual([introId, chorusId].sort());
+    expect(start[chorusId]).toBe(0);
+    expect(Object.values(gap).every((value) => value === 0)).toBe(true);
+    expect(interpolated[introId]).toBeCloseTo(0.5);
   });
 
-  it("returns 0 for every track in a gap, without needing start()", () => {
-    const clock = new FakeClock();
-    const engine = new ArrangementEngine(buildArrangement(), { clock });
-    const values = engine.sampleChannels(BEAT_MS * 3); // beat 3, in the gap
-    expect(Object.values(values).every((v) => v === 0)).toBe(true);
+  it("PB-EN-016 reaches local ended without stopping a shared transport", async () => {
+    const { clock, transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport, lookaheadMs: 1000 });
+    const playback: EnginePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+
+    await engine.play();
+    clock.advance(BEAT_MS * 6);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(engine.getPlaybackState()).toBe("ended");
+    expect(transport.getPlaybackState()).toBe("playing");
+    expect(playback.at(-1)).toMatchObject({ type: "ended", cause: "local-end" });
   });
 
-  it("interpolates within the active pattern's step", () => {
-    const clock = new FakeClock();
-    const arrangement = buildArrangement();
-    const engine = new ArrangementEngine(arrangement, { clock });
-    const introId = arrangement.patterns.intro.tracks[0].id;
-    // step0=0, step1=1; at half a beat in, phase=0.5
-    expect(engine.sampleChannels(BEAT_MS / 2)[introId]).toBeCloseTo(0.5);
-  });
-});
-
-describe("ArrangementEngine — loop / reset / dispose", () => {
-  it("wraps to the start when loop is true and totalBeats is exceeded", () => {
-    const clock = new FakeClock();
-    const arrangement = buildArrangement();
-    const engine = new ArrangementEngine(arrangement, { clock, loop: true });
-    const introId = arrangement.patterns.intro.tracks[0].id;
-    // totalBeats = 6; beat 6 wraps to beat 0.
-    expect(engine.sampleChannels(BEAT_MS * 6)[introId]).toBeCloseTo(engine.sampleChannels(0)[introId]);
-  });
-
-  it("reset(beat) re-anchors so the engine reports being at that beat", () => {
-    const clock = new FakeClock();
-    const arrangement = buildArrangement();
-    const engine = new ArrangementEngine(arrangement, { clock, lookaheadMs: 50 });
-    const sections: ArrangementSectionEvent[] = [];
-    engine.on("section", (e) => sections.push(e));
-    engine.start();
-    clock.advance(BEAT_MS); // now at beat 1, in s1
-
-    engine.seek(4);
-
-    expect(sections[sections.length - 1].section?.id).toBe("s2");
-  });
-
-  it("dispose() stops playback and clears all listeners", () => {
-    const clock = new FakeClock();
-    const engine = new ArrangementEngine(buildArrangement(), { clock, lookaheadMs: 50 });
+  it("PB-TR-006 replays from local ended with play metadata while transport keeps running", async () => {
+    const { clock, transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport, lookaheadMs: 1000 });
+    const playback: EnginePlaybackEvent[] = [];
     const steps: StepEvent[] = [];
-    engine.on("step", (e) => steps.push(e));
-    engine.start();
+    engine.on("playback", (event) => playback.push(event));
+    engine.on("step", (event) => steps.push(event));
+
+    await engine.play();
+    clock.advance(BEAT_MS * 6);
+    await vi.advanceTimersByTimeAsync(1000);
+    playback.length = 0;
+    steps.length = 0;
+
+    await engine.play();
+
+    expect(transport.getPlaybackState()).toBe("playing");
+    expect(playback).toMatchObject([
+      { type: "play", cause: "command", previousState: "ended" },
+    ]);
+    expect(steps).toMatchObject([
+      { stepIndex: 0, cause: "play", scheduledPositionMs: 0, transportPositionMs: 0 },
+    ]);
+  });
+
+  it("PB-EN-022 PB-EN-023 PB-EN-024 changes local loop without mutating transport loop", () => {
+    const { transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+    const playback: EnginePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+    const setLoop = engine.setLoop as unknown as (loop: unknown) => void;
+
+    expect(() => setLoop("yes")).toThrow(TypeError);
+    engine.setLoop(true);
+    engine.setLoop(true);
+
+    expect(playback).toMatchObject([
+      { type: "loopchange", cause: "command", snapshot: { projectLoop: true, transportLoop: false } },
+    ]);
+    expect(transport.getLoop()).toBe(false);
+  });
+
+  it("PB-EN-011 PB-EN-025 setArrangement preserves fractional beat without seeking transport", async () => {
+    const { clock, transport } = buildTransport();
+    const arrangement = buildArrangement();
+    const engine = new ArrangementEngine(arrangement, { transport });
+    const projects: ArrangementProjectEvent[] = [];
+    engine.on("project", (event) => projects.push(event));
+
+    await engine.play();
+    clock.advance(BEAT_MS * 1.5);
+    const nextArrangement = createArrangement({
+      bpm: 60,
+      patterns: arrangement.patterns,
+      sections: arrangement.sections,
+    });
+    engine.setArrangement(nextArrangement);
+
+    expect(transport.getPositionMs()).toBe(BEAT_MS * 1.5);
+    expect(engine.getPosition()).toMatchObject({ beat: 1.5, positionMs: 1500 });
+    expect(projects).toHaveLength(1);
+    expect(projects[0]).toMatchObject({ beat: 1.5, positionMs: 1500 });
+  });
+
+  it("PB-EN-014 shortens a non-looping project to local ended", async () => {
+    const { clock, transport } = buildTransport();
+    const arrangement = buildArrangement();
+    const engine = new ArrangementEngine(arrangement, { transport });
+
+    await engine.play();
+    clock.advance(BEAT_MS * 5);
+    engine.setArrangement(createArrangement({
+      bpm: 120,
+      patterns: arrangement.patterns,
+      sections: [{ id: "short", patternId: "intro", startBeat: 0, endBeat: 2 }],
+    }));
+
+    expect(engine.getPlaybackState()).toBe("ended");
+    expect(engine.getPosition()).toMatchObject({ beat: 2, positionMs: BEAT_MS * 2 });
+  });
+
+  it("PB-EN-015 shortens a looping project by modulo and keeps playing", async () => {
+    const { clock, transport } = buildTransport();
+    const arrangement = buildArrangement();
+    const engine = new ArrangementEngine(arrangement, { transport, loop: true });
+
+    await engine.play();
+    clock.advance(BEAT_MS * 5);
+    engine.setArrangement(createArrangement({
+      bpm: 120,
+      patterns: arrangement.patterns,
+      sections: [{ id: "short", patternId: "intro", startBeat: 0, endBeat: 2 }],
+    }));
+
+    expect(engine.getPlaybackState()).toBe("playing");
+    expect(engine.getPosition()).toMatchObject({ beat: 1, positionMs: BEAT_MS });
+  });
+
+  it("PB-EN-013 PB-EN-013A validates constructor and preserves state on invalid hot-swap", async () => {
+    const { clock, transport } = buildTransport();
+
+    expect(() => new ArrangementEngine({ ...buildArrangement(), sections: [{ id: "bad", patternId: "missing", startBeat: 0, endBeat: 1 }] }, { transport })).toThrow(TypeError);
+
+    const arrangement = buildArrangement();
+    const engine = new ArrangementEngine(arrangement, { transport });
+    await engine.play();
+    clock.advance(BEAT_MS);
+    const previousPosition = engine.getPosition();
+    const previousState = engine.getPlaybackState();
+
+    expect(() => engine.setArrangement({ ...buildArrangement(), bpm: -1 })).toThrow(TypeError);
+    expect(engine.getArrangement()).toBe(arrangement);
+    expect(engine.getPlaybackState()).toBe(previousState);
+    expect(engine.getPosition()).toEqual(previousPosition);
+  });
+
+  it("PB-EN-019 PB-EN-020 dispose is idempotent and borrowed transport survives", async () => {
+    const { transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+    await engine.play();
+
+    engine.dispose();
     engine.dispose();
 
-    expect(engine.isPlaying()).toBe(false);
-    clock.advance(BEAT_MS * 10);
-    expect(steps).toHaveLength(1); // only the initial step from start(), nothing after dispose
+    expect(transport.getPlaybackState()).toBe("playing");
+    expect(() => engine.sampleChannels()).toThrow();
+    expect(() => engine.on("step", () => undefined)).toThrow();
   });
 
-  it("anchors beat 0 on first start when originMs is omitted", () => {
-    const clock = new FakeClock();
-    clock.jumpTo(10_000);
-    const engine = new ArrangementEngine(buildArrangement(), { clock });
-    const sections: ArrangementSectionEvent[] = [];
-    engine.on("section", (event) => sections.push(event));
-    engine.start();
-    expect(sections.at(-1)?.section?.id).toBe("s1");
-  });
+  it("exposes ArrangementEngine through the generic ChannelSource surface", () => {
+    const { transport } = buildTransport();
+    const source: ChannelSource = new ArrangementEngine(buildArrangement(), { transport });
 
-  it("resumes from the stopped beat without counting wall-clock pause time", () => {
-    const clock = new FakeClock();
-    const engine = new ArrangementEngine(buildArrangement(), { clock, lookaheadMs: 50 });
-    const steps: StepEvent[] = [];
-    engine.on("step", (event) => steps.push(event));
-    engine.start();
-    clock.advance(BEAT_MS);
-    engine.stop();
-    clock.advance(BEAT_MS * 10);
-    engine.start();
-    expect(steps.at(-1)?.stepIndex).toBe(1);
-  });
-
-  it("ends and stops polling at the final section boundary", () => {
-    const clock = new FakeClock();
-    const engine = new ArrangementEngine(buildArrangement(), { clock, lookaheadMs: 50 });
-    const transport: string[] = [];
-    engine.on("transport", (event) => transport.push(event.type));
-    engine.start();
-    clock.advance(BEAT_MS * 6);
-    expect(engine.isPlaying()).toBe(false);
-    expect(transport).toEqual(["start", "end"]);
-    expect(clock.timers).toHaveLength(0);
-  });
-
-  it("seek emits transport, section, and step synchronously", () => {
-    const clock = new FakeClock();
-    const engine = new ArrangementEngine(buildArrangement(), { clock });
-    const events: string[] = [];
-    engine.on("transport", (event) => events.push(event.type));
-    engine.on("section", (event) => events.push(`section:${event.section?.id ?? "gap"}`));
-    engine.on("step", (event) => events.push(`step:${event.stepIndex}`));
-    engine.seek(4);
-    expect(events).toEqual(["seek", "section:s2", "step:0"]);
-  });
-
-  it("rejects an invalid hot-swap without replacing the current arrangement", () => {
-    const clock = new FakeClock();
-    const original = buildArrangement();
-    const engine = new ArrangementEngine(original, { clock });
-    const invalid = { ...original, sections: [{ ...original.sections[0], patternId: "missing" }] };
-    expect(() => engine.setArrangement(invalid)).toThrow(/Invalid arrangement/);
-    expect(engine.getArrangement().sections).toHaveLength(2);
-  });
-
-  it("preserves the current beat across a valid hot-swap", () => {
-    const clock = new FakeClock();
-    const original = buildArrangement();
-    const engine = new ArrangementEngine(original, { clock, lookaheadMs: 50 });
-    engine.start();
-    clock.advance(BEAT_MS);
-    const replacement = createArrangement({
-      bpm: 60,
-      patterns: original.patterns,
-      sections: original.sections,
-    });
-    engine.setArrangement(replacement);
-    const introId = replacement.patterns.intro.tracks[0].id;
-    expect(engine.sampleChannels(clock.now())[introId]).toBe(1);
+    source.on("playback", (event) => event.snapshot.positionMs);
+    source.on("project", (event) => event.changedChannelIds);
   });
 });

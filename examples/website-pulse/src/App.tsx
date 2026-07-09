@@ -7,8 +7,8 @@ import {
   createDecayEnvelope,
   type SequenceProject,
   type SequencerEngine,
-  type SequencerTransport,
-  type TransportEvent,
+  type PlaybackTransport,
+  type SequencerPlaybackEvent,
 } from "@vixeq/core";
 import { bindChannelsToElement } from "@vixeq/core/dom";
 import { useAnimatedChannels } from "@vixeq/react";
@@ -49,15 +49,15 @@ export const App = () => {
   const [editorOpen, setEditorOpen] = useState(false);
   const reducedMotion = useReducedMotion();
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isStarting, setIsStarting] = useState(false);
+  const [isBusy, setIsBusy] = useState(false);
   const [transportError, setTransportError] = useState<string | null>(null);
-  const [transport, setTransport] = useState<SequencerTransport | null>(null);
+  const [transport, setTransport] = useState<PlaybackTransport | null>(null);
   const [shouldAutoPlay, setShouldAutoPlay] = useState(false);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<SequencePlayerRef>(null);
   const ctxRef = useRef<AudioContext | null>(null);
-  const transportRef = useRef<SequencerTransport | null>(null);
+  const transportRef = useRef<PlaybackTransport | null>(null);
 
   // Decode the demo loop once; playback is coordinated through vixeq transport.
   useEffect(() => {
@@ -89,9 +89,8 @@ export const App = () => {
     };
   }, []);
 
-  const handleTransportChange = useCallback((e: TransportEvent) => {
-    if (e.type === "start") setIsPlaying(true);
-    if (e.type === "stop") setIsPlaying(false);
+  const handlePlaybackChange = useCallback((e: SequencerPlaybackEvent) => {
+    setIsPlaying(e.snapshot.state === "playing");
   }, []);
 
   // Create one envelope per channel; stable for the component's lifetime.
@@ -112,7 +111,7 @@ export const App = () => {
   // Engine direct subscription avoids per-step React re-renders.
   useAnimatedChannels(engine, {
     envelopes,
-    reducedMotion,
+    motionPreference: reducedMotion ? "reduce" : "no-preference",
     onFrame: (values) => {
       const el = rootRef.current;
       if (el) {
@@ -123,14 +122,24 @@ export const App = () => {
 
   const handlePlay = useCallback(async () => {
     if (!playerRef.current) return;
-    setIsStarting(true);
+    setIsBusy(true);
     setTransportError(null);
     try {
       await playerRef.current.play();
     } catch (error) {
       setTransportError(error instanceof Error ? error.message : "Unable to start audio playback.");
     } finally {
-      setIsStarting(false);
+      setIsBusy(false);
+    }
+  }, []);
+
+  const handlePause = useCallback(async () => {
+    if (!playerRef.current) return;
+    setTransportError(null);
+    try {
+      await playerRef.current.pause();
+    } catch (error) {
+      setTransportError(error instanceof Error ? error.message : "Unable to pause audio playback.");
     }
   }, []);
 
@@ -146,11 +155,11 @@ export const App = () => {
 
   const handleToggle = useCallback(async () => {
     if (isPlaying) {
-      await handleStop();
+      await handlePause();
     } else {
       await handlePlay();
     }
-  }, [isPlaying, handlePlay, handleStop]);
+  }, [isPlaying, handlePause, handlePlay]);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -216,9 +225,9 @@ export const App = () => {
             <button
               className="btn-primary"
               onClick={handleToggle}
-              disabled={!transport || isStarting}
+              disabled={!transport || isBusy}
             >
-              {isStarting ? "Starting..." : isPlaying ? "Stop" : "Play"}
+              {isBusy ? "Working..." : isPlaying ? "Pause" : "Play"}
             </button>
             <button
               className="btn-secondary"
@@ -284,10 +293,8 @@ export const App = () => {
             project={project}
             onProjectChange={({ project: p }) => setProject(p)}
             onEngineChange={setEngine}
-            onTransportChange={handleTransportChange}
+            onPlaybackChange={handlePlaybackChange}
             transport={transport}
-            timeDriven={true}
-            originMs={0}
             showTransportControls={false}
           />
         )}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { VixeqLogo } from "./VixeqLogo";
 import { SequencePlayer } from "@vixeq/player-react";
 import type { SequencePlayerRef } from "@vixeq/player-react";
-import type { SequenceProject, StepEvent, TransportEvent } from "@vixeq/core";
+import type { SequenceProject, SequencerEngine, SequencerPlaybackEvent, StepEvent } from "@vixeq/core";
 import { brandProject } from "./brandProject";
 import { useSmoothedChannels, type SmoothedSvgValues } from "./useSmoothedChannels";
 
@@ -96,30 +96,38 @@ export const App = () => {
   const [svgValues, setSvgValues] = useState<SmoothedSvgValues>(STATIC_VALUES);
   const [latestEvent, setLatestEvent] = useState<StepEvent | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [engine, setEngine] = useState<SequencerEngine | null>(null);
+  const [transportError, setTransportError] = useState<string | null>(null);
 
   const playerRef = useRef<SequencePlayerRef>(null);
+
+  const runPlayerCommand = useCallback((command: () => Promise<void> | undefined) => {
+    setTransportError(null);
+    void command()?.catch((error) => {
+      setTransportError(error instanceof Error ? error.message : "Playback command failed.");
+    });
+  }, []);
 
   const handleStep = useCallback((e: StepEvent) => {
     setLatestEvent(e);
   }, []);
 
-  const handleTransportChange = useCallback((e: TransportEvent) => {
-    if (e.type === "start") setIsPlaying(true);
-    if (e.type === "stop") setIsPlaying(false);
+  const handlePlaybackChange = useCallback((e: SequencerPlaybackEvent) => {
+    setIsPlaying(e.snapshot.state === "playing");
   }, []);
 
   const onFrame = useCallback((v: SmoothedSvgValues) => {
     setSvgValues({ ...v });
   }, []);
 
-  useSmoothedChannels(latestEvent, reducedMotion, onFrame);
+  useSmoothedChannels(engine, latestEvent, reducedMotion, onFrame);
 
   useEffect(() => {
-    if (!reducedMotion) void playerRef.current?.play();
+    if (!reducedMotion) runPlayerCommand(() => playerRef.current?.play());
     return () => {
-      void playerRef.current?.stop();
+      void playerRef.current?.stop().catch(() => undefined);
     };
-  }, [reducedMotion]);
+  }, [reducedMotion, runPlayerCommand]);
 
   const displayValues = reducedMotion ? STATIC_VALUES : svgValues;
 
@@ -150,13 +158,14 @@ export const App = () => {
             (<code>value → nextValue</code> with easing) while the rings use impulse-decay envelopes.
           </p>
           <div className="hero-actions">
-            <button className="btn-primary" onClick={() => playerRef.current?.toggle()}>
-              {isPlaying ? "Stop" : "Play"}
+            <button className="btn-primary" onClick={() => runPlayerCommand(() => playerRef.current?.toggle())}>
+              {isPlaying ? "Pause" : "Play"}
             </button>
             <button className="btn-secondary" onClick={() => setEditorOpen((o) => !o)}>
               {editorOpen ? "Close editor" : "Edit choreography"}
             </button>
           </div>
+          {transportError ? <p role="alert">{transportError}</p> : null}
         </div>
 
         <div className="svg-stage">
@@ -181,7 +190,7 @@ export const App = () => {
       {reducedMotion && (
         <div className="reduced-motion-notice" role="status">
           Motion paused — reduced-motion preference detected.
-          <button onClick={() => playerRef.current?.play()}>Play anyway</button>
+          <button onClick={() => runPlayerCommand(() => playerRef.current?.play())}>Play anyway</button>
         </div>
       )}
 
@@ -194,8 +203,9 @@ export const App = () => {
           ref={playerRef}
           project={project}
           onProjectChange={({ project: p }) => setProject(p)}
+          onEngineChange={setEngine}
           onStep={handleStep}
-          onTransportChange={handleTransportChange}
+          onPlaybackChange={handlePlaybackChange}
         />
         <div className="track-legend">
           <span style={{ "--legend-color": "var(--c-ring)" } as React.CSSProperties}>Track 1 → Outer ring</span>

@@ -85,6 +85,14 @@ export type ProjectEvent = {
   timestamp?: number;
 };
 
+export type ChannelProjectEvent = {
+  changedChannelIds: string[];
+  previousChannels: Record<string, number>;
+  channels: Record<string, number>;
+  positionMs: number;
+  beat: number;
+};
+
 export type SequencerEventMap = {
   step: StepEvent;
   playback: SequencerPlaybackEvent;
@@ -194,6 +202,6 @@ export type ChannelSource = {
   sampleChannelsAt(timeMs: number, easing?: EasingFunction): Record<string, number>;
   getPosition(): ChannelPosition;
   getPlaybackState(): PlaybackState;
-  on(eventName: "playback", handler: SequencerEventHandler<"playback">): Unsubscribe;
-  on(eventName: "project", handler: SequencerEventHandler<"project">): Unsubscribe;
+  on(eventName: "playback", handler: (event: EnginePlaybackEvent) => void): Unsubscribe;
+  on(eventName: "project", handler: (event: ChannelProjectEvent) => void): Unsubscribe;
 };

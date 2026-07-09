@@ -3,7 +3,6 @@ import {
   createDecayEnvelope,
   createMediaElementTransport,
   sectionAtBeat,
-  type PlaybackClock,
   type PlaybackTransport,
 } from "@vixeq/core";
 import { bindChannelsToElement } from "@vixeq/core/dom";
@@ -29,14 +28,11 @@ export const App = () => {
   const rootRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const ctxRef = useRef<AudioContext | null>(null);
-  const [clock, setClock] = useState<PlaybackClock | null>(null);
   const [transport, setTransport] = useState<PlaybackTransport | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [displaySeconds, setDisplaySeconds] = useState(0);
+  const [transportError, setTransportError] = useState<string | null>(null);
 
-  // The <audio> element is the transport. Playback v2 exposes media control
-  // through PlaybackTransport; until ArrangementEngine consumes transports
-  // directly, adapt its position into the PlaybackClock the engine polls.
+  // The <audio> element is the shared PlaybackTransport.
   useEffect(() => {
     const audioEl = audioRef.current;
     if (!audioEl) return;
@@ -44,31 +40,20 @@ export const App = () => {
     const ctx = new AudioContext();
     ctxRef.current = ctx;
     const mediaTransport = createMediaElementTransport(audioEl, { audioContext: ctx });
-    const mediaClock: PlaybackClock = {
-      now: () => mediaTransport.getPositionMs(),
-      setTimer(callback, delayMs) {
-        return setTimeout(callback, Math.max(0, delayMs));
-      },
-      clearTimer(timerId) {
-        clearTimeout(timerId as ReturnType<typeof setTimeout>);
-      },
-    };
 
     setTransport(mediaTransport);
-    setClock(mediaClock);
 
     return () => {
       mediaTransport.dispose();
       void ctx.close();
       ctxRef.current = null;
       setTransport(null);
-      setClock(null);
     };
   }, []);
 
-  const { engine } = useArrangement({
+  const player = useArrangement({
     arrangement,
-    clock: clock ?? undefined,
+    transport: transport ?? undefined,
     loop: true,
   });
 
@@ -87,7 +72,7 @@ export const App = () => {
     [],
   );
 
-  useAnimatedChannels(engine, {
+  useAnimatedChannels(player.engine, {
     envelopes,
     onFrame: (values) => {
       const el = rootRef.current;
@@ -114,25 +99,28 @@ export const App = () => {
   const activeLabel = activeSection ? SECTION_LABELS[activeSection.section.id] : "—";
 
   const handleToggle = useCallback(async () => {
-    if (!transport || !engine) return;
-
-    if (isPlaying) {
-      await transport.pause();
-      engine.stop();
-      setIsPlaying(false);
-    } else {
-      await transport.play();
-      engine.start();
-      setIsPlaying(true);
+    if (!transport || !player.engine) return;
+    setTransportError(null);
+    try {
+      if (player.playbackState === "playing") {
+        await player.pause();
+      } else {
+        await player.play();
+      }
+    } catch (error) {
+      setTransportError(error instanceof Error ? error.message : "Playback command failed.");
     }
-  }, [isPlaying, engine, transport]);
+  }, [player.engine, player.pause, player.play, player.playbackState, transport]);
 
   const handleJump = useCallback((startBeat: number) => {
-    if (!transport) return;
+    if (!transport || !player.engine) return;
     const nextSeconds = startBeat * BEAT_SECONDS;
-    void transport.seekMs(nextSeconds * 1000);
+    setTransportError(null);
+    void player.seekBeat(startBeat).catch((error) => {
+      setTransportError(error instanceof Error ? error.message : "Playback command failed.");
+    });
     setDisplaySeconds(nextSeconds);
-  }, [transport]);
+  }, [player.engine, player.seekBeat, transport]);
 
   const progressPct = (displaySeconds / (TOTAL_BEATS * BEAT_SECONDS)) * 100;
 
@@ -158,9 +146,10 @@ export const App = () => {
           <span className="section-badge" data-section={activeSection?.section.id ?? "gap"}>
             {activeLabel}
           </span>
-          <button className="btn-primary" onClick={handleToggle} disabled={!transport || !clock}>
-            {isPlaying ? "Pause" : "Play"}
+          <button className="btn-primary" onClick={handleToggle} disabled={!transport || player.isBusy}>
+            {player.playbackState === "playing" ? "Pause" : "Play"}
           </button>
+          {transportError ? <p role="alert">{transportError}</p> : null}
         </div>
       </div>
 

@@ -570,9 +570,13 @@ type PendingPlaybackOperation =
   | "play"
   | "pause"
   | "stop"
-  | "seek"
-  | "ratechange"
-  | "transport-loop"
+  | "toggle"
+  | "seekPositionMs"
+  | "seekStep"
+  | "seekBeat"
+  | "setPlaybackRate"
+  | "setTransportLoop"
+  | "setLoop"
   | null;
 ```
 

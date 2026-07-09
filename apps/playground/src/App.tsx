@@ -164,13 +164,8 @@ export function App() {
             }}
             onSelectedStepChange={setSelected}
             onStep={setLatestEvent}
-            onTransportChange={(event) => {
-              if (event.type === "start") {
-                setIsPlaying(true);
-              }
-              if (event.type === "stop") {
-                setIsPlaying(false);
-              }
+            onPlaybackChange={(event) => {
+              setIsPlaying(event.snapshot.state === "playing");
             }}
           />
         </div>

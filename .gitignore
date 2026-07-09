@@ -5,6 +5,8 @@ __pycache__/
 **/__pycache__/
 node_modules/
 .pnpm-store/
+.tmp/
+*.tgz
 dist/
 apps/*/dist/
 packages/*/dist/

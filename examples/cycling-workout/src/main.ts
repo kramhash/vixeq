@@ -17,37 +17,33 @@ let workout = cloneInitialWorkout();
 let position = 0;
 let activeIntervalId = workout[0].id;
 let completed = false;
-let startedAt = 0;
 let animationFrame = 0;
 let nextId = 1;
 let engine = createEngine();
+let transportError = "";
 
 function createEngine(): ArrangementEngine {
   const instance = new ArrangementEngine(workoutToArrangement(workout), { loop: false });
   instance.on("section", ({ section }) => {
     if (section) activeIntervalId = section.id;
-    updateLiveView(performance.now());
+    updateLiveView();
   });
-  instance.on("transport", (event) => {
-    if (event.type === "start") {
-      startedAt = event.timestamp - position * 1000;
+  instance.on("playback", (event) => {
+    position = instance.getPosition().beat;
+    if (event.snapshot.state === "playing") {
       completed = false;
       startAnimation();
-    } else if (event.type === "stop") {
-      position = Math.min(totalDuration(workout), (event.timestamp - startedAt) / 1000);
+    } else {
       stopAnimation();
-    } else if (event.type === "seek") {
-      position = event.beat;
-      startedAt = event.timestamp - position * 1000;
-    } else if (event.type === "reset") {
-      position = 0;
+    }
+    if (event.type === "stop") {
+      completed = false;
       activeIntervalId = workout[0].id;
-    } else if (event.type === "end") {
+    } else if (event.type === "ended") {
       position = totalDuration(workout);
       completed = true;
-      stopAnimation();
-      render();
     }
+    render();
   });
   return instance;
 }
@@ -59,6 +55,14 @@ const formatTime = (seconds: number): string => {
 
 const escapeHtml = (value: string): string =>
   value.replace(/[&<>"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[character]!);
+
+const runTransportCommand = (command: () => Promise<void>) => {
+  transportError = "";
+  void command().catch((error) => {
+    transportError = error instanceof Error ? error.message : "Playback command failed.";
+    render();
+  });
+};
 
 const intervalAt = (seconds: number): { interval: WorkoutInterval; index: number; start: number } => {
   let start = 0;
@@ -72,12 +76,12 @@ const intervalAt = (seconds: number): { interval: WorkoutInterval; index: number
 };
 
 const numberInput = (index: number, field: keyof WorkoutInterval, value: number, min: number, max: number, label: string, suffix: string) => `
-  <label class="field"><span>${label}</span><span class="input-wrap"><input type="number" data-index="${index}" data-field="${field}" min="${min}" max="${max}" step="1" value="${value}" ${engine.isPlaying() ? "disabled" : ""}><small>${suffix}</small></span></label>`;
+  <label class="field"><span>${label}</span><span class="input-wrap"><input type="number" data-index="${index}" data-field="${field}" min="${min}" max="${max}" step="1" value="${value}" ${engine.getPlaybackState() === "playing" ? "disabled" : ""}><small>${suffix}</small></span></label>`;
 
 function render(): void {
   const duration = totalDuration(workout);
   const current = intervalAt(Math.min(position, Math.max(0, duration - 0.001)));
-  const isPlaying = engine.isPlaying();
+  const isPlaying = engine.getPlaybackState() === "playing";
 
   app.innerHTML = `
     <main class="app-shell">
@@ -121,6 +125,7 @@ function render(): void {
             <button class="icon-button" data-action="next" aria-label="Next interval">→</button>
             <button class="text-button" data-action="restart">Restart</button>
           </div>
+          ${transportError ? `<p class="transport-error" role="alert">${escapeHtml(transportError)}</p>` : ""}
           <p class="next-up" id="next-up"></p>
         </section>
 
@@ -144,14 +149,16 @@ function render(): void {
         </section>
       </section>
     </main>`;
-  updateLiveView(performance.now());
+  updateLiveView();
 }
 
-function updateLiveView(now: number): void {
-  if (engine.isPlaying()) position = Math.min(totalDuration(workout), (now - startedAt) / 1000);
+function updateLiveView(): void {
+  if (engine.getPlaybackState() === "playing") {
+    position = Math.min(totalDuration(workout), engine.getPosition().beat);
+  }
   const duration = totalDuration(workout);
   const current = intervalAt(Math.min(position, Math.max(0, duration - 0.001)));
-  const channels = engine.sampleChannels(now);
+  const channels = engine.sampleChannels();
   const cadence = Math.round(40 + (channels.cadence ?? 0) * 100);
   const resistance = Math.round((channels.resistance ?? 0) * 100);
   const intervalRemaining = Math.max(0, current.start + current.interval.duration - position);
@@ -169,12 +176,15 @@ function updateLiveView(now: number): void {
   if (resistanceGauge) resistanceGauge.style.width = `${channels.resistance * 100}%`;
   document.querySelectorAll<HTMLElement>("[data-timeline-id]").forEach((element) => element.classList.toggle("is-active", element.dataset.timelineId === current.interval.id));
   const scrubber = document.querySelector<HTMLInputElement>('[data-action="seek"]');
-  if (scrubber && engine.isPlaying()) scrubber.value = String(position);
+  if (scrubber && engine.getPlaybackState() === "playing") scrubber.value = String(position);
 }
 
 function startAnimation(): void {
   stopAnimation();
-  const tick = (now: number) => { updateLiveView(now); if (engine.isPlaying()) animationFrame = requestAnimationFrame(tick); };
+  const tick = () => {
+    updateLiveView();
+    if (engine.getPlaybackState() === "playing") animationFrame = requestAnimationFrame(tick);
+  };
   animationFrame = requestAnimationFrame(tick);
 }
 
@@ -190,14 +200,13 @@ function rebuild(): void {
   completed = false;
   activeIntervalId = workout[0].id;
   engine = createEngine();
-  engine.reset();
   render();
 }
 
 function seekTo(seconds: number): void {
   position = Math.min(totalDuration(workout), Math.max(0, seconds));
   completed = position >= totalDuration(workout);
-  engine.seek(position);
+  runTransportCommand(() => engine.seekBeat(position));
   activeIntervalId = intervalAt(Math.min(position, totalDuration(workout) - 0.001)).interval.id;
   render();
 }
@@ -209,9 +218,12 @@ app.addEventListener("click", (event) => {
   const index = Number(button.dataset.index);
 
   if (action === "toggle") {
-    if (engine.isPlaying()) engine.stop();
-    else { if (completed) seekTo(0); engine.start(); }
-    render();
+    if (engine.getPlaybackState() === "playing") {
+      runTransportCommand(() => engine.pause());
+    } else {
+      if (completed) seekTo(0);
+      runTransportCommand(() => engine.play());
+    }
   } else if (action === "restart") seekTo(0);
   else if (action === "previous" || action === "next") {
     const current = intervalAt(Math.min(position, totalDuration(workout) - 0.001));

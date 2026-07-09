@@ -609,6 +609,13 @@ Codex and Claude must follow these rules when working concurrently:
 10. If implementation reveals a conflict with this specification, stop that
     work item and record the decision required; do not silently choose a new
     public behavior.
+11. Review requests and review results are recorded in git-tracked
+    `docs/reviews/<task>-claude.md` files. Before handoff, Codex creates or
+    updates the review file with `Status: review_requested`, scope, changed
+    files, review focus, commands run, and known expected failures. Claude
+    writes findings, re-review notes, and approval status in the same file.
+    Chat prompts should only point Claude at the review file, not duplicate
+    the full request.
 
 ### Task table
 
@@ -620,11 +627,12 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | P1 | 0.7 | Implement `PlaybackTransport` contract and browser/clock transports | P0 | done | Codex (author), Claude (reviewer) | `packages/core/src/` transport files |
 | P2 | 0.7 | Rebuild media and AudioBuffer transports | P1 | done | Codex (author), Claude (reviewer) | `packages/core/src/audioClock.ts` or replacement |
 | P3 | 0.7 | Refactor `SequencerEngine` to Playback v2 | P1 | done | Codex (author), Claude (author of blocker fixes + reviewer) | `packages/core/src/SequencerEngine.ts` |
-| P4 | 0.7 | Refactor `ArrangementEngine` playback shell without schema v2 | P1 | pending | — | `packages/core/src/arrangement/ArrangementEngine.ts` |
-| P5 | 0.7 | Refactor sampling, `ChannelSource`, and Envelopes | P3, P4 | pending | — | Core types/envelope files |
-| P6 | 0.7 | Refactor React hooks and reduced-motion behavior | P3, P4, P5 | pending | — | `packages/react/src/` |
-| P7 | 0.7 | Migrate `player-react` and examples to Playback v2 | P6 | pending | — | `packages/player-react/`, examples/apps |
-| P8 | 0.7 | Add packed beta smoke fixtures and publish checklist | P1–P7 | pending | — | test fixtures, docs |
+| P4 | 0.7 | Refactor `ArrangementEngine` playback shell without schema v2 | P1 | done | Codex (author), Claude (reviewer) | `packages/core/src/arrangement/ArrangementEngine.ts` |
+| P5 | 0.7 | Refactor sampling, `ChannelSource`, and Envelopes | P3, P4 | done | Codex (author), Claude (reviewer) | Core types/envelope files |
+| P6 | 0.7 | Refactor React hooks and reduced-motion behavior | P3, P4, P5 | done | Codex (author), Claude (reviewer) | `packages/react/src/` |
+| P7 | 0.7 | Migrate `player-react` and examples to Playback v2 | P6 | done | Codex (author), Claude (reviewer) | `packages/player-react/`, examples/apps |
+| P7F | 0.7 | Address P7 non-blocking review findings before beta smoke | P7 | done | Codex (author), Claude (reviewer) | Player React guard naming, official examples |
+| P8 | 0.7 | Add packed beta smoke fixtures and publish checklist | P1–P7F | done | Codex (author), Claude (reviewer) | test fixtures, docs |
 | T0 | 0.8 | Commit Timing/Timeline/Arrangement v2 schema specification | P8 | pending | — | `docs/behavior/`, API docs |
 | T1 | 0.8 | Implement `TimingMap` v2 and conversion tests | T0 | pending | — | `packages/core/src/timeline/timing.ts` |
 | T2 | 0.8 | Implement Timeline schema, strict helpers, and migration | T1 | pending | — | `packages/core/src/timeline/` |

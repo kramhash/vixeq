@@ -1,16 +1,18 @@
-import { useEffect, useRef, type MutableRefObject } from "react";
+import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
 import {
+  PlaybackError,
   type ChannelSource,
   type EasingFunction,
   type Envelope,
-  type StepEvent,
 } from "@vixeq/core";
+import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
+
+export type MotionPreference = "system" | "reduce" | "no-preference";
 
 export type AnimatedChannelsOptions = {
   /**
-   * Map of trackId → Envelope. When provided, the hook runs in envelope mode:
-   * each envelope is triggered on step events and sampled every animation frame.
-   * Tip: create these with useMemo so their identity stays stable.
+   * Map of trackId -> Envelope. Envelope trigger/sample positions use the
+   * engine's logical transport position, not rAF or wall-clock timestamps.
    */
   envelopes?: Record<string, Envelope>;
 
@@ -21,49 +23,43 @@ export type AnimatedChannelsOptions = {
   easing?: EasingFunction;
 
   /**
-   * When true, the requestAnimationFrame loop does not run and the ref
-   * retains its last value. Use with prefers-reduced-motion.
+   * Motion preference. Default "system" follows prefers-reduced-motion.
    */
-  reducedMotion?: boolean;
+  motionPreference?: MotionPreference;
 
   /**
-   * Called every animation frame with the current channel values.
-   * Ideal for direct DOM writes (e.g. with bindChannelsToElement) — avoids
-   * triggering React re-renders.
+   * Called with current channel values when the hook samples.
+   * Ideal for direct DOM writes without triggering React re-renders.
    */
   onFrame?: (values: Record<string, number>) => void;
-
-  /**
-   * External step-event source for envelope mode when the engine is not
-   * directly accessible (e.g. when using SequencePlayer's onStep callback).
-   * Ignored when an engine is provided.
-   */
-  latestEvent?: StepEvent | null;
 };
 
+const resetAll = (envelopes: Record<string, Envelope> | undefined): void => {
+  if (!envelopes) return;
+  for (const envelope of Object.values(envelopes)) {
+    envelope.reset();
+  }
+};
+
+const isDisposedSourceError = (error: unknown): boolean =>
+  error instanceof PlaybackError && error.code === "TRANSPORT_DISPOSED";
+
 /**
- * Runs a requestAnimationFrame loop that samples channel values every frame.
- *
- * Two modes:
- * - **Envelope mode** (`envelopes` option): step events excite each envelope;
- *   `envelope.sample(now)` is called every frame. Supports the "impulse and
- *   decay" pattern used in beat-driven visual choreography.
- * - **Interpolation mode** (default): calls `engine.sampleChannels(now, easing)`
- *   every frame for smooth lerp-based animation between step values.
- *
- * Returns a mutable ref whose `.current` holds the latest `{ trackId: number }`
- * map. Values are NOT stored in React state — use `onFrame` to push them to
- * the DOM (via `bindChannelsToElement`) without triggering re-renders.
+ * Runs a requestAnimationFrame loop that samples channel values without React
+ * state updates. Interpolation mode samples the ChannelSource directly.
+ * Envelope mode triggers from StepEvent.scheduledPositionMs and samples at
+ * engine.getPosition().positionMs so pause, seek, and external media stay in
+ * the same logical transport domain.
  */
 export function useAnimatedChannels(
   engine: ChannelSource | null,
   options: AnimatedChannelsOptions = {},
 ): MutableRefObject<Record<string, number>> {
-  const { envelopes, easing, reducedMotion = false, onFrame, latestEvent } = options;
+  const { envelopes, easing, motionPreference = "system", onFrame } = options;
+  const systemReducedMotion = usePrefersReducedMotion();
+  const reducedMotion = motionPreference === "reduce" || (motionPreference === "system" && systemReducedMotion);
 
   const valuesRef = useRef<Record<string, number>>({});
-
-  // Stable refs for all mutable options — avoids restarting effects on each render
   const engineRef = useRef(engine);
   const envelopesRef = useRef(envelopes);
   const easingRef = useRef(easing);
@@ -75,81 +71,119 @@ export function useAnimatedChannels(
   useEffect(() => { easingRef.current = easing; }, [easing]);
   useEffect(() => { onFrameRef.current = onFrame; }, [onFrame]);
 
-  // Subscribe to engine step events for envelope triggering.
-  // Re-subscribes when engine identity changes (e.g. engine recreated).
-  useEffect(() => {
-    if (!engine || !envelopes) return;
-
-    const off = engine.on("step", (event) => {
-      const envs = envelopesRef.current;
-      if (!envs) return;
-      // Use performance.now() so the trigger timestamp is in the same domain
-      // as the rAF `now` passed to sample() — required for time-based envelopes.
-      const now = performance.now();
-      for (const track of event.tracks) {
-        const env = envs[track.id];
-        if (env && track.enabled) {
-          env.trigger(now, track.value);
-        }
-      }
-    });
-
-    return off;
-  }, [engine, envelopes]);
-
-  // Trigger envelopes from an external step event source.
-  // Only active when engine is null (avoids double-triggering).
-  useEffect(() => {
-    if (engine !== null || !latestEvent || !envelopesRef.current) return;
+  const sampleCurrent = useCallback((): boolean => {
+    const eng = engineRef.current;
+    if (!eng) return false;
 
     const envs = envelopesRef.current;
-    // Use performance.now() so the trigger timestamp is in the same domain
-    // as the rAF `now` passed to sample() — required for time-based envelopes.
-    const now = performance.now();
-    for (const track of latestEvent.tracks) {
-      const env = envs[track.id];
-      if (env && track.enabled) {
-        env.trigger(now, track.value);
-      }
-    }
-  }, [latestEvent, engine]);
+    let values: Record<string, number>;
 
-  // requestAnimationFrame loop: sample values every frame.
-  // Restarts when reducedMotion changes (false→true stops; true→false starts).
+    try {
+      if (envs) {
+        const positionMs = eng.getPosition().positionMs;
+        values = {};
+        for (const trackId of Object.keys(envs)) {
+          values[trackId] = envs[trackId]!.sample(positionMs);
+        }
+      } else {
+        values = eng.sampleChannels(easingRef.current);
+      }
+    } catch (error) {
+      if (isDisposedSourceError(error)) {
+        if (engineRef.current === eng) {
+          engineRef.current = null;
+        }
+        return false;
+      }
+      throw error;
+    }
+
+    valuesRef.current = values;
+    onFrameRef.current?.(values);
+    return true;
+  }, []);
+
+  useEffect(() => {
+    if (!engine || !envelopes || reducedMotion) return;
+
+    try {
+      const offStep = engine.on("step", (event) => {
+        const envs = envelopesRef.current;
+        if (!envs) return;
+
+        for (const track of event.tracks) {
+          const envelope = envs[track.id];
+          if (envelope && track.enabled) {
+            envelope.trigger(event.scheduledPositionMs, track.value);
+          }
+        }
+      });
+
+      return () => {
+        offStep();
+      };
+    } catch (error) {
+      if (isDisposedSourceError(error)) return;
+      throw error;
+    }
+  }, [engine, envelopes, reducedMotion]);
+
+  useEffect(() => {
+    if (!engine) return;
+
+    let offPlayback: (() => void) | undefined;
+    try {
+      offPlayback = engine.on("playback", (event) => {
+        if (event.type === "seek" || event.type === "stop") {
+          resetAll(envelopesRef.current);
+          if (reducedMotion) {
+            sampleCurrent();
+          }
+        }
+      });
+
+      const offProject = engine.on("project", (event) => {
+        const envs = envelopesRef.current;
+        if (envs) {
+          for (const channelId of event.changedChannelIds) {
+            envs[channelId]?.reset();
+          }
+        }
+        if (reducedMotion) {
+          sampleCurrent();
+        }
+      });
+
+      return () => {
+        offPlayback?.();
+        offProject();
+      };
+    } catch (error) {
+      offPlayback?.();
+      if (isDisposedSourceError(error)) return;
+      throw error;
+    }
+  }, [engine, reducedMotion, sampleCurrent]);
+
+  useEffect(() => {
+    if (!reducedMotion) return;
+    sampleCurrent();
+  }, [reducedMotion, engine, envelopes, easing, sampleCurrent]);
+
   useEffect(() => {
     if (reducedMotion) return;
 
-    const tick = (now: number) => {
-      const envs = envelopesRef.current;
-      const eng = engineRef.current;
-
-      let values: Record<string, number>;
-
-      if (envs) {
-        // Envelope mode: sample each envelope at the current timestamp
-        values = {};
-        for (const trackId of Object.keys(envs)) {
-          values[trackId] = envs[trackId]!.sample(now);
-        }
-      } else if (eng) {
-        // Interpolation mode: easing-interpolated step-to-step sampling
-        values = eng.sampleChannels(now, easingRef.current);
-      } else {
-        // No source yet — keep the loop alive
+    const tick = () => {
+      if (sampleCurrent()) {
         rafRef.current = requestAnimationFrame(tick);
-        return;
       }
-
-      valuesRef.current = values;
-      onFrameRef.current?.(values);
-      rafRef.current = requestAnimationFrame(tick);
     };
 
     rafRef.current = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(rafRef.current);
     };
-  }, [reducedMotion]);
+  }, [reducedMotion, engine, envelopes, easing, sampleCurrent]);
 
   return valuesRef;
 }

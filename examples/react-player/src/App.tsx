@@ -9,8 +9,15 @@ export function App() {
   const playerRef = useRef<SequencePlayerRef>(null);
   const [project, setProject] = useState(initialProject);
   const [latestEvent, setLatestEvent] = useState<StepEvent | null>(null);
+  const [transportError, setTransportError] = useState<string | null>(null);
 
   const firstTrackId = project.tracks[0]?.id;
+  const runPlayerCommand = (command: () => Promise<void> | undefined) => {
+    setTransportError(null);
+    void command()?.catch((error) => {
+      setTransportError(error instanceof Error ? error.message : "Playback command failed.");
+    });
+  };
 
   return (
     <main className="shell">
@@ -20,17 +27,18 @@ export function App() {
           <p>Controlled SequencePlayer with external transport and project transforms.</p>
         </div>
         <div className="controls">
-          <button type="button" onClick={() => playerRef.current?.play()}>
+          <button type="button" onClick={() => runPlayerCommand(() => playerRef.current?.play())}>
             Play
           </button>
-          <button type="button" onClick={() => playerRef.current?.stop()}>
+          <button type="button" onClick={() => runPlayerCommand(() => playerRef.current?.stop())}>
             Stop
           </button>
-          <button type="button" onClick={() => playerRef.current?.reset(0)}>
-            Reset
+          <button type="button" onClick={() => runPlayerCommand(() => playerRef.current?.seekStep(0))}>
+            First step
           </button>
         </div>
       </header>
+      {transportError ? <p role="alert">{transportError}</p> : null}
 
       <div className="transform-controls">
         <button type="button" disabled={!firstTrackId} onClick={() => firstTrackId && setProject(clearTrack(project, firstTrackId))}>
