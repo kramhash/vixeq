@@ -9,6 +9,21 @@ semantics across Core, React, and Player React. There are no deprecated
 aliases in 0.7 — see the
 [migration guide](./docs/migrations/0.7-playback-v2.md) before upgrading.
 
+### Published
+
+- Published to npm under the `beta` dist-tag; the `latest` tag is untouched
+  (still `0.5.0`). Install explicitly with `@beta`, e.g.
+  `npm install @vixeq/core@beta`.
+  - [`@vixeq/core@0.7.0-beta.1`](https://www.npmjs.com/package/@vixeq/core/v/0.7.0-beta.1)
+  - [`@vixeq/react@0.7.0-beta.1`](https://www.npmjs.com/package/@vixeq/react/v/0.7.0-beta.1)
+  - [`@vixeq/player-react@0.7.0-beta.1`](https://www.npmjs.com/package/@vixeq/player-react/v/0.7.0-beta.1)
+- Verified against the packed tarballs (`pnpm smoke:pack`) and against a
+  clean consumer installing directly from the npm registry: ESM/CJS imports,
+  public types, React SSR, and `@vixeq/player-react/styles.css` resolution
+  all pass.
+- Known caveat: this is a prerelease with no deprecated aliases for the 0.6
+  API — see the migration guide above before adopting the beta.
+
 ### Added
 
 - Shared `PlaybackTransport` contract in `@vixeq/core`, with `PlaybackClock`,
