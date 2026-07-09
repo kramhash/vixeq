@@ -196,20 +196,22 @@ TimelineEngine.seekBeat(beat: number): Promise<void>;
   need events "as of" a seek position use a pure query (§2.2), not a dispatch
   side effect.
 - Dispatch policy for events skipped by natural transport delay is
-  `missedEventPolicy`, mirroring Sequence/Arrangement `missedStepPolicy`:
+  `missedCuePolicy`, mirroring Sequence/Arrangement `missedStepPolicy`:
   - default `"emit"`: every event between the previous and current tick position
     dispatches, in beat order, each carrying its own `lateByMs`.
   - optional `"skip"`: only the most advanced due event dispatches; earlier
-    missed cues in the same tick are discarded.
-- Explicit seek (`seekBeat`, `seekPositionMs`) never invokes `missedEventPolicy`;
+    missed cues in the same tick are discarded unconditionally (no separate
+    lateness threshold — mirrors `ArrangementEngine`'s `missedStepPolicy:
+    "skip"`, which resolves and emits only the current position).
+- Explicit seek (`seekBeat`, `seekPositionMs`) never invokes `missedCuePolicy`;
   it always emits zero cue events for the traversed range.
 - Loop dispatch repeats every event on every iteration, including any event at
   beat `0`. A looping `TimelineEngine` does not deduplicate the boundary event
   across iterations.
-- Dispatch events include:
+- Dispatch events (delivered on the `"cue"` event channel) include:
 
 ```ts
-export type TimelineDispatchEvent<TEvent extends TimelineEvent = TimelineEvent> = {
+export type TimelineCueEvent<TEvent extends TimelineEvent = TimelineEvent> = {
   event: TEvent;
   iteration: number;
   scheduledPositionMs: number;

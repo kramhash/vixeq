@@ -636,7 +636,7 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | T0 | 0.8 | Commit Timing/Timeline/Arrangement v2 schema specification | P8 | done | Claude (author), Claude (reviewer) | `docs/behavior/`, `docs/migrations/` |
 | T1 | 0.8 | Implement `TimingMap` v2 and conversion tests | T0 | done | Claude (author), Claude (reviewer) | `packages/core/src/timeline/timing.ts` |
 | T2 | 0.8 | Implement Timeline schema, strict helpers, and migration | T1 | done | Claude (author), Claude (reviewer) | `packages/core/src/timeline/` |
-| T3 | 0.8 | Implement indexed `TimelineEngine` | T1, T2 | pending | — | new Timeline Engine files |
+| T3 | 0.8 | Implement indexed `TimelineEngine` | T1, T2 | done | Codex (author), Claude (reviewer, B1/N2 fix author) | new Timeline Engine files |
 | T4 | 0.8 | Implement Arrangement v2 and migration | T1 | pending | — | `packages/core/src/arrangement/` |
 | T5 | 0.8 | Add `useTimeline` and migrate `useArrangement` | T3, T4 | pending | — | `packages/react/src/` |
 | T6 | 0.8 | Integrate Timeline v2 into `website-pulse` | T3, T5 | pending | — | `examples/website-pulse/` |

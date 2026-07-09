@@ -73,19 +73,19 @@ Status values: `planned`, `covered`, `blocked`.
 
 | ID | Scenario | Expected result | Status |
 | --- | --- | --- | --- |
-| TL-EN-001 | TimelineEngine implements ChannelSource | type check/verification fails; no sampleChannels methods present | planned |
-| TL-EN-002 | valid seekBeat | transport position updated; no cue events emitted | planned |
-| TL-EN-003 | invalid seekBeat (out of range, non-finite) | synchronous RangeError; no queued operation | planned |
-| TL-EN-004 | natural playback with missedEventPolicy emit | every crossed event dispatches in beat order with lateByMs | planned |
-| TL-EN-005 | natural playback with missedEventPolicy skip | only the most-advanced due event dispatches | planned |
-| TL-EN-006 | explicit seek across pending cues | missedEventPolicy not invoked; zero cues emitted for the traversed range | planned |
-| TL-EN-007 | looping playback crossing beat 0 | beat-0 event dispatches again on each iteration | planned |
-| TL-EN-008 | dispatch event fields | iteration, scheduledPositionMs, transportPositionMs, lateByMs all present | planned |
-| TL-EN-009 | Project hot-swap during playback | beat position preserved; no transport seek | planned |
-| TL-EN-010 | hot-swap adds event at/before current beat | not emitted retroactively; eligible on next pass | planned |
-| TL-EN-011 | non-looping local end | transitions to local ended; shared transport unaffected | planned |
-| TL-EN-012 | 100,000-event fixture range query | bounded index probes independent of total event count | planned |
-| TL-EN-013 | 100,000-event fixture per-tick dispatch | no full-event-list scan per tick | planned |
+| TL-EN-001 | TimelineEngine implements ChannelSource | type check/verification fails; no sampleChannels methods present | covered |
+| TL-EN-002 | valid seekBeat | transport position updated; no cue events emitted | covered |
+| TL-EN-003 | invalid seekBeat (out of range, non-finite) | synchronous RangeError; no queued operation | covered |
+| TL-EN-004 | natural playback with missedCuePolicy emit | every crossed event dispatches in beat order with lateByMs | covered |
+| TL-EN-005 | natural playback with missedCuePolicy skip | only the most-advanced due event dispatches, unconditionally (no lateness threshold) | covered |
+| TL-EN-006 | explicit seek across pending cues | missedCuePolicy not invoked; zero cues emitted for the traversed range | covered |
+| TL-EN-007 | looping playback crossing beat 0 | beat-0 event dispatches again on each iteration | covered |
+| TL-EN-008 | dispatch event fields | iteration, scheduledPositionMs, transportPositionMs, lateByMs all present | covered |
+| TL-EN-009 | Project hot-swap during playback | beat position preserved; no transport seek | covered |
+| TL-EN-010 | hot-swap adds event at/before current beat | not emitted retroactively; eligible on next pass | covered |
+| TL-EN-011 | non-looping local end | transitions to local ended; shared transport unaffected | covered |
+| TL-EN-012 | 100,000-event fixture range query | bounded index probes independent of total event count | covered |
+| TL-EN-013 | 100,000-event fixture per-tick dispatch | no full-event-list scan per tick | covered |
 
 ## ArrangementProject v2 (`AR-*`)
 

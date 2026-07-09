@@ -1,3 +1,11 @@
+import type {
+  EnginePlaybackEvent,
+  EnginePlaybackSnapshot,
+  MissedStepPolicy,
+  Unsubscribe,
+} from "../types";
+import type { ListenerErrorContext, PlaybackTransport } from "../playbackTransport";
+
 export type TempoEvent = {
   beat: number;
   bpm: number;
@@ -71,3 +79,51 @@ export type TimelineQueryOptions = {
   includeGlobalEvents?: boolean;
   eventTypes?: string[];
 };
+
+export type TimelineCueEvent<TEvent extends TimelineEvent = TimelineEvent> = {
+  event: TEvent;
+  iteration: number;
+  scheduledPositionMs: number;
+  transportPositionMs: number;
+  lateByMs: number;
+};
+
+export type TimelinePlaybackSnapshot = EnginePlaybackSnapshot;
+
+export type TimelinePlaybackEvent = Omit<EnginePlaybackEvent, "snapshot"> & {
+  snapshot: TimelinePlaybackSnapshot;
+};
+
+export type TimelineProjectEvent<TEvent extends TimelineEvent = TimelineEvent> = {
+  project: TimelineProject<TEvent>;
+  previousProject: TimelineProject<TEvent>;
+  positionMs: number;
+  beat: number;
+};
+
+export type TimelineEventMap<TEvent extends TimelineEvent = TimelineEvent> = {
+  cue: TimelineCueEvent<TEvent>;
+  playback: TimelinePlaybackEvent;
+  project: TimelineProjectEvent<TEvent>;
+};
+
+export type TimelineEventName = keyof TimelineEventMap;
+
+export type TimelineEventHandler<
+  TEventName extends TimelineEventName,
+  TEvent extends TimelineEvent = TimelineEvent,
+> = (event: TimelineEventMap<TEvent>[TEventName]) => void;
+
+export type TimelineEngineOptions<TEvent extends TimelineEvent = TimelineEvent> = {
+  transport?: PlaybackTransport;
+  /** Max ms between polls while playing. Default 25. */
+  lookaheadMs?: number;
+  /** Repeat from beat 0 at the timeline end. Default false. */
+  loop?: boolean;
+  missedCuePolicy?: MissedStepPolicy;
+  eventValidator?: TimelineEventValidator<TEvent>;
+  onCue?: TimelineEventHandler<"cue", TEvent>;
+  onListenerError?: (error: unknown, context: ListenerErrorContext) => void;
+};
+
+export type { Unsubscribe };

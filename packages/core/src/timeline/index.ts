@@ -1,3 +1,4 @@
+export { TimelineEngine } from "./TimelineEngine";
 export {
   beatToMs,
   createTimingMap,
@@ -32,8 +33,16 @@ export type {
   JsonValue,
   TempoEvent,
   TimelineEvent,
+  TimelineCueEvent,
+  TimelineEngineOptions,
+  TimelineEventHandler,
+  TimelineEventMap,
+  TimelineEventName,
+  TimelinePlaybackEvent,
+  TimelinePlaybackSnapshot,
   TimelineEventValidator,
   TimelineProject,
+  TimelineProjectEvent,
   TimelineQueryOptions,
   TimelineTrack,
   TimingMap,
