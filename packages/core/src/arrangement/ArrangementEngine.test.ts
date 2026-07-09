@@ -63,7 +63,8 @@ const buildArrangement = (): ArrangementProject => {
   chorus = setStepValue(chorus, chorusTrackId, 1, 1);
 
   return createArrangement({
-    bpm: 120,
+    timing: { bpm: 120 },
+    durationBeats: 6,
     patterns: { intro, chorus },
     sections: [
       { id: "s1", patternId: "intro", startBeat: 0, endBeat: 2 },
@@ -169,6 +170,35 @@ describe("ArrangementEngine — Playback v2", () => {
     expect(() => engine.seekPositionMs(BEAT_MS * 7)).toThrow(RangeError);
   });
 
+  it("AR-007 AR-008 uses Arrangement TimingMap for seek and step scheduling, ignoring pattern bpm", async () => {
+    const { clock, transport } = buildTransport();
+    const pattern = createProject({ bpm: 999, stepCount: 4, stepsPerBeat: 1, trackCount: 1 });
+    const arrangement = createArrangement({
+      timing: { tempos: [{ beat: 0, bpm: 60 }, { beat: 1, bpm: 120 }] },
+      durationBeats: 3,
+      patterns: { pattern },
+      sections: [{ id: "s1", patternId: "pattern", startBeat: 0, endBeat: 3 }],
+    });
+    const engine = new ArrangementEngine(arrangement, { transport, lookaheadMs: 10 });
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
+
+    await engine.seekBeat(2);
+    expect(transport.getPositionMs()).toBe(1500);
+
+    await engine.stop();
+    steps.length = 0;
+    await engine.play();
+    clock.advance(1500);
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(steps.map((event) => `${event.stepIndex}:${event.scheduledPositionMs}:${event.bpm}`)).toEqual([
+      "0:0:60",
+      "1:1000:120",
+      "2:1500:120",
+    ]);
+  });
+
   it("PB-CH-004 sampleChannelsAt evaluates project-relative milliseconds", () => {
     const { transport } = buildTransport();
     const arrangement = buildArrangement();
@@ -253,7 +283,8 @@ describe("ArrangementEngine — Playback v2", () => {
     await engine.play();
     clock.advance(BEAT_MS * 1.5);
     const nextArrangement = createArrangement({
-      bpm: 60,
+      timing: { bpm: 60 },
+      durationBeats: arrangement.durationBeats,
       patterns: arrangement.patterns,
       sections: arrangement.sections,
     });
@@ -273,7 +304,8 @@ describe("ArrangementEngine — Playback v2", () => {
     await engine.play();
     clock.advance(BEAT_MS * 5);
     engine.setArrangement(createArrangement({
-      bpm: 120,
+      timing: { bpm: 120 },
+      durationBeats: 2,
       patterns: arrangement.patterns,
       sections: [{ id: "short", patternId: "intro", startBeat: 0, endBeat: 2 }],
     }));
@@ -290,7 +322,8 @@ describe("ArrangementEngine — Playback v2", () => {
     await engine.play();
     clock.advance(BEAT_MS * 5);
     engine.setArrangement(createArrangement({
-      bpm: 120,
+      timing: { bpm: 120 },
+      durationBeats: 2,
       patterns: arrangement.patterns,
       sections: [{ id: "short", patternId: "intro", startBeat: 0, endBeat: 2 }],
     }));
@@ -311,7 +344,10 @@ describe("ArrangementEngine — Playback v2", () => {
     const previousPosition = engine.getPosition();
     const previousState = engine.getPlaybackState();
 
-    expect(() => engine.setArrangement({ ...buildArrangement(), bpm: -1 })).toThrow(TypeError);
+    expect(() => engine.setArrangement({
+      ...buildArrangement(),
+      timing: { tempos: [{ beat: 1, bpm: 120 }], startPositionMs: 0 },
+    })).toThrow(TypeError);
     expect(engine.getArrangement()).toBe(arrangement);
     expect(engine.getPlaybackState()).toBe(previousState);
     expect(engine.getPosition()).toEqual(previousPosition);

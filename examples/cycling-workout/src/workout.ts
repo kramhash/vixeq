@@ -1,3 +1,4 @@
+import { createTimingMap } from "@vixeq/core";
 import type { ArrangementProject, SequenceProject, Track } from "@vixeq/core";
 
 export const WORKOUT_LIMITS = {
@@ -79,7 +80,7 @@ export const workoutToArrangement = (workout: WorkoutInterval[]): ArrangementPro
     return section;
   });
 
-  return { version: 1, bpm: 60, patterns, sections };
+  return { version: 2, timing: createTimingMap({ bpm: 60 }), durationBeats: elapsedSeconds, patterns, sections };
 };
 
 export const totalDuration = (workout: WorkoutInterval[]): number =>

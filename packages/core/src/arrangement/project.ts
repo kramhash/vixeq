@@ -1,26 +1,28 @@
-import { SEQUENCER_LIMITS } from "../limits";
-import { clamp } from "../project";
 import { normalizeProject, validateProject } from "../validation";
+import { createTimingMap, normalizeTimingMap, validateTimingMap } from "../timeline/timing";
 import type { SequenceProject, ValidationIssue, ValidationResult } from "../types";
 import type { ArrangementProject, ArrangementSection, CreateArrangementOptions } from "./types";
+
+const DEFAULT_DURATION_BEATS = 4;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+const isFiniteNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+
 export const createArrangement = (options: CreateArrangementOptions = {}): ArrangementProject => ({
-  version: 1,
-  bpm: clamp(options.bpm ?? SEQUENCER_LIMITS.defaultBpm, SEQUENCER_LIMITS.minBpm, SEQUENCER_LIMITS.maxBpm),
+  version: 2,
+  timing: normalizeTimingMap(options.timing),
+  durationBeats: isFiniteNumber(options.durationBeats) && options.durationBeats > 0
+    ? options.durationBeats
+    : DEFAULT_DURATION_BEATS,
   patterns: options.patterns ?? {},
   sections: options.sections ?? [],
 });
 
-const isFiniteNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
-
 /**
- * Validates an ArrangementProject-shaped input. Checks: version/bpm range,
- * each pattern is a valid SequenceProject (delegates to validateProject),
- * every section references an existing pattern with 0 <= startBeat < endBeat,
- * and sections do not overlap.
+ * Validates ArrangementProject v2 strictly. Migration from v1 is explicit;
+ * legacy `bpm` is rejected instead of being converted to `timing`.
  */
 export const validateArrangement = (input: unknown): ValidationResult => {
   const errors: ValidationIssue[] = [];
@@ -29,17 +31,31 @@ export const validateArrangement = (input: unknown): ValidationResult => {
     return { ok: false, errors: [{ path: "$", message: "Arrangement must be an object." }] };
   }
 
-  if (input.version !== 1) {
-    errors.push({ path: "version", message: "Version must be 1." });
+  if (input.version !== 2) {
+    errors.push({ path: "version", message: "Version must be 2." });
   }
 
-  if (typeof input.bpm !== "number" || Number.isNaN(input.bpm)) {
-    errors.push({ path: "bpm", message: "BPM must be a number." });
-  } else if (input.bpm < SEQUENCER_LIMITS.minBpm || input.bpm > SEQUENCER_LIMITS.maxBpm) {
-    errors.push({
-      path: "bpm",
-      message: `BPM must be between ${SEQUENCER_LIMITS.minBpm} and ${SEQUENCER_LIMITS.maxBpm}.`,
-    });
+  if (input.bpm !== undefined) {
+    errors.push({ path: "bpm", message: "Arrangement must not include the removed bpm field." });
+  }
+
+  if (!isRecord(input.timing)) {
+    errors.push({ path: "timing", message: "Timing must be an object." });
+  } else {
+    try {
+      validateTimingMap(input.timing as ArrangementProject["timing"]);
+    } catch (error) {
+      errors.push({ path: "timing", message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  let durationBeats: number | undefined;
+  if (typeof input.durationBeats !== "number") {
+    errors.push({ path: "durationBeats", message: "durationBeats must be a number." });
+  } else if (!Number.isFinite(input.durationBeats) || input.durationBeats <= 0) {
+    errors.push({ path: "durationBeats", message: "durationBeats must be a finite number greater than 0." });
+  } else {
+    durationBeats = input.durationBeats;
   }
 
   const patterns = isRecord(input.patterns) ? input.patterns : null;
@@ -101,6 +117,12 @@ export const validateArrangement = (input: unknown): ValidationResult => {
     } else if (isFiniteNumber(section.startBeat) && section.endBeat <= section.startBeat) {
       errors.push({ path: `sections.${index}.endBeat`, message: "endBeat must be greater than startBeat." });
       ok = false;
+    } else if (durationBeats !== undefined && section.endBeat > durationBeats) {
+      errors.push({
+        path: `sections.${index}.endBeat`,
+        message: `endBeat must be less than or equal to durationBeats (${durationBeats}).`,
+      });
+      ok = false;
     }
 
     if (ok) {
@@ -122,21 +144,17 @@ export const validateArrangement = (input: unknown): ValidationResult => {
 };
 
 /**
- * Best-effort sanitization (types/ranges), mirroring normalizeProject:
- * clamps bpm, normalizes every pattern via normalizeProject, and drops
- * sections with an unknown patternId or an invalid beat range. Does NOT
- * enforce non-overlap — use validateArrangement for that.
+ * Best-effort v2-only sanitization. This never maps legacy `bpm` to
+ * `timing`; v1-to-v2 conversion belongs to `migrateArrangementProject()`.
  */
 export const normalizeArrangement = (input: unknown): ArrangementProject => {
-  if (!isRecord(input)) {
+  if (!isRecord(input) || input.version !== 2) {
     return createArrangement();
   }
 
-  const bpm = clamp(
-    typeof input.bpm === "number" ? input.bpm : SEQUENCER_LIMITS.defaultBpm,
-    SEQUENCER_LIMITS.minBpm,
-    SEQUENCER_LIMITS.maxBpm,
-  );
+  const durationBeats = isFiniteNumber(input.durationBeats) && input.durationBeats > 0
+    ? input.durationBeats
+    : DEFAULT_DURATION_BEATS;
 
   const rawPatterns = isRecord(input.patterns) ? input.patterns : {};
   const patterns: Record<string, SequenceProject> = {};
@@ -154,11 +172,12 @@ export const normalizeArrangement = (input: unknown): ArrangementProject => {
       startBeat: isFiniteNumber(section.startBeat) && section.startBeat >= 0 ? section.startBeat : 0,
       endBeat: isFiniteNumber(section.endBeat) ? section.endBeat : 0,
     }))
-    .filter((section) => section.endBeat > section.startBeat);
+    .filter((section) => section.endBeat > section.startBeat && section.endBeat <= durationBeats);
 
   return {
-    version: 1,
-    bpm,
+    version: 2,
+    timing: normalizeTimingMap(isRecord(input.timing) ? input.timing : createTimingMap()),
+    durationBeats,
     patterns,
     sections,
   };

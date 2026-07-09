@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createProject, setStepValue } from "../project";
 import { createArrangement } from "./project";
-import { resolveArrangementStep, sampleArrangement, sectionAtBeat, unionTrackIds } from "./resolve";
+import { arrangementDurationBeats, resolveArrangementStep, sampleArrangement, sectionAtBeat, unionTrackIds } from "./resolve";
 import type { ArrangementProject } from "./types";
 
 const buildBasicArrangement = (): ArrangementProject => {
@@ -16,7 +16,8 @@ const buildBasicArrangement = (): ArrangementProject => {
   chorus = setStepValue(chorus, chorusTrackId, 1, 1);
 
   return createArrangement({
-    bpm: 120,
+    timing: { bpm: 120 },
+    durationBeats: 12,
     patterns: { intro, chorus },
     sections: [
       { id: "s1", patternId: "intro", startBeat: 0, endBeat: 4 },
@@ -37,6 +38,13 @@ describe("unionTrackIds", () => {
 });
 
 describe("sectionAtBeat", () => {
+  it("AR-004 uses explicit durationBeats so a trailing gap can be part of the project", () => {
+    const arrangement = { ...buildBasicArrangement(), durationBeats: 16 };
+
+    expect(arrangementDurationBeats(arrangement)).toBe(16);
+    expect(sectionAtBeat(arrangement, 13)).toBeNull();
+  });
+
   it("resolves the section containing a beat", () => {
     const arrangement = buildBasicArrangement();
     const lookup = sectionAtBeat(arrangement, 1.5);
@@ -68,7 +76,8 @@ describe("resolveArrangementStep", () => {
     // Use a section longer than the pattern to exercise the loop-fill.
     const intro = createProject({ bpm: 999, stepCount: 2, stepsPerBeat: 1, trackCount: 1 });
     const arrangement = createArrangement({
-      bpm: 120,
+      timing: { bpm: 120 },
+      durationBeats: 8,
       patterns: { intro },
       sections: [{ id: "s1", patternId: "intro", startBeat: 0, endBeat: 8 }],
     });

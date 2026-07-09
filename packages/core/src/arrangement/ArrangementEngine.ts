@@ -9,6 +9,7 @@ import {
   type PlaybackTransport,
   type PlaybackTransportEvent,
 } from "../playbackTransport";
+import { beatToMs, msToBeat } from "../timeline/timing";
 import {
   arrangementDurationBeats,
   resolveArrangementStep,
@@ -47,6 +48,7 @@ type ArrangementStepResolution = {
   nextStepIndex: number;
   phase: number;
   absoluteSectionStep: number;
+  scheduledBeat: number;
   scheduledPositionMs: number;
 };
 
@@ -238,7 +240,7 @@ export class ArrangementEngine {
       throw new RangeError(`beat must be a finite number from 0 to ${durationBeats}.`);
     }
     if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
-    return this.runTransportCommands(["seek"], () => this.transport.seekMs(beat * this.getMsPerBeat()));
+    return this.runTransportCommands(["seek"], () => this.transport.seekMs(beatToMs(this.arrangement.timing, beat)));
   }
 
   seekPositionMs(positionMs: number): Promise<void> {
@@ -311,7 +313,7 @@ export class ArrangementEngine {
     }
 
     const previousPositionMs = this.getLogicalPositionMs();
-    const previousBeat = previousPositionMs / this.getMsPerBeat(previousArrangement);
+    const previousBeat = msToBeat(previousArrangement.timing, previousPositionMs);
     const previousChannels = this.sampleArrangementChannels(previousArrangement, previousPositionMs);
     const previousState = this.playbackState;
     const transportPositionMs = this.getTransportPositionMs();
@@ -320,7 +322,7 @@ export class ArrangementEngine {
     this.trackIds = unionTrackIds(this.arrangement);
 
     const nextBeat = this.normalizeBeatForArrangement(previousBeat, arrangement);
-    const nextPositionMs = nextBeat * this.getMsPerBeat(arrangement);
+    const nextPositionMs = beatToMs(arrangement.timing, nextBeat);
     this.projectAnchor = {
       transportPositionMs,
       projectPositionMs: nextPositionMs,
@@ -336,7 +338,7 @@ export class ArrangementEngine {
       previousChannels,
       channels,
       positionMs: this.cachedPositionMs,
-      beat: this.cachedPositionMs / this.getMsPerBeat(),
+      beat: msToBeat(this.arrangement.timing, this.cachedPositionMs),
     };
     this.emit("project", event);
 
@@ -369,7 +371,7 @@ export class ArrangementEngine {
     const positionMs = this.getLogicalPositionMs();
     return {
       positionMs,
-      beat: positionMs / this.getMsPerBeat(),
+      beat: msToBeat(this.arrangement.timing, positionMs),
     };
   }
 
@@ -669,10 +671,17 @@ export class ArrangementEngine {
     this.lastEmittedStepKey = this.stepKey(resolved);
     this.lastEmittedScheduledPositionMs = scheduledPositionMs;
     const pattern = this.arrangement.patterns[resolved.section.patternId];
-    const durationMs = this.getMsPerBeat() / pattern.stepsPerBeat;
+    const nextStepBeat = Math.min(
+      resolved.section.endBeat,
+      resolved.scheduledBeat + 1 / pattern.stepsPerBeat,
+    );
+    const durationMs = Math.max(
+      0,
+      beatToMs(this.arrangement.timing, nextStepBeat) - resolved.scheduledPositionMs,
+    );
     const event: StepEvent = {
       stepIndex: resolved.stepIndex,
-      bpm: this.arrangement.bpm,
+      bpm: this.getBpmAtBeat(resolved.scheduledBeat),
       scheduledPositionMs,
       transportPositionMs,
       lateByMs: Math.max(0, transportPositionMs - scheduledPositionMs),
@@ -693,7 +702,7 @@ export class ArrangementEngine {
   }
 
   private emitSectionForPosition(positionMs: number, cause: StepEventCause, force: boolean): void {
-    const beat = positionMs / this.getMsPerBeat();
+    const beat = msToBeat(this.arrangement.timing, positionMs);
     const lookup = sectionAtBeat(this.arrangement, beat);
     const section = lookup?.section ?? null;
     const sectionId = section?.id ?? null;
@@ -715,7 +724,7 @@ export class ArrangementEngine {
   }
 
   private syncCurrentSection(positionMs: number): void {
-    const beat = positionMs / this.getMsPerBeat();
+    const beat = msToBeat(this.arrangement.timing, positionMs);
     this.currentSection = sectionAtBeat(this.arrangement, beat)?.section ?? null;
   }
 
@@ -745,7 +754,7 @@ export class ArrangementEngine {
     return {
       state: this.playbackState,
       positionMs,
-      beat: positionMs / this.getMsPerBeat(),
+      beat: msToBeat(this.arrangement.timing, positionMs),
       playbackRate: transportSnapshot?.playbackRate ?? 1,
       projectLoop: this.localLoop,
       transportLoop: transportSnapshot?.loop ?? false,
@@ -812,8 +821,7 @@ export class ArrangementEngine {
   }
 
   private resolveAtPosition(positionMs: number, arrangement = this.arrangement): ArrangementStepResolution | null {
-    const msPerBeat = this.getMsPerBeat(arrangement);
-    const beat = positionMs / msPerBeat;
+    const beat = msToBeat(arrangement.timing, positionMs);
     const resolved = resolveArrangementStep(arrangement, beat);
     if (!resolved) {
       return null;
@@ -826,24 +834,26 @@ export class ArrangementEngine {
     return {
       ...resolved,
       absoluteSectionStep,
-      scheduledPositionMs: scheduledBeat * msPerBeat,
+      scheduledBeat,
+      scheduledPositionMs: beatToMs(arrangement.timing, scheduledBeat),
     };
   }
 
   private getDueStepResolutions(afterPositionMs: number, toPositionMs: number): ArrangementStepResolution[] {
-    const msPerBeat = this.getMsPerBeat();
     const due: ArrangementStepResolution[] = [];
+    const fromBeat = msToBeat(this.arrangement.timing, afterPositionMs);
+    const toBeat = msToBeat(this.arrangement.timing, toPositionMs);
 
     for (const section of this.arrangement.sections) {
       const pattern = this.arrangement.patterns[section.patternId];
-      const stepDurationMs = msPerBeat / pattern.stepsPerBeat;
-      const sectionStartMs = section.startBeat * msPerBeat;
-      const sectionEndMs = section.endBeat * msPerBeat;
-      const firstStep = Math.max(0, Math.floor((afterPositionMs - sectionStartMs) / stepDurationMs) + 1);
-      const lastStep = Math.floor((Math.min(toPositionMs, sectionEndMs - 1e-9) - sectionStartMs) / stepDurationMs);
+      const firstStep = Math.max(0, Math.floor((fromBeat - section.startBeat) * pattern.stepsPerBeat));
+      const lastStep = Math.floor(
+        (Math.min(toBeat, section.endBeat - 1e-9) - section.startBeat) * pattern.stepsPerBeat,
+      );
 
       for (let absoluteSectionStep = firstStep; absoluteSectionStep <= lastStep; absoluteSectionStep += 1) {
-        const scheduledPositionMs = sectionStartMs + absoluteSectionStep * stepDurationMs;
+        const scheduledBeat = section.startBeat + absoluteSectionStep / pattern.stepsPerBeat;
+        const scheduledPositionMs = beatToMs(this.arrangement.timing, scheduledBeat);
         if (scheduledPositionMs <= afterPositionMs || scheduledPositionMs > toPositionMs) {
           continue;
         }
@@ -854,6 +864,7 @@ export class ArrangementEngine {
           nextStepIndex: (stepIndex + 1) % pattern.stepCount,
           phase: 0,
           absoluteSectionStep,
+          scheduledBeat,
           scheduledPositionMs,
         });
       }
@@ -876,7 +887,7 @@ export class ArrangementEngine {
     positionMs: number,
     easing: EasingFunction = linear,
   ): Record<string, number> {
-    const beat = positionMs / this.getMsPerBeat(arrangement);
+    const beat = msToBeat(arrangement.timing, positionMs);
     return sampleArrangement(arrangement, beat, easing, unionTrackIds(arrangement));
   }
 
@@ -894,11 +905,18 @@ export class ArrangementEngine {
   }
 
   private getDurationMs(arrangement = this.arrangement): number {
-    return this.getDurationBeats(arrangement) * this.getMsPerBeat(arrangement);
+    return beatToMs(arrangement.timing, this.getDurationBeats(arrangement));
   }
 
-  private getMsPerBeat(arrangement = this.arrangement): number {
-    return 60_000 / arrangement.bpm;
+  private getBpmAtBeat(beat: number): number {
+    let bpm = this.arrangement.timing.tempos[0].bpm;
+    for (const tempo of this.arrangement.timing.tempos) {
+      if (tempo.beat > beat) {
+        break;
+      }
+      bpm = tempo.bpm;
+    }
+    return bpm;
   }
 
   private emit<TEventName extends ArrangementEventName>(

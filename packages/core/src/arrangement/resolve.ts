@@ -19,7 +19,7 @@ export const unionTrackIds = (arrangement: ArrangementProject): string[] => {
 };
 
 export const arrangementDurationBeats = (arrangement: ArrangementProject): number =>
-  arrangement.sections.reduce((max, section) => Math.max(max, section.endBeat), 0);
+  arrangement.durationBeats;
 
 export type SectionLookup = {
   section: ArrangementSection;

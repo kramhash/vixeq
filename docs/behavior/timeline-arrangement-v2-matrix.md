@@ -91,17 +91,17 @@ Status values: `planned`, `covered`, `blocked`.
 
 | ID | Scenario | Expected result | Status |
 | --- | --- | --- | --- |
-| AR-001 | construct minimal valid v2 arrangement | version 2, timing TimingMap present, no top-level bpm field | planned |
-| AR-002 | construct arrangement with legacy bpm field | strict construction rejects removed v1 field | planned |
-| AR-003 | durationBeats missing/non-positive | strict construction throws | planned |
-| AR-004 | durationBeats exceeds last section endBeat | trailing gap outputs 0 on every channel | planned |
-| AR-005 | section beats outside [0, durationBeats] | strict construction throws RangeError | planned |
-| AR-006 | overlapping sections | strict construction throws | planned |
-| AR-007 | pattern-local bpm on a SequenceProject pattern | ignored; Arrangement TimingMap governs conversion | planned |
-| AR-008 | tempo change mid-arrangement | beat-to-position conversion changes; section/pattern beat placement unchanged | planned |
-| AR-009 | non-looping hot-swap shortens duration below current beat | moves to new end and transitions to ended | planned |
-| AR-010 | looping hot-swap shortens duration below current beat | modulo into new duration and continues | planned |
-| AR-011 | hot-swap forced reposition | exactly one destination step with cause project-change | planned |
+| AR-001 | construct minimal valid v2 arrangement | version 2, timing TimingMap present, no top-level bpm field | covered |
+| AR-002 | construct arrangement with legacy bpm field | strict construction rejects removed v1 field | covered |
+| AR-003 | durationBeats missing/non-positive | strict construction throws | covered |
+| AR-004 | durationBeats exceeds last section endBeat | trailing gap outputs 0 on every channel | covered |
+| AR-005 | section beats outside [0, durationBeats] | strict construction throws RangeError | covered |
+| AR-006 | overlapping sections | strict construction throws | covered |
+| AR-007 | pattern-local bpm on a SequenceProject pattern | ignored; Arrangement TimingMap governs conversion | covered |
+| AR-008 | tempo change mid-arrangement | beat-to-position conversion changes; section/pattern beat placement unchanged | covered |
+| AR-009 | non-looping hot-swap shortens duration below current beat | moves to new end and transitions to ended | covered |
+| AR-010 | looping hot-swap shortens duration below current beat | modulo into new duration and continues | covered |
+| AR-011 | hot-swap forced reposition | exactly one destination step with cause project-change | covered |
 
 ## Migration (`MIG-*`)
 
@@ -112,8 +112,8 @@ Status values: `planned`, `covered`, `blocked`.
 | MIG-003 | migrateTimelineProject with trackId "global" | rewritten to trackId null with no warning | covered |
 | MIG-004 | migrateTimelineProject with event durationBeats/value present | ok:true with one warning per affected event, or ok:false when meaning cannot be preserved without caller option | covered |
 | MIG-005 | migrateTimelineProject with track type present | ok:true with one warning per affected track | covered |
-| MIG-006 | migrateArrangementProject with v1 bpm | maps to one TempoEvent at beat 0 | planned |
-| MIG-007 | migrateArrangementProject without explicit durationBeats option | returns ok:false; no inferred value | planned |
-| MIG-008 | migrateArrangementProject with explicit durationBeats option | ok:true using the supplied value | planned |
-| MIG-009 | normalize*() called on already-v2 data | no version change; repairs stay within v2 schema | covered (Timeline side; Arrangement side pending T4) |
-| MIG-010 | migrate*() never invoked implicitly by Engine/Project construction | strict construction throws instead of migrating | covered (Timeline side; Arrangement side pending T4) |
+| MIG-006 | migrateArrangementProject with v1 bpm | maps to one TempoEvent at beat 0 | covered |
+| MIG-007 | migrateArrangementProject without explicit durationBeats option | returns ok:false; no inferred value | covered |
+| MIG-008 | migrateArrangementProject with explicit durationBeats option | ok:true using the supplied value | covered |
+| MIG-009 | normalize*() called on already-v2 data | no version change; repairs stay within v2 schema | covered |
+| MIG-010 | migrate*() never invoked implicitly by Engine/Project construction | strict construction throws instead of migrating | covered |

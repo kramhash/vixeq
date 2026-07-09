@@ -5,139 +5,160 @@ import { createArrangement, normalizeArrangement, validateArrangement } from "./
 const validPattern = () => createProject({ stepCount: 4, trackCount: 1 });
 
 describe("createArrangement", () => {
-  it("fills in defaults", () => {
+  it("AR-001 fills in minimal v2 defaults", () => {
     const arrangement = createArrangement();
-    expect(arrangement).toEqual({ version: 1, bpm: 120, patterns: {}, sections: [] });
+
+    expect(arrangement).toEqual({
+      version: 2,
+      timing: { tempos: [{ beat: 0, bpm: 120 }], startPositionMs: 0 },
+      durationBeats: 4,
+      patterns: {},
+      sections: [],
+    });
   });
 
-  it("clamps bpm to SEQUENCER_LIMITS", () => {
-    const arrangement = createArrangement({ bpm: 10_000 });
-    expect(arrangement.bpm).toBe(300);
+  it("accepts TimingMap-style options", () => {
+    const arrangement = createArrangement({ timing: { bpm: 90, startPositionMs: 250 }, durationBeats: 8 });
+
+    expect(arrangement.timing).toEqual({ tempos: [{ beat: 0, bpm: 90 }], startPositionMs: 250 });
+    expect(arrangement.durationBeats).toBe(8);
   });
 });
 
 describe("validateArrangement", () => {
-  it("accepts a well-formed arrangement", () => {
+  it("accepts a well-formed v2 arrangement with a trailing gap", () => {
     const intro = validPattern();
     const result = validateArrangement({
-      version: 1,
-      bpm: 120,
+      version: 2,
+      timing: { tempos: [{ beat: 0, bpm: 120 }], startPositionMs: 0 },
+      durationBeats: 8,
       patterns: { intro },
       sections: [{ id: "s1", patternId: "intro", startBeat: 0, endBeat: 4 }],
     });
+
     expect(result.ok).toBe(true);
   });
 
-  it("accepts a gap between sections", () => {
-    const intro = validPattern();
+  it("AR-002 rejects a legacy bpm field instead of migrating it", () => {
     const result = validateArrangement({
-      version: 1,
+      version: 2,
       bpm: 120,
-      patterns: { intro },
-      sections: [
-        { id: "s1", patternId: "intro", startBeat: 0, endBeat: 4 },
-        { id: "s2", patternId: "intro", startBeat: 8, endBeat: 12 },
-      ],
+      timing: { tempos: [{ beat: 0, bpm: 120 }], startPositionMs: 0 },
+      durationBeats: 4,
+      patterns: {},
+      sections: [],
     });
-    expect(result.ok).toBe(true);
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errors.some((issue) => issue.path === "bpm")).toBe(true);
   });
 
-  it("rejects overlapping sections", () => {
+  it("AR-003 rejects missing, non-positive, or non-finite durationBeats", () => {
+    const missing = validateArrangement({
+      version: 2,
+      timing: { tempos: [{ beat: 0, bpm: 120 }], startPositionMs: 0 },
+      patterns: {},
+      sections: [],
+    });
+    const zero = validateArrangement({
+      version: 2,
+      timing: { tempos: [{ beat: 0, bpm: 120 }], startPositionMs: 0 },
+      durationBeats: 0,
+      patterns: {},
+      sections: [],
+    });
+
+    expect(missing.ok).toBe(false);
+    expect(zero.ok).toBe(false);
+  });
+
+  it("AR-005 rejects sections outside [0, durationBeats]", () => {
     const intro = validPattern();
     const result = validateArrangement({
-      version: 1,
-      bpm: 120,
+      version: 2,
+      timing: { tempos: [{ beat: 0, bpm: 120 }], startPositionMs: 0 },
+      durationBeats: 4,
+      patterns: { intro },
+      sections: [{ id: "s1", patternId: "intro", startBeat: 0, endBeat: 5 }],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errors.some((issue) => issue.path === "sections.0.endBeat")).toBe(true);
+  });
+
+  it("AR-006 rejects overlapping sections", () => {
+    const intro = validPattern();
+    const result = validateArrangement({
+      version: 2,
+      timing: { tempos: [{ beat: 0, bpm: 120 }], startPositionMs: 0 },
+      durationBeats: 12,
       patterns: { intro },
       sections: [
         { id: "s1", patternId: "intro", startBeat: 0, endBeat: 8 },
         { id: "s2", patternId: "intro", startBeat: 4, endBeat: 12 },
       ],
     });
+
     expect(result.ok).toBe(false);
-    expect(result.errors.some((e) => e.message.includes("overlaps"))).toBe(true);
+    expect(!result.ok && result.errors.some((issue) => issue.message.includes("overlaps"))).toBe(true);
   });
 
-  it("rejects a section referencing an unknown pattern", () => {
-    const result = validateArrangement({
-      version: 1,
-      bpm: 120,
+  it("rejects unknown patterns and invalid nested SequenceProject data", () => {
+    const unknown = validateArrangement({
+      version: 2,
+      timing: { tempos: [{ beat: 0, bpm: 120 }], startPositionMs: 0 },
+      durationBeats: 4,
       patterns: {},
       sections: [{ id: "s1", patternId: "missing", startBeat: 0, endBeat: 4 }],
     });
-    expect(result.ok).toBe(false);
-    expect(result.errors.some((e) => e.path === "sections.0.patternId")).toBe(true);
-  });
-
-  it("rejects startBeat >= endBeat", () => {
-    const intro = validPattern();
-    const result = validateArrangement({
-      version: 1,
-      bpm: 120,
-      patterns: { intro },
-      sections: [{ id: "s1", patternId: "intro", startBeat: 4, endBeat: 4 }],
-    });
-    expect(result.ok).toBe(false);
-    expect(result.errors.some((e) => e.path === "sections.0.endBeat")).toBe(true);
-  });
-
-  it("rejects bpm outside SEQUENCER_LIMITS", () => {
-    const result = validateArrangement({ version: 1, bpm: 5, patterns: {}, sections: [] });
-    expect(result.ok).toBe(false);
-    expect(result.errors.some((e) => e.path === "bpm")).toBe(true);
-  });
-
-  it("bubbles up invalid pattern errors with a patterns.<id>.<path> prefix", () => {
-    const result = validateArrangement({
-      version: 1,
-      bpm: 120,
+    const badPattern = validateArrangement({
+      version: 2,
+      timing: { tempos: [{ beat: 0, bpm: 120 }], startPositionMs: 0 },
+      durationBeats: 4,
       patterns: { intro: { version: 1, bpm: 120, stepCount: "not-a-number", tracks: [] } },
       sections: [],
     });
-    expect(result.ok).toBe(false);
-    expect(result.errors.some((e) => e.path === "patterns.intro.stepCount")).toBe(true);
+
+    expect(unknown.ok).toBe(false);
+    expect(badPattern.ok).toBe(false);
   });
 
-  it("rejects non-object input", () => {
-    expect(validateArrangement(null).ok).toBe(false);
-    expect(validateArrangement("nope").ok).toBe(false);
+  it("rejects invalid timing", () => {
+    const result = validateArrangement({
+      version: 2,
+      timing: { tempos: [{ beat: 1, bpm: 120 }], startPositionMs: 0 },
+      durationBeats: 4,
+      patterns: {},
+      sections: [],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errors.some((issue) => issue.path === "timing")).toBe(true);
   });
 });
 
 describe("normalizeArrangement", () => {
-  it("returns a default arrangement for non-object input", () => {
+  it("MIG-009 returns a default v2 arrangement for non-object or wrong-version input", () => {
     expect(normalizeArrangement(null)).toEqual(createArrangement());
+    expect(normalizeArrangement({ version: 1, bpm: 120 })).toEqual(createArrangement());
   });
 
-  it("clamps bpm and normalizes patterns", () => {
-    const result = normalizeArrangement({
-      version: 1,
-      bpm: 99999,
-      patterns: { intro: { version: 1, bpm: 120, stepCount: 4, tracks: [] } },
-      sections: [],
-    });
-    expect(result.bpm).toBe(300);
-    expect(result.patterns.intro.tracks.length).toBeGreaterThan(0);
-  });
-
-  it("drops sections referencing an unknown pattern", () => {
-    const result = normalizeArrangement({
-      version: 1,
-      bpm: 120,
-      patterns: {},
-      sections: [{ id: "s1", patternId: "missing", startBeat: 0, endBeat: 4 }],
-    });
-    expect(result.sections).toEqual([]);
-  });
-
-  it("drops sections with an invalid beat range", () => {
+  it("repairs only v2 schema fields", () => {
     const intro = validPattern();
     const result = normalizeArrangement({
-      version: 1,
-      bpm: 120,
+      version: 2,
+      timing: { tempos: [{ beat: 1, bpm: 90 }], startPositionMs: -1 },
+      durationBeats: 8,
       patterns: { intro },
-      sections: [{ id: "s1", patternId: "intro", startBeat: 4, endBeat: 2 }],
+      sections: [
+        { id: "s1", patternId: "intro", startBeat: 0, endBeat: 4 },
+        { id: "too-long", patternId: "intro", startBeat: 7, endBeat: 9 },
+        { id: "missing", patternId: "missing", startBeat: 0, endBeat: 1 },
+      ],
     });
-    expect(result.sections).toEqual([]);
-  });
 
+    expect(result.version).toBe(2);
+    expect(result.timing).toEqual({ tempos: [{ beat: 0, bpm: 90 }, { beat: 1, bpm: 90 }], startPositionMs: 0 });
+    expect(result.sections.map((section) => section.id)).toEqual(["s1"]);
+  });
 });

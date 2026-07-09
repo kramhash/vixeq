@@ -298,8 +298,14 @@ export type MigrationResult<T> =
   valid, non-negative finite number; otherwise migration records an error rather
   than defaulting silently to `0`.
 - `ArrangementProject_v1.bpm` maps to a single `TempoEvent` at `beat: 0` with that
-  BPM value (clamped/validated the same way `normalizeTempoEvent` already
-  behaves in v1).
+  BPM value only when it is a finite number within
+  `SEQUENCER_LIMITS.minBpm`/`maxBpm`; otherwise migration records an error
+  rather than silently clamping it (consistent with `startPositionMs`'s
+  invalid-`offsetMs` handling above — migration rejects rather than repairs
+  an out-of-range numeric v1 field with no caller-supplied conversion
+  option). `normalizeTempoEvent`'s clamping behavior remains correct for its
+  own use — repairing already-v2-shaped data within one schema version — but
+  does not apply at the migration boundary.
 - `ArrangementProject_v1` has no `durationBeats`. Migration requires an explicit
   option to supply it (for example, derived from section extents plus a caller
   margin, or an explicit value); it does not infer a value on the caller's behalf

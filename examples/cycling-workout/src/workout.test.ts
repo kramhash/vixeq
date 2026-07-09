@@ -12,7 +12,8 @@ import {
 describe("cycling workout adapter", () => {
   it("maps elapsed seconds directly to arrangement beats", () => {
     const arrangement = workoutToArrangement(cloneInitialWorkout().slice(0, 2));
-    expect(arrangement.bpm).toBe(60);
+    expect(arrangement.timing.tempos).toEqual([{ beat: 0, bpm: 60 }]);
+    expect(arrangement.durationBeats).toBe(105);
     expect(arrangement.sections).toEqual([
       { id: "warm-up", patternId: "interval-warm-up", startBeat: 0, endBeat: 60 },
       { id: "build", patternId: "interval-build", startBeat: 60, endBeat: 105 },
