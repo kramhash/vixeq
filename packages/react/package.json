@@ -1,6 +1,6 @@
 {
   "name": "@vixeq/react",
-  "version": "0.6.0",
+  "version": "0.7.0-beta.1",
   "type": "module",
   "description": "React hooks for the Vixeq step sequencer engine.",
   "license": "MIT",

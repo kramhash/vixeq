@@ -2,27 +2,87 @@
 
 ## Unreleased
 
-### Planned breaking changes
+## 0.7.0-beta.1 - 2026-07-09
 
-- Playback v2 is specified for the `0.7.0-beta.1` implementation. It replaces
-  clock-domain sampling with transport-owned sampling, standardizes
-  play/pause/stop/seek semantics, and introduces the shared
-  `PlaybackTransport` contract.
-- `SequencerEngine` now uses `PlaybackTransport` directly in the staged 0.7
-  implementation: `play()`, `pause()`, `stop()`, `seekStep()`, and
-  `seekPositionMs()` replace `start()`, `reset()`, `setBpm()`, raw `clock`,
-  `timeDriven`, and `originMs` Sequencer APIs. Arrangement, React hooks,
-  Player React, and examples are migrated in later Playback v2 stages.
-- Added `SequencerPlaybackEvent` (`EnginePlaybackEvent` with a
+Playback v2: transport-owned sampling and standardized play/pause/stop/seek
+semantics across Core, React, and Player React. There are no deprecated
+aliases in 0.7 — see the
+[migration guide](./docs/migrations/0.7-playback-v2.md) before upgrading.
+
+### Added
+
+- Shared `PlaybackTransport` contract in `@vixeq/core`, with `PlaybackClock`,
+  `PlaybackSnapshot`, and `PlaybackError` types. `SequencerEngine` and
+  `ArrangementEngine` both consume a `PlaybackTransport` via the `transport`
+  option.
+- `SequencerPlaybackEvent` (`EnginePlaybackEvent` with a
   `SequencerPlaybackSnapshot`), the Sequencer-specific event type for
   `SequencerEventMap["playback"]`. `EnginePlaybackEvent.snapshot` stays the
-  generic `EnginePlaybackSnapshot` so other Engines (e.g. Arrangement in P4)
-  can define their own concrete playback event type under the shared name.
-- This section documents planned work and is not part of the currently shipped
-  `0.6.0` API. See the
-  [Playback v2 contract](./docs/behavior/playback-v2.md),
-  [behavior matrix](./docs/behavior/playback-v2-matrix.md), and
-  [0.7 migration guide](./docs/migrations/0.7-playback-v2.md).
+  generic `EnginePlaybackSnapshot` so other Engines (Arrangement) define their
+  own concrete playback event type under the shared name.
+- `Envelope.reset()` on the `Envelope` interface, for consistent re-triggering
+  across transport seeks and Project changes.
+- `motionPreference` option (`"system" | "reduce" | "no-preference"`) on
+  `useAnimatedChannels`, replacing the boolean `reducedMotion` flag. In
+  reduced mode, ordinary step ticks are ignored but explicit seek/stop/Project
+  changes still produce one fresh static sample.
+- Packed-tarball beta smoke harness (`pnpm smoke:pack`) verifying ESM/CJS
+  imports, public types, React SSR, and `styles.css` resolution from the
+  packed `@vixeq/core`, `@vixeq/react`, and `@vixeq/player-react` tarballs
+  across all examples.
+
+### Changed
+
+- `SequencerEngine` and `ArrangementEngine` controls are now asynchronous:
+  `play()`, `pause()`, `stop()`, `seekStep()`, and `seekPositionMs()` replace
+  `start()`, `reset()`, `setBpm()`, and the raw `clock`/`timeDriven`/`originMs`
+  options. `stop()` always returns to position 0; use unit seek to pause in
+  place.
+- `sampleChannels()` reads the Engine's current transport position directly
+  (no `performance.now()` argument); `sampleChannelsAt(elapsedMs, easing)`
+  samples a Project-relative offset instead.
+- Step and Arrangement section events carry `scheduledPositionMs`,
+  `transportPositionMs`, `lateByMs`, and `cause` instead of a raw clock
+  `timestamp`, removing consumer-maintained timestamp interpolation.
+- `@vixeq/react` hooks (`useSequencerEngine`, `useSequencePlayer`,
+  `useArrangement`) expose `playbackState`, `pendingOperation`/`isBusy`,
+  `positionRef`/`onPosition`, and separate `projectError`/`transportError`
+  state, replacing `isPlaying`, `isStarting`, and the single `error` field.
+- `SequencePlayerRef` (`@vixeq/player-react`) replaces `reset()` with `play()`,
+  `pause()`, `stop()`, `toggle()`, `seekStep()`, `seekPositionMs()`,
+  `setPlaybackRate()`, and `setTransportLoop()`. Built-in controls render a
+  Play/Pause toggle plus a separate Stop action.
+- `SequencerEngine`, `ArrangementEngine`, and Project update methods validate
+  and throw `TypeError` on malformed typed input instead of normalizing it;
+  normalize untrusted JSON explicitly with `normalizeProject()` before
+  construction. Seek and rate inputs are no longer clamped or
+  modulo-normalized.
+
+### Breaking
+
+- `AudioClock`/`AudioContextClock`, `createAudioClock()`, and
+  `createAudioContextClock()` are removed; use `createMediaElementTransport()`
+  or `createAudioBufferTransport()`. `SequencerTransport` is renamed
+  `PlaybackTransport`; `SequencerClock` is renamed `PlaybackClock`.
+- `TransportEvent` and `ArrangementTransportEvent` are unified into
+  `EnginePlaybackEvent`; the Engine `"transport"` event and
+  `onTransportChange` callbacks are renamed `"playback"` /
+  `onPlaybackChange`.
+- `timeDriven` and `originMs` Engine options are removed (playback is always
+  time-driven; the Engine owns logical anchoring). The transport
+  `stopAtMs` option is removed.
+- `useAnimatedChannels({ reducedMotion })` is removed; pass
+  `motionPreference: "reduce"` instead. Envelope mode requires a
+  `ChannelSource` and no longer accepts `latestEvent` without an Engine.
+
+### Migration Notes
+
+- Full before/after examples for every change above are in the
+  [0.7 migration guide](./docs/migrations/0.7-playback-v2.md), including the
+  [Playback v2 contract](./docs/behavior/playback-v2.md) and
+  [behavior matrix](./docs/behavior/playback-v2-matrix.md).
+- An Engine borrows its transport: `engine.dispose()` does not dispose a
+  caller-supplied transport. Dispose the transport separately.
 
 ## 0.6.0 - 2026-07-05
 
