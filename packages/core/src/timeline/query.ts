@@ -13,32 +13,46 @@ const matchesQueryOptions = (
   event: TimelineEvent,
   options: TimelineQueryOptions = {},
 ): boolean => {
+  if (options.eventTypes && !options.eventTypes.includes(event.type)) {
+    return false;
+  }
+
+  if (event.trackId === null) {
+    // includeGlobalEvents is the only global-event control; trackIds has no
+    // effect on it (spec §2.2).
+    return options.includeGlobalEvents ?? true;
+  }
+
   if (options.trackIds && !options.trackIds.includes(event.trackId)) {
     return false;
-  }
-
-  if (options.eventTypes && !options.eventTypes.includes(event.type ?? "")) {
-    return false;
-  }
-
-  if (event.trackId === "global") {
-    return true;
   }
 
   return getEnabledTrackIds(project, options).has(event.trackId);
 };
 
+/**
+ * Strict, half-open range query: `0 <= fromBeat <= toBeat <= durationBeats`.
+ * Throws `RangeError` for a reversed, out-of-bounds, or non-finite range
+ * instead of reordering or clamping it (spec §2.2).
+ */
 export const getEventsInBeatRange = (
   project: TimelineProject,
   fromBeat: number,
   toBeat: number,
   options: TimelineQueryOptions = {},
 ): TimelineEvent[] => {
-  const start = Math.min(fromBeat, toBeat);
-  const end = Math.max(fromBeat, toBeat);
+  if (!Number.isFinite(fromBeat) || !Number.isFinite(toBeat)) {
+    throw new RangeError("fromBeat and toBeat must be finite numbers.");
+  }
+
+  if (fromBeat < 0 || fromBeat > toBeat || toBeat > project.durationBeats) {
+    throw new RangeError(
+      `fromBeat and toBeat must satisfy 0 <= fromBeat <= toBeat <= ${project.durationBeats}.`,
+    );
+  }
 
   return project.events.filter(
-    (event) => event.beat >= start && event.beat < end && matchesQueryOptions(project, event, options),
+    (event) => event.beat >= fromBeat && event.beat < toBeat && matchesQueryOptions(project, event, options),
   );
 };
 

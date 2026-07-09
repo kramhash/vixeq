@@ -8,30 +8,44 @@ export type TimingMap = {
   startPositionMs: number;
 };
 
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonValue[] | JsonObject;
+export type JsonObject = { [key: string]: JsonValue };
+
 export type TimelineTrack = {
   id: string;
   name: string;
   enabled: boolean;
-  type?: string;
-  data?: Record<string, unknown>;
+  data?: JsonObject;
 };
 
-export type TimelineEvent = {
+export type TimelineEvent<
+  TType extends string = string,
+  TData extends JsonObject = JsonObject,
+> = {
   id: string;
-  trackId: string;
+  trackId: string | null;
   beat: number;
-  durationBeats?: number;
-  value?: number;
-  type?: string;
-  data?: Record<string, unknown>;
+  type: TType;
+  data?: TData;
 };
 
-export type TimelineProject = {
-  version: 1;
+export type TimelineProject<TEvent extends TimelineEvent = TimelineEvent> = {
+  version: 2;
   timing: TimingMap;
+  durationBeats: number;
   tracks: TimelineTrack[];
-  events: TimelineEvent[];
+  events: TEvent[];
 };
+
+/**
+ * Optional domain-validation callback (spec §2.1). Runs once per event,
+ * after Core's own structural/JSON-compatibility checks pass. Throws to
+ * reject a domain-invalid event; a non-throwing call accepts it.
+ */
+export type TimelineEventValidator<TEvent extends TimelineEvent = TimelineEvent> = (
+  event: TEvent,
+) => void;
 
 export type CreateTimingMapOptions =
   | {
@@ -45,6 +59,7 @@ export type CreateTimingMapOptions =
 
 export type CreateTimelineProjectOptions = {
   timing?: CreateTimingMapOptions | TimingMap;
+  durationBeats?: number;
   tracks?: Partial<TimelineTrack>[];
   events?: Partial<TimelineEvent>[];
 };
@@ -52,10 +67,7 @@ export type CreateTimelineProjectOptions = {
 export type TimelineQueryOptions = {
   trackIds?: string[];
   includeDisabledTracks?: boolean;
+  /** Independent global-event gate. Defaults to `true`. Unaffected by `trackIds`. */
+  includeGlobalEvents?: boolean;
   eventTypes?: string[];
-};
-
-export type SequenceToTimelineOptions = {
-  threshold?: number;
-  eventType?: string;
 };

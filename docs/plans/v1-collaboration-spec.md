@@ -635,7 +635,7 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | P8 | 0.7 | Add packed beta smoke fixtures and publish checklist | P1–P7F | done | Codex (author), Claude (reviewer) | test fixtures, docs |
 | T0 | 0.8 | Commit Timing/Timeline/Arrangement v2 schema specification | P8 | done | Claude (author), Claude (reviewer) | `docs/behavior/`, `docs/migrations/` |
 | T1 | 0.8 | Implement `TimingMap` v2 and conversion tests | T0 | done | Claude (author), Claude (reviewer) | `packages/core/src/timeline/timing.ts` |
-| T2 | 0.8 | Implement Timeline schema, strict helpers, and migration | T1 | pending | — | `packages/core/src/timeline/` |
+| T2 | 0.8 | Implement Timeline schema, strict helpers, and migration | T1 | done | Claude (author), Claude (reviewer) | `packages/core/src/timeline/` |
 | T3 | 0.8 | Implement indexed `TimelineEngine` | T1, T2 | pending | — | new Timeline Engine files |
 | T4 | 0.8 | Implement Arrangement v2 and migration | T1 | pending | — | `packages/core/src/arrangement/` |
 | T5 | 0.8 | Add `useTimeline` and migrate `useArrangement` | T3, T4 | pending | — | `packages/react/src/` |

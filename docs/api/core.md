@@ -27,6 +27,7 @@ Gaps are valid and output zero. Sections restart their pattern at step 0. Missin
 - `createEnvelope`, `createDecayEnvelope`, smoothing helpers, easing functions, `lerp`. Envelopes expose `trigger(positionMs)`, `sample(positionMs)`, and `reset()` using logical transport positions.
 - Timeline exports provide beat/time conversion and event queries for tempo-variable data.
 - `TimingMap` (0.8, v2) uses `startPositionMs`. `createTimingMap`/`normalizeTimingMap` repair input; `validateTimingMap(timing)` throws `TypeError`/`RangeError` on structurally invalid input without repairing it.
+- `TimelineProject` (0.8, v2) requires `durationBeats` and uses `trackId: string | null` (`null` is a global event); `TimelineTrack.type` and `TimelineEvent.durationBeats`/`value` are removed. `createTimelineProject`/`normalizeTimelineProject` repair input. `validateTimelineProject(input, eventValidator?)` returns a `ValidationResult` and never throws; the immutable update helpers (`addTimelineTrack`, `addTimelineEvent`, `updateTimelineEvent`, `removeTimelineTrack`, `removeTimelineEvent`, `setTimelineTrackEnabled`) are strict and throw `TypeError` on invalid input by calling it internally and rejecting on `ok: false` (auto-generating a missing `id` is the one sanctioned exception). `migrateTimelineProject(v1Project, options)` converts v1 data; `options.durationBeats` is required. `getEventsInBeatRange` throws `RangeError` for a reversed or out-of-bounds range instead of clamping it. `sequenceProjectToTimeline` is removed with no replacement.
 
 ## DOM subpath
 

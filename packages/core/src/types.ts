@@ -191,6 +191,16 @@ export type ValidationResult =
       errors: ValidationIssue[];
     };
 
+export type MigrationIssue = {
+  code: string;
+  message: string;
+  path?: string;
+};
+
+export type MigrationResult<T> =
+  | { ok: true; project: T; warnings: MigrationIssue[] }
+  | { ok: false; errors: MigrationIssue[] };
+
 /**
  * Minimal contract shared by SequencerEngine and ArrangementEngine.
  * Lets rAF-driven consumers (e.g. useAnimatedChannels) work with either

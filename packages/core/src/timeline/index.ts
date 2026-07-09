@@ -22,13 +22,17 @@ export {
   validateTimelineProject,
 } from "./project";
 export { getEventsAtBeat, getEventsInBeatRange, getNextEvents } from "./query";
-export { sequenceProjectToTimeline } from "./fromSequence";
+export { migrateTimelineProject } from "./migration";
+export type { TimelineMigrationOptions, TimelineProjectV1 } from "./migration";
 export type {
   CreateTimelineProjectOptions,
   CreateTimingMapOptions,
-  SequenceToTimelineOptions,
+  JsonObject,
+  JsonPrimitive,
+  JsonValue,
   TempoEvent,
   TimelineEvent,
+  TimelineEventValidator,
   TimelineProject,
   TimelineQueryOptions,
   TimelineTrack,
