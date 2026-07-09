@@ -236,3 +236,86 @@ self-report wording overstatement in this file, N2: `TM-011` could add a
 few more wrong-typed-field cases for full branch coverage) — neither
 affects correctness of the shipped implementation. T1 may be marked `done`
 in the task table.
+
+## N2 fix verification
+
+Re-checked as a short-pass follow-up. The author addressed N2 by extending
+`TM-011` in `packages/core/src/timeline/timing.test.ts` (lines 109-126) with
+three additional assertions, on top of the three already present at the
+time N2 was written:
+
+- `validateTimingMap(null as unknown as TimingMap)` — `timing` itself is
+  not an object.
+- `validateTimingMap({ tempos: ["not-an-object"], startPositionMs: 0 } as
+  unknown as TimingMap)` — a `tempos` array element that is not an object.
+- `validateTimingMap({ tempos: [{ beat: 0, bpm: "120" }], startPositionMs: 0
+  } as unknown as TimingMap)` — a wrong-typed `bpm`.
+
+All three of the cases named in N2 (non-object `timing`, non-object tempo
+array element, wrong-typed `bpm`) are now present, plus the three original
+cases (`tempos` not an array, `beat` not a number, `startPositionMs` not a
+number) — six assertions total in `TM-011`.
+
+Hand-traced each new case against `validateTimingMap()` in
+`packages/core/src/timeline/timing.ts` (not just confirmed the tests pass):
+
+- `timing = null`: `isPlainObject(null)` (line 72-73) evaluates
+  `typeof null === "object"` (true) `&& value !== null` (false) → returns
+  `false`. `!isPlainObject(timing)` is therefore `true`, so line 82 throws
+  `new TypeError("TimingMap must be an object.")` before any property of
+  `timing` is dereferenced (no crash-before-throw risk from `timing.tempos`
+  on `null`). Confirmed `TypeError`.
+- `tempos: ["not-an-object"]`: passes the outer `isPlainObject`/
+  `Array.isArray`/length checks (a 1-element array is not empty), then the
+  `forEach` at line 95 binds `tempo = "not-an-object"` (a string).
+  `isPlainObject("not-an-object")` → `typeof "not-an-object" === "object"`
+  is `false` (it's `"string"`) → returns `false`. `!isPlainObject(tempo)`
+  is `true`, so line 97 throws `new TypeError(`TimingMap.tempos[0] must be
+  an object.`)`. Confirmed `TypeError`.
+- `tempos: [{ beat: 0, bpm: "120" }]`: `tempo.beat` is `0`
+  (`typeof === "number"`, finite, index `0` and `=== 0`, so lines 100-118
+  all pass and `previousBeat` is set to `0`). At line 120,
+  `typeof tempo.bpm !== "number"` — `"120"` has `typeof === "string"` — is
+  `true`, so line 121 throws `new TypeError(`TimingMap.tempos[0].bpm must
+  be a number.`)` before the `Number.isFinite`/range check at line 124 is
+  ever reached. Confirmed `TypeError`.
+
+All three new cases genuinely traverse the `TypeError` branch the test
+asserts, not just a code path that happens to also throw something else.
+
+Commands run (independent re-run, not the author's report):
+
+- `pnpm --filter @vixeq/core test` → 14 files, 203 tests passed, all green
+  (matches the original review's reported count; `TM-011` now carries 6
+  assertions instead of 3, so the total assertion count inside that one
+  test grew even though the file/test counts didn't change).
+- `pnpm --filter @vixeq/core typecheck` → clean, no errors.
+- `git show adda629 --stat` → 9 files changed: `docs/api/core.md`,
+  `docs/behavior/timeline-arrangement-v2-matrix.md`,
+  `docs/plans/v1-collaboration-spec.md`,
+  `docs/reviews/t1-timing-map-claude.md` (this file, new),
+  `packages/core/src/timeline/index.ts`,
+  `packages/core/src/timeline/timeline.test.ts`,
+  `packages/core/src/timeline/timing.test.ts`,
+  `packages/core/src/timeline/timing.ts`,
+  `packages/core/src/timeline/types.ts`. This is exactly the file set
+  already listed in this review's own "Changed files" section (plus the
+  review doc itself, which the repo's process commits alongside the
+  implementation) — no `arrangement/`, `project.ts`,
+  `SequencerEngine.ts`, or other out-of-scope file is touched. No
+  unintended/scope-creep changes found in this commit beyond the N2 test
+  fix and the originally-reviewed T1 work.
+
+Process note (not a correctness finding): the N2 fix was folded into
+commit `adda629` itself rather than landing as a separate follow-up commit,
+so the fix went in without its own independent review cycle. This
+re-verification pass closes that gap after the fact. No new blocking issue
+was found, so `Status` remains `approved`.
+
+**Verdict: resolved.** All three case categories named in N2 (non-object
+`timing`, non-object `tempos` element, wrong-typed `bpm`) are now present in
+`TM-011`, and hand-tracing `validateTimingMap()` confirms each one actually
+throws `TypeError` via the intended branch, not incidentally. Full test
+suite (203 tests) and typecheck remain green, and `git show adda629 --stat`
+shows no scope-out-of-bounds changes beyond the T1 implementation and this
+N2 test fix.
