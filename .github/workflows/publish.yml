@@ -45,6 +45,27 @@ jobs:
           if [ -n "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]; then echo "REQUEST_TOKEN: present"; else echo "REQUEST_TOKEN: missing"; fi
           if [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then echo "REQUEST_URL: present"; else echo "REQUEST_URL: missing"; fi
 
-      - name: Publish @vixeq/core (pnpm ndjson diagnostic)
-        working-directory: packages/core
-        run: pnpm publish --access public --no-git-checks --provenance --reporter=ndjson 2>&1 || true
+      - name: Manual OIDC exchange diagnostic
+        run: |
+          echo "GITHUB_ACTIONS=$GITHUB_ACTIONS"
+          echo "NPM_ID_TOKEN set: ${NPM_ID_TOKEN:+yes}"
+
+          id_response=$(curl -s -w '\n%{http_code}' \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org")
+          id_status=$(echo "$id_response" | tail -n1)
+          id_body=$(echo "$id_response" | sed '$d')
+          echo "ID token request status: $id_status"
+          id_token=$(echo "$id_body" | jq -r '.value // empty')
+          echo "ID token obtained: ${id_token:+yes}"
+
+          if [ -n "$id_token" ]; then
+            exchange_response=$(curl -s -w '\n%{http_code}' -X POST \
+              -H "Authorization: Bearer $id_token" \
+              -H "Content-Length: 0" \
+              "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/%40vixeq%2Fcore")
+            exchange_status=$(echo "$exchange_response" | tail -n1)
+            exchange_body=$(echo "$exchange_response" | sed '$d')
+            echo "Exchange status: $exchange_status"
+            echo "Exchange body: $exchange_body"
+          fi
