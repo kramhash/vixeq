@@ -2,6 +2,93 @@
 
 ## Unreleased
 
+## 0.8.0-beta.1 - 2026-07-10
+
+Timing/Timeline/Arrangement v2: a shared, tempo-mapped `TimingMap` for
+Timeline and Arrangement, an indexed `TimelineEngine` with cue scheduling,
+`ArrangementProject` v2 playback against a tempo map, and `useTimeline()`.
+There are no deprecated aliases in 0.8 — see the
+[migration guide](./docs/migrations/0.8-timeline-arrangement-v2.md) before
+upgrading.
+
+### Published
+
+- Published to npm under the `beta` dist-tag; the `latest` tag is untouched
+  (still `0.5.0`). Install explicitly with `@beta`, e.g.
+  `npm install @vixeq/core@beta`.
+  - [`@vixeq/core@0.8.0-beta.1`](https://www.npmjs.com/package/@vixeq/core/v/0.8.0-beta.1)
+  - [`@vixeq/react@0.8.0-beta.1`](https://www.npmjs.com/package/@vixeq/react/v/0.8.0-beta.1)
+  - [`@vixeq/player-react@0.8.0-beta.1`](https://www.npmjs.com/package/@vixeq/player-react/v/0.8.0-beta.1)
+- Verified against the packed tarballs (`pnpm smoke:pack`), including the
+  v1-to-v2 migration fixture
+  ([`fixtures/migration/v1-to-v2.json`](./fixtures/migration/v1-to-v2.json)),
+  and against a clean consumer installing directly from the npm registry:
+  ESM/CJS imports, public types, React SSR, and
+  `@vixeq/player-react/styles.css` resolution all pass.
+- Known caveat: this is a prerelease with no deprecated aliases for the 0.7
+  API — see the migration guide above before adopting the beta.
+
+### Added
+
+- `TimingMap`, shared by Timeline and Arrangement: a tempo-map (`tempos`) plus
+  `startPositionMs` pre-roll, with `createTimingMap()`, `normalizeTimingMap()`,
+  `validateTimingMap()`, and pure `beatToMs()`/`msToBeat()` conversions.
+- `TimelineProject` v2: explicit, required `durationBeats`; sparse point
+  events addressed by an indexed `TimelineEngine` (`eventIndex`) for O(log n)
+  range queries via `getEventsAtBeat()`/`getEventsInBeatRange()`/
+  `getNextEvents()`. `TimelineEngine` schedules and emits due cues against a
+  `PlaybackTransport`, with a configurable `missedCuePolicy` (`"emit"` |
+  `"skip"`) for catch-up behavior after a delayed callback.
+- `ArrangementProject` v2: `bpm` is replaced by a `timing: TimingMap`, and
+  `durationBeats` is now an explicit required field instead of being implicit.
+  `ArrangementEngine` plays sections against the tempo map, so variable-tempo
+  arrangements (tempo changes mid-arrangement) are supported end-to-end.
+- `migrateTimelineProject()` and `migrateArrangementProject()` in
+  `@vixeq/core`, converting v1 project data to the v2 schema. Both follow a
+  strict "reject invalid, don't repair" policy: they return `{ ok: false,
+  errors }` for malformed v1 input rather than silently clamping or
+  normalizing it. `migrateArrangementProject()` requires an explicit
+  `durationBeats` option (there is no v1 source for it) and rejects an
+  invalid v1 `bpm`.
+- `useTimeline()` in `@vixeq/react`: mirrors the `useArrangement()`/
+  `useSequencerEngine()` contract (`playbackState`, `pendingOperation`/
+  `isBusy`, `positionRef`/`onPosition`, `projectError`/`transportError`,
+  `play`/`pause`/`stop`/`toggle`/`seekPositionMs`/`seekBeat`/
+  `setPlaybackRate`/`setLoop`) around `TimelineEngine`, with atomic
+  project hot-swap and a serialized command queue.
+- `website-pulse` example now demonstrates `TimelineEngine`-driven caption/
+  marker cues alongside the existing Sequencer-driven pulse effects, as a
+  full-show loop.
+- Reusable beta migration fixture
+  ([`fixtures/migration/v1-to-v2.json`](./fixtures/migration/v1-to-v2.json))
+  covering Timeline and Arrangement migration success, warnings, and failure
+  cases; used by both the Core unit tests and `pnpm smoke:pack`.
+
+### Changed
+
+- `TimelineTrack.data`/`TimelineEvent.data` narrows from
+  `Record<string, unknown>` to a JSON-compatible `JsonObject` (finite numeric
+  leaves only).
+- `TimelineQueryOptions` gains `includeGlobalEvents` (default `true`),
+  decoupled from `trackIds` filtering. An invalid beat range now throws
+  `RangeError` instead of being silently reordered.
+
+### Breaking
+
+- `TimingMap.offsetMs` is renamed `TimingMap.startPositionMs` (pure rename,
+  same pre-roll semantics).
+- `TimelineEvent.durationBeats` and `TimelineEvent.value` are removed;
+  Timeline supports point events only. Fold any previously-meaningful value
+  into `TimelineEvent.data`.
+- `TimelineTrack.type` is removed with no replacement field; use
+  `TimelineEvent.type` (now required) or a `data` key instead.
+- `TimelineEvent.trackId: "global"` is renamed `TimelineEvent.trackId: null`.
+- `sequenceProjectToTimeline()` is removed with no direct replacement;
+  construct a `TimelineProject` explicitly (see the migration guide).
+- `TimelineProject.version` and `ArrangementProject.version` are bumped to
+  `2`; `TimelineProjectV1`/`ArrangementProjectV1` are the v1 shapes accepted
+  by the migration functions.
+
 ### Fixed
 
 - `SequencerEngine` no longer permanently stops emitting `"step"` events (and
@@ -11,9 +98,6 @@
   any Sequencer + looping-transport combination previously froze after one
   loop wrap, because the step-emission monotonicity guard was never
   re-anchored on the transport's `"loop"` event.
-
-### Added
-
 - `StepEventCause` gains a `"loop"` member (`"play" | "tick" | "seek" |
   "project-change" | "loop"`), emitted by `SequencerEngine` for the
   re-anchoring step described above. `ArrangementEngine` shares the same
@@ -21,6 +105,18 @@
   guard compares section+step identity rather than an ever-increasing
   absolute counter, so a loop-caused position wrap naturally re-fires
   without needing an explicit `"loop"` branch.
+
+### Migration Notes
+
+- Full before/after examples for every change above are in the
+  [0.8 migration guide](./docs/migrations/0.8-timeline-arrangement-v2.md),
+  including the
+  [Timing/Timeline/Arrangement v2 contract](./docs/behavior/timeline-arrangement-v2.md).
+- `normalize*()` functions (`normalizeTimingMap()`,
+  `normalizeTimelineProject()`, `normalizeArrangement()`) repair data within
+  one schema version and never change `version`; they are not a substitute
+  for `migrateTimelineProject()`/`migrateArrangementProject()` across
+  versions.
 
 ## 0.7.0-beta.1 - 2026-07-09
 
