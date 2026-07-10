@@ -641,7 +641,7 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | T5 | 0.8 | Add `useTimeline` and migrate `useArrangement` | T3, T4 | done | Codex (author), Claude (reviewer, B1/B2 fix author) | `packages/react/src/` |
 | T6 | 0.8 | Integrate Timeline v2 into `website-pulse` | T3, T5 | done | Codex (author), Claude (reviewer, paperwork for SequencerEngine fix) | `examples/website-pulse/`, `packages/core/src/SequencerEngine.ts` (P3 loop-resume regression fix surfaced by this task) |
 | T7 | 0.8 | Add v1-to-v2 migration fixtures and beta smoke tests | T2, T4, T6 | done | Codex (author), Claude (reviewer, N1 fix author) | Core tests, fixtures, docs |
-| T8 | 0.8 | Promote 0.8.0 stable release docs and package versions | T7 | in_progress | Codex (author), Claude (reviewer, approved; CHANGELOG B1 fix author) — remaining: actual npm publish + registry smoke | package metadata, README/API docs, release docs |
+| T8 | 0.8 | Promote 0.8.0 stable release docs and package versions | T7 | done | Codex (author), Claude (reviewer, CHANGELOG fix, npm publish + registry smoke) | package metadata, README/API docs, release docs |
 | R0 | 0.9 | Add API Extractor reports and API-diff CI | P8, T7 | pending | — | package configs, `.github/` |
 | R1 | 0.9 | Add coverage configuration and behavior-matrix gates | P8, T7 | pending | — | Vitest configs, CI |
 | R2 | 0.9 | Add Node/React/TypeScript/package compatibility fixtures | P8, T7 | pending | — | fixtures, CI |

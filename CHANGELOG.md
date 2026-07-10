@@ -5,11 +5,21 @@
 ## 0.8.0 - 2026-07-11
 
 Stable release of Timing/Timeline/Arrangement v2, promoting the 0.8 beta
-line. Not yet published — see `docs/release/0.8-beta-checklist.md`'s Stable
-Promotion Steps. A `### Published` section will be added once
-`@vixeq/core`, `@vixeq/react`, and `@vixeq/player-react` are actually
-promoted to `0.8.0` under the `latest` dist-tag and registry smoke passes,
-matching how `0.7.0-beta.1`'s publish was recorded only after the fact.
+line.
+
+### Published
+
+- Promoted `@vixeq/core`, `@vixeq/react`, and `@vixeq/player-react` to
+  `0.8.0` under the `latest` dist-tag.
+  - [`@vixeq/core@0.8.0`](https://www.npmjs.com/package/@vixeq/core/v/0.8.0)
+  - [`@vixeq/react@0.8.0`](https://www.npmjs.com/package/@vixeq/react/v/0.8.0)
+  - [`@vixeq/player-react@0.8.0`](https://www.npmjs.com/package/@vixeq/player-react/v/0.8.0)
+- Keeps the `beta` dist-tag on `0.8.0-beta.1`.
+- Verified against a clean consumer installing directly from the npm
+  registry (not local tarballs): ESM/CJS imports, the v1-to-v2 migration
+  API (`migrateTimelineProject()`/`migrateArrangementProject()`), public
+  types, React SSR, and `@vixeq/player-react/styles.css` resolution all
+  pass.
 
 ### Added
 

@@ -526,3 +526,48 @@ Changed Files list. T8's task-table row should remain `in_progress` until an
 actual npm publish and registry smoke succeed and are recorded in a
 follow-up `### Published` commit — this review approves the *documentation
 fix*, not a publish that still has not happened.
+
+## Publish and registry smoke (follow-up, by the user's decision)
+
+The user asked to proceed with the actual publish, via the `Publish` GitHub
+Actions workflow (`.github/workflows/publish.yml`) rather than a manual
+`pnpm publish`, despite that workflow's own recent, unresolved-looking
+`fix(ci)`/`debug(ci)` OIDC history.
+
+- Pushed the T8 commit (`fff0455`) to `origin/main` (required so CI would
+  publish the version-bumped code).
+- Triggered the workflow manually via `gh workflow run "Publish" --ref main`
+  rather than pushing a `v0.8.0` tag, to keep the trigger reversible/re-runnable.
+- Run [29130984863](https://github.com/kramhash/vixeq/actions/runs/29130984863)
+  completed with `conclusion: success`. Its log shows all three
+  `pnpm --filter <name> publish --access public --no-git-checks --provenance`
+  invocations succeeding via the OIDC-exchanged token — the long-running OIDC
+  debugging effort visible in `.github/workflows/publish.yml`'s history
+  evidently resolved itself with this run (this was not otherwise verified
+  or investigated beyond confirming the run's own success and the registry
+  state below).
+- Independently confirmed against the live registry (not just the workflow's
+  own exit code): `npm view <name> dist-tags --json` for all three packages
+  now reports `{"latest":"0.8.0","beta":"0.8.0-beta.1"}`.
+- Registry smoke: built a clean, from-scratch consumer outside the
+  repository (not `pnpm smoke:pack`, which only ever installs from local
+  tarballs), reusing `fixtures/pack-smoke/consumer/src/*` smoke scripts, with
+  `package.json` dependencies on `@vixeq/core`/`@vixeq/react`/
+  `@vixeq/player-react` at literal `"0.8.0"` (registry resolution, not
+  `file:`). `pnpm install` there resolved and downloaded all three packages
+  fresh from the registry (pnpm's own "immature version" warning on all
+  three is corroborating evidence they were installed newly from the
+  registry rather than from any local cache). Ran, and confirmed green,
+  every one of `smoke:core-esm`, `smoke:core-cjs`, `smoke:core-migration`,
+  `smoke:react-ssr`, `smoke:types` (`tsc --noEmit` against the installed
+  `.d.ts`), and `smoke:vite` (a production `vite build` exercising
+  `@vixeq/player-react/styles.css` resolution). The temporary consumer
+  directory was deleted afterward.
+- Recorded the publish in `CHANGELOG.md`'s `## 0.8.0` section (added back a
+  `### Published` subsection with the real npm URLs and the registry-smoke
+  coverage list, mirroring `0.7.0-beta.1`'s `### Published` precedent) and
+  updated the task table's T8 row to `done`.
+
+**T8 is now fully complete**: docs/version bump (reviewed, approved),
+CHANGELOG accuracy (B1 fixed, re-verified), and the actual npm publish +
+registry smoke this review's own Review Focus asked to gate on.
