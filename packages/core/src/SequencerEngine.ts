@@ -352,6 +352,18 @@ export class SequencerEngine {
       return;
     }
 
+    if (event.type === "loop") {
+      // The transport wraps its reported position at each loop boundary, so the
+      // absolute step counter must be re-anchored here — otherwise emitDueSteps'
+      // monotonicity guard (see below) would permanently suppress further steps
+      // once the wrapped position drops back below the pre-loop maximum.
+      this.clearTimer();
+      this.emitPlayback(event.type, cause, previousState);
+      this.emitStepForPosition(this.getLogicalPositionMs(), "loop");
+      this.rescheduleIfPlaying();
+      return;
+    }
+
     if (event.type === "ratechange") {
       this.emitPlayback(event.type, cause, previousState);
       this.rescheduleIfPlaying();

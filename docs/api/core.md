@@ -5,6 +5,7 @@
 - `new SequencerEngine(project, options?)` — plays and samples one looping `SequenceProject`.
 - Sequencer controls: `play()`, `pause()`, `stop()`, `seekStep(stepIndex)`, `seekPositionMs(positionMs)`, `setProject(next)`, `sampleChannels()`, `sampleChannelsAt(positionMs)`, `dispose()`.
 - Sequencer options include `transport`, `lookaheadMs`, `missedStepPolicy`, `onStep`, and `onListenerError`. Omitting `transport` creates an Engine-owned browser-clock transport.
+- `StepEvent.cause` includes `"loop"`: when an attached transport wraps position on a natural loop, `SequencerEngine` emits one `"loop"`-caused step immediately at the wrapped position, re-anchoring step emission so it does not permanently stop after the first loop.
 - `createProject(options?)`, `createTrack(name, stepCount)` — create normalized project data.
 - `setProjectBpm`, `setStepValue`, `toggleStep`, `addTrack`, `removeTrack`, `renameTrack`, `setTrackEnabled`, `clearTrack`, `rotateTrackSteps`, `randomizeTrack` — immutable project updates.
 - `validateProject(input)`, `normalizeProject(input)` — validation and import-boundary normalization.

@@ -631,6 +631,13 @@ export class ArrangementEngine {
       return;
     }
 
+    // Unlike SequencerEngine's ever-increasing absolute-step counter (which
+    // needed an explicit "loop" transport-event branch to re-anchor after a
+    // position wrap — see StepEventCause's "loop" member and
+    // SequencerEngine.ts), this guard compares section+step identity. A
+    // transport loop wrap naturally produces a different stepKey than the
+    // one last emitted, so re-emission resumes on its own; ArrangementEngine
+    // does not need (and does not implement) a "loop"-caused step.
     const stepKey = this.stepKey(resolved);
     if (this.lastEmittedStepKey === stepKey) {
       return;

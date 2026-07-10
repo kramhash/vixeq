@@ -43,7 +43,7 @@ export type StepEvent = {
   timestamp?: number;
 };
 
-export type StepEventCause = "play" | "tick" | "seek" | "project-change";
+export type StepEventCause = "play" | "tick" | "seek" | "project-change" | "loop";
 
 export type TransportEvent =
   | {

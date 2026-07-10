@@ -1,5 +1,5 @@
-import { createProject, renameTrack, setStepValue } from "@vixeq/core";
-import type { SequenceProject } from "@vixeq/core";
+import { beatToMs, createProject, createTimelineProject, renameTrack, setStepValue } from "@vixeq/core";
+import type { SequenceProject, TimelineEvent, TimelineProject } from "@vixeq/core";
 
 const set = (project: SequenceProject, trackId: string, stepIndex: number, value: number) =>
   setStepValue(project, trackId, stepIndex, value);
@@ -39,3 +39,83 @@ export const brandTrackIds = {
   eq:   brandProject.tracks[2]!.id,
   mood: brandProject.tracks[3]!.id,
 } as const;
+
+export type WebsitePulseScene = "arrival" | "surge" | "signal" | "afterglow";
+
+export type WebsitePulseSceneState = {
+  scene: WebsitePulseScene;
+  label: string;
+  accent: string;
+};
+
+export type WebsitePulseSceneCue = TimelineEvent<"scene", WebsitePulseSceneState>;
+
+export type WebsitePulseCaptionCue = TimelineEvent<"caption", {
+  caption: string;
+}>;
+
+export type WebsitePulseTimelineEvent = WebsitePulseSceneCue | WebsitePulseCaptionCue;
+
+export const initialSceneCue: WebsitePulseSceneState = {
+  scene: "arrival",
+  label: "Arrival",
+  accent: "#00e5ff",
+};
+
+export const initialCaption = "Signal locked. The room warms up on the first downbeat.";
+
+export const brandTimelineProject = createTimelineProject({
+  timing: { bpm: 120 },
+  durationBeats: 8,
+  events: [
+    { id: "scene-arrival", trackId: null, beat: 0, type: "scene", data: initialSceneCue },
+    { id: "caption-arrival", trackId: null, beat: 0, type: "caption", data: { caption: initialCaption } },
+    {
+      id: "scene-surge",
+      trackId: null,
+      beat: 2,
+      type: "scene",
+      data: { scene: "surge", label: "Surge", accent: "#ff2d78" },
+    },
+    {
+      id: "caption-surge",
+      trackId: null,
+      beat: 2,
+      type: "caption",
+      data: { caption: "Bass cues push the hero controls and visualizer into focus." },
+    },
+    {
+      id: "scene-signal",
+      trackId: null,
+      beat: 4,
+      type: "scene",
+      data: { scene: "signal", label: "Signal", accent: "#b06fff" },
+    },
+    {
+      id: "caption-signal",
+      trackId: null,
+      beat: 4,
+      type: "caption",
+      data: { caption: "Timeline cues now drive the caption while sequencer channels keep pulsing." },
+    },
+    {
+      id: "scene-afterglow",
+      trackId: null,
+      beat: 6,
+      type: "scene",
+      data: { scene: "afterglow", label: "Afterglow", accent: "#ffaa00" },
+    },
+    {
+      id: "caption-afterglow",
+      trackId: null,
+      beat: 6,
+      type: "caption",
+      data: { caption: "The final two beats resolve into the warm mood wash before the loop can restart." },
+    },
+  ],
+}) as TimelineProject<WebsitePulseTimelineEvent>;
+
+export const brandTimelineDurationMs = beatToMs(
+  brandTimelineProject.timing,
+  brandTimelineProject.durationBeats,
+);

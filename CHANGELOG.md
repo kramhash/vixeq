@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Fixed
+
+- `SequencerEngine` no longer permanently stops emitting `"step"` events (and
+  therefore stops triggering envelope-driven channel animation, e.g.
+  `useAnimatedChannels`) after the first time a transport it is attached to
+  loops. Discovered via `website-pulse`'s full-show loop feature (0.8/T6):
+  any Sequencer + looping-transport combination previously froze after one
+  loop wrap, because the step-emission monotonicity guard was never
+  re-anchored on the transport's `"loop"` event.
+
+### Added
+
+- `StepEventCause` gains a `"loop"` member (`"play" | "tick" | "seek" |
+  "project-change" | "loop"`), emitted by `SequencerEngine` for the
+  re-anchoring step described above. `ArrangementEngine` shares the same
+  `StepEventCause` type but does not produce `"loop"`: its step re-emission
+  guard compares section+step identity rather than an ever-increasing
+  absolute counter, so a loop-caused position wrap naturally re-fires
+  without needing an explicit `"loop"` branch.
+
 ## 0.7.0-beta.1 - 2026-07-09
 
 Playback v2: transport-owned sampling and standardized play/pause/stop/seek

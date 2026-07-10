@@ -11,8 +11,16 @@ import {
   type SequencerPlaybackEvent,
 } from "@vixeq/core";
 import { bindChannelsToElement } from "@vixeq/core/dom";
-import { useAnimatedChannels } from "@vixeq/react";
-import { brandProject, brandTrackIds } from "./brandProject";
+import { useAnimatedChannels, useTimeline } from "@vixeq/react";
+import {
+  brandProject,
+  brandTimelineDurationMs,
+  brandTimelineProject,
+  brandTrackIds,
+  initialCaption,
+  initialSceneCue,
+  type WebsitePulseTimelineEvent,
+} from "./brandProject";
 
 const EQ_AMPLITUDES = [0.65, 0.95, 0.8, 1.0, 0.75, 0.9, 0.6];
 
@@ -29,6 +37,72 @@ const CSS_MAPPING = {
   [brandTrackIds.cta]:  "--pulse-cta",
   [brandTrackIds.eq]:   "--pulse-eq",
   [brandTrackIds.mood]: "--pulse-mood",
+};
+
+type TimelineControlApi = {
+  seekPositionMs: (positionMs: number) => Promise<void>;
+  setPlaybackRate: (rate: number) => Promise<void>;
+  setTransportLoop: (loop: boolean) => Promise<void>;
+};
+
+const formatTime = (positionMs: number) => `${(positionMs / 1000).toFixed(2)}s`;
+
+type TimelineLayerProps = {
+  transport: PlaybackTransport;
+  playbackRate: number;
+  fullShowLoop: boolean;
+  onCue: (event: WebsitePulseTimelineEvent) => void;
+  onPosition: (positionMs: number) => void;
+  onError: (message: string | null) => void;
+  onControls: (controls: TimelineControlApi | null) => void;
+};
+
+const TimelineLayer = ({
+  transport,
+  playbackRate,
+  fullShowLoop,
+  onCue,
+  onPosition,
+  onError,
+  onControls,
+}: TimelineLayerProps) => {
+  const timeline = useTimeline<WebsitePulseTimelineEvent>({
+    project: brandTimelineProject,
+    transport,
+    onCue: (event) => onCue(event.event),
+    onPosition: (position) => onPosition(position.positionMs),
+    onProjectError: (error) => onError(error.message),
+    onTransportError: (error) => onError(error instanceof Error ? error.message : String(error)),
+  });
+
+  useEffect(() => {
+    onControls({
+      seekPositionMs: timeline.seekPositionMs,
+      setPlaybackRate: timeline.setPlaybackRate,
+      setTransportLoop: timeline.setTransportLoop,
+    });
+    return () => onControls(null);
+  }, [onControls, timeline.seekPositionMs, timeline.setPlaybackRate, timeline.setTransportLoop]);
+
+  useEffect(() => {
+    const message = timeline.projectError?.message
+      ?? (timeline.transportError instanceof Error ? timeline.transportError.message : null);
+    onError(message);
+  }, [onError, timeline.projectError, timeline.transportError]);
+
+  useEffect(() => {
+    void timeline.setPlaybackRate(playbackRate).catch((error) => {
+      onError(error instanceof Error ? error.message : String(error));
+    });
+  }, [onError, playbackRate, timeline.setPlaybackRate]);
+
+  useEffect(() => {
+    void timeline.setTransportLoop(fullShowLoop).catch((error) => {
+      onError(error instanceof Error ? error.message : String(error));
+    });
+  }, [fullShowLoop, onError, timeline.setTransportLoop]);
+
+  return null;
 };
 
 const useReducedMotion = () => {
@@ -51,13 +125,21 @@ export const App = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [transportError, setTransportError] = useState<string | null>(null);
+  const [timelineError, setTimelineError] = useState<string | null>(null);
   const [transport, setTransport] = useState<PlaybackTransport | null>(null);
   const [shouldAutoPlay, setShouldAutoPlay] = useState(false);
+  const [activeScene, setActiveScene] = useState(initialSceneCue);
+  const [caption, setCaption] = useState(initialCaption);
+  const [timelinePositionMs, setTimelinePositionMs] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [fullShowLoop, setFullShowLoop] = useState(false);
+  const [timelineControlsReady, setTimelineControlsReady] = useState(false);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<SequencePlayerRef>(null);
   const ctxRef = useRef<AudioContext | null>(null);
   const transportRef = useRef<PlaybackTransport | null>(null);
+  const timelineControlsRef = useRef<TimelineControlApi | null>(null);
 
   // Decode the demo loop once; playback is coordinated through vixeq transport.
   useEffect(() => {
@@ -70,7 +152,7 @@ export const App = () => {
       .then((arrayBuffer) => ctx.decodeAudioData(arrayBuffer))
       .then((buffer) => {
         if (cancelled) return;
-        const nextTransport = createAudioBufferTransport(ctx, buffer, { loop: true });
+        const nextTransport = createAudioBufferTransport(ctx, buffer, { loop: false });
         transportRef.current = nextTransport;
         setTransport(nextTransport);
       })
@@ -91,6 +173,26 @@ export const App = () => {
 
   const handlePlaybackChange = useCallback((e: SequencerPlaybackEvent) => {
     setIsPlaying(e.snapshot.state === "playing");
+  }, []);
+
+  const handleTimelineCue = useCallback((event: WebsitePulseTimelineEvent) => {
+    if (event.type === "scene" && event.data) {
+      setActiveScene(event.data);
+      const el = rootRef.current;
+      if (el) {
+        el.style.setProperty("--scene-accent", event.data.accent);
+      }
+      return;
+    }
+
+    if (event.type === "caption" && event.data) {
+      setCaption(event.data.caption);
+    }
+  }, []);
+
+  const handleTimelineControls = useCallback((controls: TimelineControlApi | null) => {
+    timelineControlsRef.current = controls;
+    setTimelineControlsReady(controls !== null);
   }, []);
 
   // Create one envelope per channel; stable for the component's lifetime.
@@ -172,7 +274,7 @@ export const App = () => {
       const arrayBuffer = await file.arrayBuffer();
       const buffer = await ctx.decodeAudioData(arrayBuffer);
       transportRef.current?.dispose?.();
-      const nextTransport = createAudioBufferTransport(ctx, buffer, { loop: true });
+      const nextTransport = createAudioBufferTransport(ctx, buffer, { loop: false });
       transportRef.current = nextTransport;
       setTransport(nextTransport);
       setShouldAutoPlay(true);
@@ -181,14 +283,65 @@ export const App = () => {
     }
   }, [handleStop]);
 
+  const handleScrubChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const nextPositionMs = Number(e.target.value);
+    setTimelinePositionMs(nextPositionMs);
+    setTimelineError(null);
+    try {
+      await timelineControlsRef.current?.seekPositionMs(nextPositionMs);
+    } catch (error) {
+      setTimelineError(error instanceof Error ? error.message : "Unable to seek show timeline.");
+    }
+  }, []);
+
+  const handlePlaybackRateChange = useCallback(async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextRate = Number(e.target.value);
+    setPlaybackRate(nextRate);
+    setTimelineError(null);
+    try {
+      await timelineControlsRef.current?.setPlaybackRate(nextRate);
+    } catch (error) {
+      setTimelineError(error instanceof Error ? error.message : "Unable to change playback rate.");
+    }
+  }, []);
+
+  const handleFullShowLoopChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const nextLoop = e.target.checked;
+    setFullShowLoop(nextLoop);
+    setTimelineError(null);
+    try {
+      await timelineControlsRef.current?.setTransportLoop(nextLoop);
+    } catch (error) {
+      setTimelineError(error instanceof Error ? error.message : "Unable to change full-show loop.");
+    }
+  }, []);
+
   useEffect(() => {
     if (!transport || !shouldAutoPlay) return;
     setShouldAutoPlay(false);
     void handlePlay();
   }, [handlePlay, shouldAutoPlay, transport]);
 
+  const displayError = transportError ?? timelineError;
+
   return (
-    <div className="app" ref={rootRef}>
+    <div
+      className="app"
+      ref={rootRef}
+      data-scene={activeScene.scene}
+      style={{ "--scene-accent": activeScene.accent } as React.CSSProperties}
+    >
+      {transport && (
+        <TimelineLayer
+          transport={transport}
+          playbackRate={playbackRate}
+          fullShowLoop={fullShowLoop}
+          onCue={handleTimelineCue}
+          onPosition={setTimelinePositionMs}
+          onError={setTimelineError}
+          onControls={handleTimelineControls}
+        />
+      )}
       <header className="site-nav">
         <span className="nav-brand">
           <VixeqMark size={16} />
@@ -218,8 +371,17 @@ export const App = () => {
           <p className="event-sub">
             An eight-hour live electronic performance. Every light,
             projection and pulse on this page is driven by the same
-            BPM clock — choreographed as a <code>SequenceProject</code>.
+            BPM clock — channels from a <code>SequenceProject</code>,
+            cues from a <code>TimelineProject</code>.
           </p>
+
+          <div className="live-cue" aria-live="polite">
+            <div className="live-cue__meta">
+              <span className="live-cue__scene">{activeScene.label}</span>
+              <span>{formatTime(timelinePositionMs)} / {formatTime(brandTimelineDurationMs)}</span>
+            </div>
+            <p>{caption}</p>
+          </div>
 
           <div className="hero-actions">
             <button
@@ -231,10 +393,53 @@ export const App = () => {
             </button>
             <button
               className="btn-secondary"
+              onClick={handleStop}
+              disabled={!transport || isBusy}
+            >
+              Stop
+            </button>
+            <button
+              className="btn-secondary"
               onClick={() => setEditorOpen((o) => !o)}
             >
               {editorOpen ? "Close editor" : "Edit choreography"}
             </button>
+          </div>
+
+          <div className="show-controls">
+            <label className="show-control show-control--scrub">
+              <span>Scrub</span>
+              <input
+                type="range"
+                min={0}
+                max={brandTimelineDurationMs}
+                step={25}
+                value={Math.min(timelinePositionMs, brandTimelineDurationMs)}
+                onChange={handleScrubChange}
+                disabled={!timelineControlsReady || isBusy}
+              />
+            </label>
+            <label className="show-control">
+              <span>Rate</span>
+              <select
+                value={playbackRate}
+                onChange={handlePlaybackRateChange}
+                disabled={!timelineControlsReady || isBusy}
+              >
+                <option value={0.75}>0.75x</option>
+                <option value={1}>1x</option>
+                <option value={1.25}>1.25x</option>
+              </select>
+            </label>
+            <label className="show-control show-control--loop">
+              <input
+                type="checkbox"
+                checked={fullShowLoop}
+                onChange={handleFullShowLoopChange}
+                disabled={!timelineControlsReady || isBusy}
+              />
+              <span>Full-show loop</span>
+            </label>
           </div>
 
           <label className="audio-file-label">
@@ -247,9 +452,9 @@ export const App = () => {
             />
           </label>
 
-          {transportError && (
+          {displayError && (
             <p className="audio-error" role="alert">
-              {transportError}
+              {displayError}
             </p>
           )}
         </div>

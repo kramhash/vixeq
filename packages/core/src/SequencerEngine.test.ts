@@ -102,6 +102,37 @@ describe("SequencerEngine — Playback v2", () => {
     expect(steps.slice(1).every((event) => event.cause === "tick")).toBe(true);
   });
 
+  it("PB-EN-029 resumes step emission across a transport loop boundary (regression: effects freeze while audio loops)", async () => {
+    const clock = new FakeClock();
+    const transport = createClockTransport(clock, { durationMs: STEP_MS * 4, loop: true });
+    const project = createProject({ bpm: 120, stepCount: 4, trackCount: 1 });
+    const engine = new SequencerEngine(project, { transport, lookaheadMs: 1000 });
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
+
+    await engine.play();
+    // Advance in lockstep, one step at a time, across two full loops (8 steps)
+    // so the transport's loop boundary and the engine's own tick timer interleave
+    // the way they would in real playback.
+    for (let index = 0; index < 8; index += 1) {
+      clock.advance(STEP_MS);
+      await vi.advanceTimersByTimeAsync(STEP_MS);
+    }
+
+    expect(steps.map((event) => event.stepIndex)).toEqual([0, 1, 2, 3, 0, 1, 2, 3, 0]);
+    expect(steps.map((event) => event.cause)).toEqual([
+      "play",
+      "tick",
+      "tick",
+      "tick",
+      "loop",
+      "tick",
+      "tick",
+      "tick",
+      "loop",
+    ]);
+  });
+
   it("PB-EN-002 pauses and resumes without duplicating the current step", async () => {
     const { clock, transport } = buildTransport();
     const project = createProject({ bpm: 120, stepCount: 16, trackCount: 1 });
