@@ -34,7 +34,7 @@ const off = engine.on("step", (event) => {
   console.log(event.stepIndex, event.tracks);
 });
 
-engine.start();
+await engine.play();
 ```
 
 ## Packages
@@ -80,8 +80,9 @@ The current release line is focused on proving the engine and package boundaries
 - track transform helpers
 - React hooks for using the engine from an app
 - an embeddable React sequence player
-- timeline conversion/query utilities
-- multi-pattern arrangements with gaps, seek, looping, and section events
+- a tempo-mapped `TimelineEngine` for sparse cue scheduling (`useTimeline()`)
+- multi-pattern arrangements with gaps, seek, looping, tempo changes, and
+  section events
 - opt-in reduced-motion detection for React animation (`usePrefersReducedMotion`)
 - copyable examples
 - a hosted playground demo
