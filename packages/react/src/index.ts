@@ -15,4 +15,11 @@ export {
   type UseArrangementOptions,
   type UseArrangementState,
 } from "./useArrangement";
+export {
+  useTimeline,
+  type TimelineLatestEvent,
+  type TimelinePendingOperation,
+  type UseTimelineOptions,
+  type UseTimelineState,
+} from "./useTimeline";
 export { usePrefersReducedMotion } from "./usePrefersReducedMotion";

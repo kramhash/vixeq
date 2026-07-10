@@ -19,6 +19,7 @@ class FakeClock implements PlaybackClock {
 
 const pattern = createProject({ stepCount: 4, stepsPerBeat: 1, trackCount: 1 });
 const arrangement = createArrangement({
+  durationBeats: 4,
   patterns: { pattern },
   sections: [{ id: "one", patternId: "pattern", startBeat: 0, endBeat: 4 }],
 });
@@ -91,7 +92,7 @@ describe("useArrangement", () => {
     expect(result.current.projectError).toBeNull();
   });
 
-  it("PB-RE-003 hot-swaps valid data and reports invalid updates without losing the engine", () => {
+  it("PB-RE-003 hot-swaps valid data and reports invalid updates without losing the engine", async () => {
     const transport = createClockTransport(new FakeClock());
     const onProjectError = vi.fn();
     const { result, rerender } = renderHook(
@@ -100,21 +101,33 @@ describe("useArrangement", () => {
     );
     const engine = result.current.engine;
 
-    const replacement = createArrangement({ bpm: 90, patterns: { pattern }, sections: arrangement.sections });
+    await act(async () => {
+      await transport.seekMs(1000);
+    });
+
+    const replacement = createArrangement({
+      timing: { bpm: 60 },
+      durationBeats: arrangement.durationBeats,
+      patterns: { pattern },
+      sections: arrangement.sections,
+    });
     rerender({ value: replacement });
     expect(result.current.engine).toBe(engine);
-    expect(engine?.getArrangement().bpm).toBe(90);
+    expect(engine?.getArrangement().timing.tempos[0].bpm).toBe(60);
+    expect(transport.getPositionMs()).toBe(1000);
+    expect(result.current.positionRef.current).toMatchObject({ beat: 2, positionMs: 2000 });
     expect(result.current.projectError).toBeNull();
 
     rerender({ value: { ...replacement, sections: [{ ...replacement.sections[0]!, patternId: "missing" }] } });
     expect(result.current.projectError).toBeInstanceOf(Error);
     expect(onProjectError).toHaveBeenCalledOnce();
-    expect(engine?.getArrangement().bpm).toBe(90);
+    expect(engine?.getArrangement().timing.tempos[0].bpm).toBe(60);
   });
 
   it("seekBeat updates position and section synchronously", async () => {
     const transport = createClockTransport(new FakeClock());
     const withGap = createArrangement({
+      durationBeats: 8,
       patterns: { pattern },
       sections: [{ id: "later", patternId: "pattern", startBeat: 4, endBeat: 8 }],
     });

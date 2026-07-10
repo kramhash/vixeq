@@ -8,6 +8,7 @@ describe("React hooks SSR", () => {
   it("PB-SSR-001 PB-SSR-002 renders without browser APIs", () => {
     const project = createProject({ stepCount: 4, trackCount: 1 });
     const arrangement = createArrangement({
+      durationBeats: 4,
       patterns: { pattern: project },
       sections: [{ id: "intro", patternId: "pattern", startBeat: 0, endBeat: 4 }],
     });

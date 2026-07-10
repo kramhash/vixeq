@@ -8,7 +8,8 @@ import { chorusPattern, introPattern } from "./patterns";
  * beat timeline rather than one pattern looping forever.
  */
 export const arrangement = createArrangement({
-  bpm: 120,
+  timing: { bpm: 120 },
+  durationBeats: 32,
   patterns: { intro: introPattern, chorus: chorusPattern },
   sections: [
     { id: "intro-1", patternId: "intro", startBeat: 0, endBeat: 8 },
@@ -26,6 +27,6 @@ export const SECTION_LABELS: Record<string, string> = {
 };
 
 /** beat -> seconds, for rendering the section markers under the seek bar. */
-export const BEAT_SECONDS = 60 / arrangement.bpm;
+export const BEAT_SECONDS = 60 / arrangement.timing.tempos[0].bpm;
 export const TOTAL_BEATS = Math.max(...arrangement.sections.map((s) => s.endBeat));
 export const TOTAL_SECONDS = TOTAL_BEATS * BEAT_SECONDS;
