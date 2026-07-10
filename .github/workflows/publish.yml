@@ -40,32 +40,36 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Debug OIDC env
+      - name: Publish packages via OIDC-exchanged tokens
         run: |
-          if [ -n "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]; then echo "REQUEST_TOKEN: present"; else echo "REQUEST_TOKEN: missing"; fi
-          if [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then echo "REQUEST_URL: present"; else echo "REQUEST_URL: missing"; fi
+          set -euo pipefail
 
-      - name: Manual OIDC exchange diagnostic
-        run: |
-          echo "GITHUB_ACTIONS=$GITHUB_ACTIONS"
-          echo "NPM_ID_TOKEN set: ${NPM_ID_TOKEN:+yes}"
-
-          id_response=$(curl -s -w '\n%{http_code}' \
+          id_token=$(curl -sf \
             -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org")
-          id_status=$(echo "$id_response" | tail -n1)
-          id_body=$(echo "$id_response" | sed '$d')
-          echo "ID token request status: $id_status"
-          id_token=$(echo "$id_body" | jq -r '.value // empty')
-          echo "ID token obtained: ${id_token:+yes}"
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org" | jq -r '.value')
+          if [ -z "$id_token" ] || [ "$id_token" = "null" ]; then
+            echo "::error::Failed to obtain a GitHub Actions OIDC ID token" >&2
+            exit 1
+          fi
 
-          if [ -n "$id_token" ]; then
-            exchange_response=$(curl -s -w '\n%{http_code}' -X POST \
+          publish_pkg () {
+            local name="$1"
+            local escaped_name
+            escaped_name=$(node -e 'console.log(encodeURIComponent(process.argv[1]))' "$name")
+            local npm_token
+            npm_token=$(curl -sf -X POST \
               -H "Authorization: Bearer $id_token" \
               -H "Content-Length: 0" \
-              "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/%40vixeq%2Fcore")
-            exchange_status=$(echo "$exchange_response" | tail -n1)
-            exchange_body=$(echo "$exchange_response" | sed '$d')
-            echo "Exchange status: $exchange_status"
-            echo "Exchange body: $exchange_body"
-          fi
+              "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/$escaped_name" | jq -r '.token')
+            if [ -z "$npm_token" ] || [ "$npm_token" = "null" ]; then
+              echo "::error::Failed to exchange OIDC token for $name" >&2
+              return 1
+            fi
+            npm config set --location=user "//registry.npmjs.org/:_authToken" "$npm_token"
+            trap 'npm config delete --location=user "//registry.npmjs.org/:_authToken"' RETURN
+            pnpm --filter "$name" publish --access public --no-git-checks --provenance
+          }
+
+          publish_pkg "@vixeq/core"
+          publish_pkg "@vixeq/react"
+          publish_pkg "@vixeq/player-react"
