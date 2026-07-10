@@ -640,7 +640,7 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | T4 | 0.8 | Implement Arrangement v2 and migration | T1 | done | Codex (author), Claude (reviewer, B1 fix author) | `packages/core/src/arrangement/` |
 | T5 | 0.8 | Add `useTimeline` and migrate `useArrangement` | T3, T4 | done | Codex (author), Claude (reviewer, B1/B2 fix author) | `packages/react/src/` |
 | T6 | 0.8 | Integrate Timeline v2 into `website-pulse` | T3, T5 | done | Codex (author), Claude (reviewer, paperwork for SequencerEngine fix) | `examples/website-pulse/`, `packages/core/src/SequencerEngine.ts` (P3 loop-resume regression fix surfaced by this task) |
-| T7 | 0.8 | Add v1-to-v2 migration fixtures and beta smoke tests | T2, T4, T6 | pending | — | Core tests, fixtures, docs |
+| T7 | 0.8 | Add v1-to-v2 migration fixtures and beta smoke tests | T2, T4, T6 | done | Codex (author), Claude (reviewer, N1 fix author) | Core tests, fixtures, docs |
 | R0 | 0.9 | Add API Extractor reports and API-diff CI | P8, T7 | pending | — | package configs, `.github/` |
 | R1 | 0.9 | Add coverage configuration and behavior-matrix gates | P8, T7 | pending | — | Vitest configs, CI |
 | R2 | 0.9 | Add Node/React/TypeScript/package compatibility fixtures | P8, T7 | pending | — | fixtures, CI |

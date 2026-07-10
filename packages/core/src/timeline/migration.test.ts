@@ -1,6 +1,30 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { migrateTimelineProject, normalizeTimelineProject, validateTimelineProject } from "./index";
-import type { TimelineProjectV1 } from "./migration";
+import type { TimelineMigrationOptions, TimelineProjectV1 } from "./migration";
+
+type TimelineMigrationFixtures = {
+  timeline: {
+    valid: {
+      project: TimelineProjectV1;
+      options: TimelineMigrationOptions;
+    };
+    removedFields: {
+      project: TimelineProjectV1;
+      options: TimelineMigrationOptions;
+      warningCodes: string[];
+    };
+    invalidOffset: {
+      project: TimelineProjectV1;
+      options: TimelineMigrationOptions;
+      errorCodes: string[];
+    };
+  };
+};
+
+const migrationFixtures = JSON.parse(
+  readFileSync(new URL("../../../../fixtures/migration/v1-to-v2.json", import.meta.url), "utf8"),
+) as TimelineMigrationFixtures;
 
 const v1Project = (overrides: Partial<TimelineProjectV1> = {}): TimelineProjectV1 => ({
   version: 1,
@@ -111,6 +135,58 @@ describe("migrateTimelineProject", () => {
 
     expect(result.ok).toBe(true);
     expect(result.ok && validateTimelineProject(result.project).ok).toBe(true);
+  });
+});
+
+describe("v1-to-v2 migration fixtures", () => {
+  it("migrates the reusable Timeline success fixture into strict v2 output", () => {
+    const result = migrateTimelineProject(
+      migrationFixtures.timeline.valid.project,
+      migrationFixtures.timeline.valid.options,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.project).toMatchObject({
+      version: 2,
+      timing: {
+        tempos: migrationFixtures.timeline.valid.project.timing.tempos,
+        startPositionMs: 250,
+      },
+      durationBeats: 8,
+    });
+    expect(result.project.events.find((event) => event.id === "cue-global")?.trackId).toBeNull();
+    expect(result.warnings).toEqual([]);
+    expect(validateTimelineProject(result.project).ok).toBe(true);
+  });
+
+  it("keeps removed-field migration warnings stable for beta smoke consumers", () => {
+    const result = migrateTimelineProject(
+      migrationFixtures.timeline.removedFields.project,
+      migrationFixtures.timeline.removedFields.options,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.warnings.map((warning) => warning.code).sort()).toEqual(
+      [...migrationFixtures.timeline.removedFields.warningCodes].sort(),
+    );
+    expect(result.project.tracks[0]).not.toHaveProperty("type");
+    expect(result.project.events[0]).not.toHaveProperty("durationBeats");
+    expect(result.project.events[0]).not.toHaveProperty("value");
+    expect(validateTimelineProject(result.project).ok).toBe(true);
+  });
+
+  it("keeps invalid v1 Timeline fixture errors stable", () => {
+    const result = migrateTimelineProject(
+      migrationFixtures.timeline.invalidOffset.project,
+      migrationFixtures.timeline.invalidOffset.options,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errors.map((error) => error.code)).toEqual(
+      expect.arrayContaining(migrationFixtures.timeline.invalidOffset.errorCodes),
+    );
   });
 });
 

@@ -1,8 +1,26 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createProject } from "../project";
 import { validateArrangement } from "./project";
 import { migrateArrangementProject } from "./migration";
-import type { ArrangementProjectV1 } from "./types";
+import type { ArrangementMigrationOptions, ArrangementProjectV1 } from "./types";
+
+type ArrangementMigrationFixtures = {
+  arrangement: {
+    valid: {
+      project: ArrangementProjectV1;
+      options: ArrangementMigrationOptions;
+    };
+    missingDuration: {
+      project: ArrangementProjectV1;
+      errorCodes: string[];
+    };
+  };
+};
+
+const migrationFixtures = JSON.parse(
+  readFileSync(new URL("../../../../fixtures/migration/v1-to-v2.json", import.meta.url), "utf8"),
+) as ArrangementMigrationFixtures;
 
 const validV1 = (): ArrangementProjectV1 => ({
   version: 1,
@@ -71,5 +89,34 @@ describe("migrateArrangementProject", () => {
 
     expect(invalidPattern.ok).toBe(false);
     expect(invalidSection.ok).toBe(false);
+  });
+});
+
+describe("v1-to-v2 migration fixtures", () => {
+  it("migrates the reusable Arrangement success fixture into strict v2 output", () => {
+    const result = migrateArrangementProject(
+      migrationFixtures.arrangement.valid.project,
+      migrationFixtures.arrangement.valid.options,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.project).toMatchObject({
+      version: 2,
+      timing: { tempos: [{ beat: 0, bpm: 132 }], startPositionMs: 0 },
+      durationBeats: 8,
+    });
+    expect(result.project).not.toHaveProperty("bpm");
+    expect(result.warnings).toEqual([]);
+    expect(validateArrangement(result.project).ok).toBe(true);
+  });
+
+  it("keeps missing-duration Arrangement fixture errors stable", () => {
+    const result = migrateArrangementProject(migrationFixtures.arrangement.missingDuration.project);
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errors.map((error) => error.code)).toEqual(
+      expect.arrayContaining(migrationFixtures.arrangement.missingDuration.errorCodes),
+    );
   });
 });

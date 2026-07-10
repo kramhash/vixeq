@@ -8,6 +8,7 @@ const rootDir = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const tempRoot = path.join(rootDir, ".tmp", "pack-smoke");
 const tarballDir = path.join(tempRoot, "tarballs");
 const fixtureConsumerDir = path.join(rootDir, "fixtures", "pack-smoke", "consumer");
+const migrationFixturePath = path.join(rootDir, "fixtures", "migration", "v1-to-v2.json");
 
 const publicPackages = [
   { name: "@vixeq/core", dir: "packages/core" },
@@ -176,10 +177,11 @@ const prepareTempWorkspace = async (tarballs) => {
     scripts: {
       "smoke:core-esm": "node src/core-esm.mjs",
       "smoke:core-cjs": "node src/core-cjs.cjs",
+      "smoke:core-migration": "node src/core-migration.mjs",
       "smoke:react-ssr": "node src/react-ssr.mjs",
       "smoke:types": "tsc --noEmit",
       "smoke:vite": "vite build",
-      smoke: "pnpm run smoke:core-esm && pnpm run smoke:core-cjs && pnpm run smoke:react-ssr && pnpm run smoke:types && pnpm run smoke:vite",
+      smoke: "pnpm run smoke:core-esm && pnpm run smoke:core-cjs && pnpm run smoke:core-migration && pnpm run smoke:react-ssr && pnpm run smoke:types && pnpm run smoke:vite",
     },
     dependencies: {
       "@vixeq/core": fileSpecFor(consumerDir, tarballs.get("@vixeq/core")),
@@ -196,6 +198,7 @@ const prepareTempWorkspace = async (tarballs) => {
       vite: findDependencyVersion(sourcePackageJsons, "vite"),
     },
   });
+  await cp(migrationFixturePath, path.join(consumerDir, "src", "migration-v1-to-v2.json"));
 
   for (const project of smokeProjects) {
     const sourceDir = path.join(rootDir, project.source);

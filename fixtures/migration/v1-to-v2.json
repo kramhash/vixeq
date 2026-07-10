@@ -1,0 +1,202 @@
+{
+  "timeline": {
+    "valid": {
+      "project": {
+        "version": 1,
+        "timing": {
+          "tempos": [
+            {
+              "beat": 0,
+              "bpm": 120
+            },
+            {
+              "beat": 4,
+              "bpm": 96
+            }
+          ],
+          "offsetMs": 250
+        },
+        "tracks": [
+          {
+            "id": "lead",
+            "name": "Lead",
+            "enabled": true,
+            "data": {
+              "color": "cyan"
+            }
+          }
+        ],
+        "events": [
+          {
+            "id": "cue-global",
+            "trackId": "global",
+            "beat": 0,
+            "type": "scene"
+          },
+          {
+            "id": "cue-lead",
+            "trackId": "lead",
+            "beat": 2,
+            "type": "accent",
+            "data": {
+              "intensity": 0.8
+            }
+          }
+        ]
+      },
+      "options": {
+        "durationBeats": 8
+      }
+    },
+    "removedFields": {
+      "project": {
+        "version": 1,
+        "timing": {
+          "tempos": [
+            {
+              "beat": 0,
+              "bpm": 128
+            }
+          ],
+          "offsetMs": 0
+        },
+        "tracks": [
+          {
+            "id": "automation",
+            "name": "Automation",
+            "enabled": true,
+            "type": "sequence"
+          }
+        ],
+        "events": [
+          {
+            "id": "gain-rise",
+            "trackId": "automation",
+            "beat": 1,
+            "durationBeats": 2,
+            "value": 0.75
+          }
+        ]
+      },
+      "options": {
+        "durationBeats": 4
+      },
+      "warningCodes": [
+        "TIMELINE_TRACK_TYPE_DROPPED",
+        "TIMELINE_EVENT_REMOVED_FIELD_DROPPED"
+      ]
+    },
+    "invalidOffset": {
+      "project": {
+        "version": 1,
+        "timing": {
+          "tempos": [
+            {
+              "beat": 0,
+              "bpm": 120
+            }
+          ],
+          "offsetMs": -1
+        },
+        "tracks": [
+          {
+            "id": "lead",
+            "name": "Lead",
+            "enabled": true
+          }
+        ],
+        "events": [
+          {
+            "id": "cue-lead",
+            "trackId": "lead",
+            "beat": 0
+          }
+        ]
+      },
+      "options": {
+        "durationBeats": 4
+      },
+      "errorCodes": [
+        "TIMELINE_INVALID_OFFSET_MS"
+      ]
+    }
+  },
+  "arrangement": {
+    "valid": {
+      "project": {
+        "version": 1,
+        "bpm": 132,
+        "patterns": {
+          "intro": {
+            "version": 1,
+            "bpm": 90,
+            "stepCount": 4,
+            "stepsPerBeat": 4,
+            "tracks": [
+              {
+                "id": "kick",
+                "name": "Kick",
+                "enabled": true,
+                "steps": [
+                  1,
+                  0,
+                  0.5,
+                  0
+                ]
+              }
+            ]
+          }
+        },
+        "sections": [
+          {
+            "id": "intro-a",
+            "patternId": "intro",
+            "startBeat": 0,
+            "endBeat": 4
+          }
+        ]
+      },
+      "options": {
+        "durationBeats": 8
+      }
+    },
+    "missingDuration": {
+      "project": {
+        "version": 1,
+        "bpm": 132,
+        "patterns": {
+          "intro": {
+            "version": 1,
+            "bpm": 90,
+            "stepCount": 4,
+            "stepsPerBeat": 4,
+            "tracks": [
+              {
+                "id": "kick",
+                "name": "Kick",
+                "enabled": true,
+                "steps": [
+                  1,
+                  0,
+                  0.5,
+                  0
+                ]
+              }
+            ]
+          }
+        },
+        "sections": [
+          {
+            "id": "intro-a",
+            "patternId": "intro",
+            "startBeat": 0,
+            "endBeat": 4
+          }
+        ]
+      },
+      "errorCodes": [
+        "ARRANGEMENT_DURATION_REQUIRED"
+      ]
+    }
+  }
+}
