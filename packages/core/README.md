@@ -152,13 +152,19 @@ This is equivalent to looping over `element.style.setProperty(cssVar, value.toFi
 
 ## Arrangement
 
-Sequence multiple patterns on a shared song-level beat timeline. An `ArrangementProject` holds a library of patterns plus a list of non-overlapping sections that place them on that timeline; the arrangement's own `bpm` is the single source of truth (each pattern's `bpm` is ignored).
+Sequence multiple patterns on a shared song-level beat timeline. An
+`ArrangementProject` holds a tempo-mapped `timing` field, an explicit
+`durationBeats`, a library of patterns, and a list of non-overlapping sections
+that place those patterns on the timeline. Pattern-local `bpm` values are
+ignored during arrangement playback; the arrangement `TimingMap` is
+authoritative.
 
 ```ts
-import { ArrangementEngine, createArrangement } from "@vixeq/core";
+import { ArrangementEngine, createArrangement, createTimingMap } from "@vixeq/core";
 
 const arrangement = createArrangement({
-  bpm: 120,
+  timing: createTimingMap({ bpm: 120 }),
+  durationBeats: 32,
   patterns: { verse: verseProject, chorus: chorusProject },
   sections: [
     { id: "v1", patternId: "verse", startBeat: 0, endBeat: 16 },
@@ -179,7 +185,13 @@ await engine.stop();       // stop and return to beat 0
 
 Gaps between sections (or past the end, when not looping) output `0` on every channel. `ArrangementEngine` is always time-driven from `PlaybackTransport`, so seek/scrub/audio-sync are correct by construction. Its local `loop` / `setLoop()` state is independent of the transport's own loop flag. It implements the same `on("step", ...)` / `on("playback", ...)` / `on("project", ...)` / `sampleChannels()` shape as `SequencerEngine` (see the `ChannelSource` type), plus an Arrangement-specific `section` event.
 
-Use `validateArrangement` / `normalizeArrangement` the same way as their `SequenceProject` counterparts. The pure functions behind the engine (`resolveArrangementStep`, `sampleArrangement`, `sectionAtBeat`, `arrangementDurationBeats`, `unionTrackIds`) are also exported for custom playback loops.
+Use `validateArrangement` / `normalizeArrangement` the same way as their
+`SequenceProject` counterparts. `migrateArrangementProject(input, options)`
+converts v1 arrangement data by mapping the old top-level `bpm` into a v2
+`TimingMap`; `options.durationBeats` is required because v1 data has no
+duration field. The pure functions behind the engine (`resolveArrangementStep`,
+`sampleArrangement`, `sectionAtBeat`, `arrangementDurationBeats`,
+`unionTrackIds`) are also exported for custom playback loops.
 
 ## Package Status
 
@@ -198,5 +210,6 @@ The core API is intentionally small:
 - built-in presets
 - `createEnvelope` / `createDecayEnvelope`
 - optional `PlaybackTransport` helpers
+- `TimingMap` / `TimelineEngine` helpers for tempo-mapped cue scheduling
 - `bindChannelsToElement` (via `@vixeq/core/dom`)
 - `ArrangementEngine` / `createArrangement` for multi-pattern song playback

@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## 0.8.0 - 2026-07-11
+
+Stable release of Timing/Timeline/Arrangement v2, promoting the 0.8 beta
+line. Not yet published — see `docs/release/0.8-beta-checklist.md`'s Stable
+Promotion Steps. A `### Published` section will be added once
+`@vixeq/core`, `@vixeq/react`, and `@vixeq/player-react` are actually
+promoted to `0.8.0` under the `latest` dist-tag and registry smoke passes,
+matching how `0.7.0-beta.1`'s publish was recorded only after the fact.
+
+### Added
+
+- `TimingMap`, `TimelineProject` v2, indexed `TimelineEngine`, `useTimeline()`,
+  `ArrangementProject` v2 with tempo-map playback, and explicit
+  `migrateTimelineProject()` / `migrateArrangementProject()` APIs.
+- `website-pulse` Timeline integration and reusable migration fixtures.
+
+### Breaking
+
+- Same breaking changes as `0.8.0-beta.1`: no deprecated aliases are provided.
+  See the [0.8 migration guide](./docs/migrations/0.8-timeline-arrangement-v2.md)
+  before upgrading.
+
 ## 0.8.0-beta.1 - 2026-07-10
 
 Timing/Timeline/Arrangement v2: a shared, tempo-mapped `TimingMap` for

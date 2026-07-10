@@ -70,15 +70,23 @@ function AudioSequencer() {
 
 ## Arrangement Usage
 
-`useArrangement` mirrors `useSequencerEngine`'s lifecycle (create on mount, dispose on unmount, hot-swap on prop change) for an `ArrangementProject` — a song-level structure with multiple patterns placed on a shared beat timeline.
+`useArrangement` mirrors `useSequencerEngine`'s lifecycle (create on mount,
+dispose on unmount, hot-swap on prop change) for an `ArrangementProject` — a
+song-level structure with tempo-mapped timing, an explicit duration, and
+multiple patterns placed on a shared beat timeline.
 
 ```tsx
-import { createArrangement } from "@vixeq/core";
+import { createArrangement, createTimingMap } from "@vixeq/core";
 import { useAnimatedChannels, useArrangement } from "@vixeq/react";
 
 function Song() {
   const [arrangement] = useState(() =>
-    createArrangement({ bpm: 120, patterns, sections }),
+    createArrangement({
+      timing: createTimingMap({ bpm: 120 }),
+      durationBeats: 32,
+      patterns,
+      sections,
+    }),
   );
   const player = useArrangement({ arrangement });
 
