@@ -40,5 +40,10 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Debug OIDC env
+        run: |
+          if [ -n "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]; then echo "REQUEST_TOKEN: present"; else echo "REQUEST_TOKEN: missing"; fi
+          if [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then echo "REQUEST_URL: present"; else echo "REQUEST_URL: missing"; fi
+
       - name: Publish packages
         run: pnpm -r publish --access public --no-git-checks --provenance
