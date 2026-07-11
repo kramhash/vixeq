@@ -234,6 +234,7 @@ body {
     color: var(--c-text);
     font-size: 0.88rem;
     line-height: 1.45;
+    height: 2rem;
 }
 
 /* ─── action buttons ────────────────────────────────── */

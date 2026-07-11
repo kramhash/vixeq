@@ -344,8 +344,7 @@ export const App = () => {
       )}
       <header className="site-nav">
         <span className="nav-brand">
-          <VixeqMark size={16} />
-          VIXEQ
+          <VixeqMark size={120} />
         </span>
         <nav className="nav-links">
           <a href="#">Schedule</a>

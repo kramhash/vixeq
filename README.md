@@ -1,7 +1,4 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="brand/vixeq-logo.svg">
-  <img src="brand/vixeq-logo-light.svg" alt="Vixeq" height="60">
-</picture>
+<img src="brand/header.png" alt="Vixeq One pulse. Any motion."  />
 
 Vixeq is a UI-agnostic step sequencer engine for `0.0` to `1.0` control values.
 
