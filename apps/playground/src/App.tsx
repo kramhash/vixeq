@@ -1,13 +1,19 @@
 import { SequencePlayer, type SelectedStep } from "@vixeq/player-react";
 import { createProject, normalizeProject, presets, validateProject, type SequenceProject, type StepEvent } from "@vixeq/core";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Visualizer } from "./Visualizer";
+import { Visualizer, type VisualizerHandle } from "./Visualizer";
+import { VixeqLogo } from "./VixeqLogo";
 import { loadStoredProject, saveStoredProject, type ProjectStorageLoadResult } from "./projectStorage";
 import { createVisualizerState } from "./visualizerState";
 
 const DEFAULT_TRACK_NAMES = ["Kick / Energy", "Depth / Motion", "Glow / Accent", "Color Shift"];
 
-const createInitialProject = (): SequenceProject => createProject({ trackNames: DEFAULT_TRACK_NAMES });
+// Used by the "New" button: a blank canvas with no steps set.
+const createBlankProject = (): SequenceProject => createProject({ trackNames: DEFAULT_TRACK_NAMES });
+
+// Used for the first-ever load (no saved project yet): the "default" preset,
+// so Play immediately shows the visualizer in motion.
+const createStarterProject = (): SequenceProject => normalizeProject(presets.default);
 
 const getBrowserStorage = (): Storage | undefined =>
   typeof window === "undefined" ? undefined : window.localStorage;
@@ -15,7 +21,7 @@ const getBrowserStorage = (): Storage | undefined =>
 const getInitialProject = (): { project: SequenceProject; loadResult: ProjectStorageLoadResult } => {
   const loadResult = loadStoredProject(getBrowserStorage());
   return {
-    project: loadResult.project ?? createInitialProject(),
+    project: loadResult.project ?? createStarterProject(),
     loadResult,
   };
 };
@@ -33,6 +39,7 @@ export function App() {
     initialProject.loadResult.status,
   );
   const skippedIgnoredStorageSaveRef = useRef(false);
+  const visualizerRef = useRef<VisualizerHandle>(null);
 
   const presetEntries = useMemo(() => Object.entries(presets), []);
   const visualizerState = useMemo(
@@ -60,7 +67,7 @@ export function App() {
       return;
     }
 
-    setProject(createInitialProject());
+    setProject(createBlankProject());
     setSelected(null);
     setLatestEvent(null);
     setJsonText("");
@@ -111,6 +118,18 @@ export function App() {
     setImportError("");
   };
 
+  const saveVisualizerPng = () => {
+    const dataUrl = visualizerRef.current?.capturePng();
+    if (!dataUrl) {
+      return;
+    }
+
+    const anchor = document.createElement("a");
+    anchor.href = dataUrl;
+    anchor.download = `vixeq-visualizer-${Date.now()}.png`;
+    anchor.click();
+  };
+
   const storageLabel =
     storageStatus === "unavailable"
       ? "Local save unavailable"
@@ -122,11 +141,10 @@ export function App() {
     <main className="app-shell">
       <header className="toolbar">
         <div className="brand">
-          <span className="brand-mark" />
-          <div>
-            <h1>Vixeq</h1>
-            <p>0-1 control sequencer</p>
+          <div className="brand-mark">
+            <VixeqLogo height={28} />
           </div>
+          <p>Signal sequencer</p>
         </div>
 
         <div className="data-controls">
@@ -149,13 +167,16 @@ export function App() {
           <button type="button" onClick={importJson}>
             Import
           </button>
+          <button type="button" onClick={saveVisualizerPng}>
+            Save PNG
+          </button>
           <span className="storage-status">{storageLabel}</span>
         </div>
       </header>
 
       <section className="workspace">
         <div className="playground-main">
-          <Visualizer state={visualizerState} />
+          <Visualizer ref={visualizerRef} state={visualizerState} />
           <SequencePlayer
             project={project}
             onProjectChange={({ project: nextProject }) => {
