@@ -1,6 +1,6 @@
 import { createShaderBackground, glsl, type ShaderBackgroundInstance } from "@frapx/shader";
 import { simplex3d } from "@frapx/shader-noise";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import {
   createVisualEnvelope,
   decayEnvelope,
@@ -159,7 +159,18 @@ const initialUniforms = {
   tracks: [0, 0.5, 0, 0] as [number, number, number, number],
 };
 
-export function Visualizer({ state }: { state: VisualizerState }) {
+function fixto(value: number) {
+  return `00${value}`.slice(-2);
+}
+
+export type VisualizerHandle = {
+  capturePng: () => string | null;
+};
+
+export const Visualizer = forwardRef<VisualizerHandle, { state: VisualizerState }>(function Visualizer(
+  { state },
+  ref,
+) {
   const targetRef = useRef<HTMLDivElement | null>(null);
   const fallbackCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const shaderRef = useRef<ShaderBackgroundInstance<typeof initialUniforms> | null>(null);
@@ -171,6 +182,26 @@ export function Visualizer({ state }: { state: VisualizerState }) {
   const [status, setStatus] = useState<"shader" | "fallback">("shader");
   const [errorLabel, setErrorLabel] = useState("");
   const [displayEnvelope, setDisplayEnvelope] = useState<VisualEnvelopeState>(() => createVisualEnvelope());
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      capturePng: () => {
+        if (status === "shader") {
+          const shader = shaderRef.current;
+          if (!shader?.canvas) {
+            return null;
+          }
+
+          shader.render();
+          return shader.canvas.toDataURL("image/png");
+        }
+
+        return fallbackCanvasRef.current?.toDataURL("image/png") ?? null;
+      },
+    }),
+    [status],
+  );
 
   const readout = useMemo(
     () => ({
@@ -360,17 +391,17 @@ export function Visualizer({ state }: { state: VisualizerState }) {
             <h2>Fluid Pulse</h2>
             <p>{state.isPlaying ? "Live step signal" : "Editing preview"}</p>
           </div>
-          <div className="visualizer-metrics">
-            <span>Step {state.stepIndex + 1}</span>
-            <span>Kick {readout.kick}</span>
-            <span>Depth {readout.depth > 0 ? "+" : ""}{readout.depth}</span>
-            <span>Glow {readout.glow}</span>
-            <span>Color {readout.color}</span>
-            <span>Complexity {readout.complexity}</span>
+          <div className="visualizer-metrics value-label">
+            <span>Step {fixto(state.stepIndex + 1)}</span>
+            <span>Kick {fixto(readout.kick)}</span>
+            <span>Depth {readout.depth > 0 ? "+" : readout.depth < 0 ? "" : "~"}{readout.depth}</span>
+            <span>Glow {fixto(readout.glow)}</span>
+            <span>Color {fixto(readout.color)}</span>
+            <span>Complexity {fixto(readout.complexity)}</span>
           </div>
         </div>
         {status === "fallback" ? <span className="visualizer-status">{errorLabel || "2D fallback"}</span> : null}
       </div>
     </section>
   );
-}
+});
