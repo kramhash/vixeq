@@ -208,7 +208,7 @@ to the same timing map without building a DAW editor.
 
 **Theme**: Make public stability measurable before the API freeze.
 
-- [ ] Commit API Extractor reports for all three public packages and fail CI on unreviewed differences.
+- [x] Commit API Extractor reports for all three public packages and fail CI on unreviewed differences (see `pnpm api:check`/`pnpm api:update` and `.github/workflows/ci.yml`).
 - [ ] Enforce Core branch coverage of at least 90%, React branch coverage of at least 85%, and 100% on critical playback/timing/migration modules.
 - [ ] Test Node.js 22 and 24, React 18 and 19, TypeScript `>=5.5 <6`, SSR imports, and ESM/CJS packed consumers.
 - [ ] Run actual media E2E in the locked Playwright Chromium, Firefox, and WebKit versions.

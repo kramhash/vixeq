@@ -46,7 +46,9 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --sourcemap",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "api:check": "api-extractor run --verbose",
+    "api:update": "api-extractor run --local --verbose"
   },
   "devDependencies": {
     "@types/react": "^19.1.8",
