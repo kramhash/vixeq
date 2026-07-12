@@ -15,6 +15,11 @@ import {
 } from "@vixeq/core";
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 
+/**
+ * Name of a `useArrangement` command while it sits at the head of the
+ * internal command queue (queued or actively running). Reflected on
+ * {@link UseArrangementState.pendingOperation}.
+ */
 export type ArrangementPendingOperation =
   | "play"
   | "pause"
@@ -26,45 +31,130 @@ export type ArrangementPendingOperation =
   | "setTransportLoop"
   | "setLoop";
 
+/**
+ * Union of the engine events that can be surfaced through
+ * {@link UseArrangementState.latestEventRef}: a scheduled `StepEvent`, an
+ * `ArrangementPlaybackEvent` (play/pause/stop/seek/error transitions), an
+ * `ArrangementProjectEvent` emitted after a `setArrangement` hot-swap, or an
+ * `ArrangementSectionEvent` emitted whenever the active section changes.
+ */
 export type ArrangementLatestEvent =
   | StepEvent
   | ArrangementPlaybackEvent
   | ArrangementProjectEvent
   | ArrangementSectionEvent;
 
+/** Options accepted by {@link useArrangement}. */
 export type UseArrangementOptions = {
+  /**
+   * The arrangement project to play. Passing a new reference hot-swaps the
+   * running engine's arrangement via `setArrangement` instead of recreating
+   * the engine, unless construction previously failed for this exact
+   * object.
+   */
   arrangement: ArrangementProject;
+  /**
+   * Playback transport to drive the engine's clock. Defaults to
+   * `createClockTransport(browserClock)`, which the hook creates and
+   * disposes itself. Pass an explicit transport to share a clock across
+   * multiple engines or hooks.
+   */
   transport?: PlaybackTransport;
+  /** Forwarded to `ArrangementEngine`'s constructor; bounds the scheduling lookahead window in milliseconds. */
   lookaheadMs?: number;
+  /**
+   * Engine-local loop flag: when `true`, playback repeats from beat 0 once
+   * it reaches the end of the arrangement. Distinct from
+   * {@link UseArrangementState.setTransportLoop}, which loops the transport
+   * itself. Defaults to `false`; can also be changed at runtime via
+   * {@link UseArrangementState.setLoop}.
+   */
   loop?: boolean;
+  /** Forwarded to `ArrangementEngine`'s constructor; controls whether skipped intermediate steps are emitted or coalesced. */
   missedStepPolicy?: MissedStepPolicy;
+  /** Called with every `StepEvent` the engine schedules. */
   onStep?: (event: StepEvent) => void;
+  /** Called whenever the active arrangement section changes, including transitions to/from a gap (`section: null`). */
   onSection?: (event: ArrangementSectionEvent) => void;
+  /** Called on every playback state transition (play/pause/stop/seek/error). */
   onPlaybackChange?: (event: ArrangementPlaybackEvent) => void;
+  /**
+   * Called with the engine's current `ChannelPosition` on every rAF tick
+   * while playing, and after seeks/arrangement swaps. Use this (or
+   * {@link UseArrangementState.positionRef}) instead of `latestEventRef` for
+   * continuous progress UI, since position updates do not trigger a React
+   * re-render on their own.
+   */
   onPosition?: (position: ChannelPosition) => void;
+  /**
+   * Called when constructing the engine, or hot-swapping its arrangement,
+   * throws. The error is also captured on
+   * {@link UseArrangementState.projectError} without throwing during
+   * render.
+   */
   onProjectError?: (error: Error) => void;
+  /**
+   * Called when a queued transport command (play/pause/stop/seek/...)
+   * rejects. The error is also captured on
+   * {@link UseArrangementState.transportError}; the rejected promise
+   * returned by the corresponding command method still rejects as well.
+   */
   onTransportError?: (error: unknown) => void;
 };
 
+/** State and controls returned by {@link useArrangement}. */
 export type UseArrangementState = {
   /** The underlying ArrangementEngine instance, or null when construction fails. */
   engine: ArrangementEngine | null;
+  /** The currently active section, or `null` if playback is in a gap between sections. */
   currentSection: ArrangementSection | null;
+  /** Current playback state, updated on every playback transition. */
   playbackState: PlaybackState;
+  /**
+   * Ref holding the engine's current `ChannelPosition`. Updated on every rAF
+   * tick while playing and after seeks/arrangement swaps, without forcing a
+   * re-render — read it inside animation callbacks instead of depending on
+   * hook state for continuous progress.
+   */
   positionRef: MutableRefObject<ChannelPosition>;
-  latestEvent: ArrangementLatestEvent | null;
+  /**
+   * Ref holding the most recent step, playback, project, or section event
+   * emitted by the engine. Updated on every step (not just once per frame),
+   * without forcing a re-render — read it inside imperative code, not
+   * during render. Consumers that need to repaint on every step should
+   * track `onStep`/`onSection` into their own state instead, since a ref
+   * mutation does not itself schedule a render.
+   */
+  latestEventRef: MutableRefObject<ArrangementLatestEvent | null>;
+  /**
+   * Error from the most recent engine construction or `setArrangement`
+   * call, or `null` if it succeeded. Construction/hot-swap failures are
+   * captured here rather than thrown during render.
+   */
   projectError: Error | null;
+  /** Error from the most recently rejected transport command, or `null`. */
   transportError: unknown | null;
+  /** The command currently at the head of the queue (running or waiting), or `null` if idle. */
   pendingOperation: ArrangementPendingOperation | null;
+  /** `true` while any command is queued or running, i.e. `pendingOperation !== null`. */
   isBusy: boolean;
+  /** Starts or resumes playback. */
   play: () => Promise<void>;
+  /** Pauses playback, retaining the current position. */
   pause: () => Promise<void>;
+  /** Stops playback and resets position to the start. */
   stop: () => Promise<void>;
+  /** Plays if paused/stopped, or pauses if currently playing. */
   toggle: () => Promise<void>;
+  /** Seeks to an absolute position in milliseconds. */
   seekPositionMs: (positionMs: number) => Promise<void>;
+  /** Seeks to a specific beat. */
   seekBeat: (beat: number) => Promise<void>;
+  /** Sets the transport's playback rate (must be a finite number greater than 0). */
   setPlaybackRate: (rate: number) => Promise<void>;
+  /** Sets whether the transport loops at its known duration. */
   setTransportLoop: (loop: boolean) => Promise<void>;
+  /** Sets the engine-local loop flag (repeat from beat 0 at arrangement end), independent of transport looping. */
   setLoop: (loop: boolean) => Promise<void>;
 };
 
@@ -101,10 +191,43 @@ const cancelScheduledFrame = (frameId: ReturnType<typeof setTimeout> | number): 
 };
 
 /**
- * Owns an ArrangementEngine lifecycle, hot-swaps ArrangementProject updates,
- * and exposes Playback v2 controls. The returned `engine` satisfies the
- * `ChannelSource` contract, so it can be passed directly to
- * `useAnimatedChannels`.
+ * Owns an `ArrangementEngine` lifecycle: constructs it from an
+ * `ArrangementProject` (patterns played across ordered, beat-timed
+ * sections), hot-swaps the arrangement when a new reference is passed, and
+ * disposes the engine (and any transport the hook created) on unmount.
+ * Commands are serialized through an internal queue, so calling several in a
+ * row runs them one after another in order rather than racing. The returned
+ * `engine` satisfies the `ChannelSource` contract, so it can be passed
+ * directly to `useAnimatedChannels`.
+ *
+ * Construction and arrangement-hot-swap failures are captured on
+ * `projectError`/`onProjectError` instead of throwing during render.
+ * Continuous playback position is exposed both as `positionRef` (read
+ * without a re-render) and via the `onPosition` callback, since it changes
+ * every animation frame while playing.
+ *
+ * @param options - Arrangement, transport, and callback configuration. See {@link UseArrangementOptions}.
+ * @returns Playback state, current section, position, latest event, errors, and transport controls. See {@link UseArrangementState}.
+ *
+ * @example
+ * ```tsx
+ * function ArrangementPlayer({ arrangement }: { arrangement: ArrangementProject }) {
+ *   const { currentSection, playbackState, play, pause } = useArrangement({
+ *     arrangement,
+ *     loop: true,
+ *     onSection: (event) => console.log("entered section", event.section?.id),
+ *   });
+ *
+ *   return (
+ *     <div>
+ *       <p>Section: {currentSection?.id ?? "(gap)"}</p>
+ *       <button onClick={() => (playbackState === "playing" ? pause() : play())}>
+ *         {playbackState === "playing" ? "Pause" : "Play"}
+ *       </button>
+ *     </div>
+ *   );
+ * }
+ * ```
  */
 export function useArrangement(options: UseArrangementOptions): UseArrangementState {
   const { arrangement, transport, lookaheadMs, loop, missedStepPolicy } = options;
@@ -127,7 +250,7 @@ export function useArrangement(options: UseArrangementOptions): UseArrangementSt
   const [engine, setEngine] = useState<ArrangementEngine | null>(null);
   const [currentSection, setCurrentSection] = useState<ArrangementSection | null>(null);
   const [playbackState, setPlaybackState] = useState<PlaybackState>("stopped");
-  const [latestEvent, setLatestEvent] = useState<ArrangementLatestEvent | null>(null);
+  const latestEventRef = useRef<ArrangementLatestEvent | null>(null);
   const [projectError, setProjectError] = useState<Error | null>(null);
   const [transportError, setTransportError] = useState<unknown | null>(null);
   const [pendingOperation, setPendingOperation] = useState<ArrangementPendingOperation | null>(null);
@@ -236,18 +359,18 @@ export function useArrangement(options: UseArrangementOptions): UseArrangementSt
     setProjectError(null);
 
     const offStep = newEngine.on("step", (event) => {
-      setLatestEvent(event);
+      latestEventRef.current = event;
       onStepRef.current?.(event);
     });
     const offSection = newEngine.on("section", (event) => {
       setCurrentSection(event.section);
-      setLatestEvent(event);
+      latestEventRef.current = event;
       onSectionRef.current?.(event);
     });
     const offPlayback = newEngine.on("playback", (event) => {
       setPlaybackState(event.snapshot.state);
       setCurrentSection(event.snapshot.section);
-      setLatestEvent(event);
+      latestEventRef.current = event;
       positionRef.current = newEngine.getPosition();
       onPositionRef.current?.(positionRef.current);
       if (event.type === "error") {
@@ -258,7 +381,7 @@ export function useArrangement(options: UseArrangementOptions): UseArrangementSt
     });
     const offProject = newEngine.on("project", (event) => {
       setCurrentSection(newEngine.getCurrentSection());
-      setLatestEvent(event);
+      latestEventRef.current = event;
       positionRef.current = newEngine.getPosition();
       onPositionRef.current?.(positionRef.current);
     });
@@ -396,7 +519,7 @@ export function useArrangement(options: UseArrangementOptions): UseArrangementSt
     currentSection,
     playbackState,
     positionRef,
-    latestEvent,
+    latestEventRef,
     projectError,
     transportError,
     pendingOperation,

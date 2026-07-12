@@ -21,6 +21,45 @@ class FakeClock implements PlaybackClock {
   clearTimer = () => undefined;
 }
 
+/**
+ * Unlike {@link FakeClock} above (whose `setTimer` is a no-op stub used to
+ * drive the hook's own rAF-based position loop by hand), this clock actually
+ * queues and fires the engine's internal step-scheduling timers when
+ * advanced, so natural (non-command) "tick" step events fire — mirroring
+ * `packages/core/src/SequencerEngine.test.ts`'s fixture.
+ */
+class TickingFakeClock implements PlaybackClock {
+  currentTime = 0;
+  private nextTimerId = 1;
+  private timers: Array<{ id: number; callback: () => void; dueAt: number }> = [];
+
+  now = () => this.currentTime;
+
+  setTimer = (callback: () => void, delayMs: number): unknown => {
+    const id = this.nextTimerId;
+    this.nextTimerId += 1;
+    this.timers.push({ id, callback, dueAt: this.currentTime + delayMs });
+    return id;
+  };
+
+  clearTimer = (timerId: unknown): void => {
+    this.timers = this.timers.filter((timer) => timer.id !== timerId);
+  };
+
+  advance(ms: number): void {
+    const target = this.currentTime + ms;
+    while (true) {
+      this.timers.sort((left, right) => left.dueAt - right.dueAt);
+      const timer = this.timers[0];
+      if (!timer || timer.dueAt > target) break;
+      this.timers.shift();
+      this.currentTime = timer.dueAt;
+      timer.callback();
+    }
+    this.currentTime = target;
+  }
+}
+
 type Deferred = {
   resolve: () => void;
   reject: (error: unknown) => void;
@@ -346,5 +385,35 @@ describe("useSequencerEngine", () => {
     expect(result.current.positionRef.current.positionMs).toBeGreaterThan(0);
     expect(onPosition).toHaveBeenCalled();
     expect(renders).toBe(rendersAfterPlay);
+  });
+
+  it("PB-RE-010 mutates latestEventRef on every natural tick step without a rerender per step", async () => {
+    vi.useFakeTimers();
+    try {
+      const clock = new TickingFakeClock();
+      const transport = createClockTransport(clock);
+      const project = createProject({ bpm: 120, stepCount: 16, trackCount: 1 });
+      let renders = 0;
+      const { result } = renderHook(() => {
+        renders += 1;
+        return useSequencerEngine({ project, transport, lookaheadMs: 1000 });
+      });
+
+      await act(async () => {
+        await result.current.play();
+      });
+      expect(result.current.latestEventRef.current).toMatchObject({ stepIndex: 0, cause: "play" });
+      const rendersAfterPlay = renders;
+
+      await act(async () => {
+        clock.advance(125 * 3);
+        await vi.advanceTimersByTimeAsync(125 * 3);
+      });
+
+      expect(result.current.latestEventRef.current).toMatchObject({ stepIndex: 3, cause: "tick" });
+      expect(renders).toBe(rendersAfterPlay);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

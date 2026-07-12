@@ -17,6 +17,44 @@ class FakeClock implements PlaybackClock {
   clearTimer = () => undefined;
 }
 
+/**
+ * Unlike {@link FakeClock} above (whose `setTimer` is a no-op stub), this
+ * clock actually queues and fires the engine's internal step-scheduling
+ * timers when advanced, so natural (non-command) "tick" step events fire —
+ * mirroring `packages/core/src/SequencerEngine.test.ts`'s fixture.
+ */
+class TickingFakeClock implements PlaybackClock {
+  currentTime = 0;
+  private nextTimerId = 1;
+  private timers: Array<{ id: number; callback: () => void; dueAt: number }> = [];
+
+  now = () => this.currentTime;
+
+  setTimer = (callback: () => void, delayMs: number): unknown => {
+    const id = this.nextTimerId;
+    this.nextTimerId += 1;
+    this.timers.push({ id, callback, dueAt: this.currentTime + delayMs });
+    return id;
+  };
+
+  clearTimer = (timerId: unknown): void => {
+    this.timers = this.timers.filter((timer) => timer.id !== timerId);
+  };
+
+  advance(ms: number): void {
+    const target = this.currentTime + ms;
+    while (true) {
+      this.timers.sort((left, right) => left.dueAt - right.dueAt);
+      const timer = this.timers[0];
+      if (!timer || timer.dueAt > target) break;
+      this.timers.shift();
+      this.currentTime = timer.dueAt;
+      timer.callback();
+    }
+    this.currentTime = target;
+  }
+}
+
 const pattern = createProject({ stepCount: 4, stepsPerBeat: 1, trackCount: 1 });
 const arrangement = createArrangement({
   durationBeats: 4,
@@ -140,5 +178,35 @@ describe("useArrangement", () => {
     expect(result.current.currentSection?.id).toBe("later");
     expect(result.current.positionRef.current.beat).toBe(4);
     expect(result.current.playbackState).toBe("paused");
+  });
+
+  it("PB-RE-004 mutates latestEventRef on every natural tick step without a rerender per step", async () => {
+    vi.useFakeTimers();
+    try {
+      const clock = new TickingFakeClock();
+      const transport = createClockTransport(clock);
+      let renders = 0;
+      const { result } = renderHook(() => {
+        renders += 1;
+        return useArrangement({ arrangement, transport, lookaheadMs: 1000 });
+      });
+
+      await act(async () => {
+        await result.current.play();
+      });
+      expect(result.current.latestEventRef.current).toMatchObject({ stepIndex: 0, cause: "play" });
+      const rendersAfterPlay = renders;
+
+      // pattern is bpm 120 / stepsPerBeat 1 -> one step every 500ms.
+      await act(async () => {
+        clock.advance(500 * 3);
+        await vi.advanceTimersByTimeAsync(500 * 3);
+      });
+
+      expect(result.current.latestEventRef.current).toMatchObject({ stepIndex: 3, cause: "tick" });
+      expect(renders).toBe(rendersAfterPlay);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

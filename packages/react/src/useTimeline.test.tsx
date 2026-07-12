@@ -19,6 +19,44 @@ class FakeClock implements PlaybackClock {
   clearTimer = () => undefined;
 }
 
+/**
+ * Unlike {@link FakeClock} above (whose `setTimer` is a no-op stub), this
+ * clock actually queues and fires the engine's internal cue-scheduling
+ * timers when advanced, so natural (non-command) cues fire — mirroring
+ * `packages/core/src/SequencerEngine.test.ts`'s fixture.
+ */
+class TickingFakeClock implements PlaybackClock {
+  currentTime = 0;
+  private nextTimerId = 1;
+  private timers: Array<{ id: number; callback: () => void; dueAt: number }> = [];
+
+  now = () => this.currentTime;
+
+  setTimer = (callback: () => void, delayMs: number): unknown => {
+    const id = this.nextTimerId;
+    this.nextTimerId += 1;
+    this.timers.push({ id, callback, dueAt: this.currentTime + delayMs });
+    return id;
+  };
+
+  clearTimer = (timerId: unknown): void => {
+    this.timers = this.timers.filter((timer) => timer.id !== timerId);
+  };
+
+  advance(ms: number): void {
+    const target = this.currentTime + ms;
+    while (true) {
+      this.timers.sort((left, right) => left.dueAt - right.dueAt);
+      const timer = this.timers[0];
+      if (!timer || timer.dueAt > target) break;
+      this.timers.shift();
+      this.currentTime = timer.dueAt;
+      timer.callback();
+    }
+    this.currentTime = target;
+  }
+}
+
 type CaptionEvent = TimelineEvent<"caption", { text: string }>;
 
 const project = createTimelineProject({
@@ -80,7 +118,7 @@ describe("useTimeline", () => {
     expect(transport.getPlaybackState()).toBe("paused");
   });
 
-  it("wires cue events to latestEvent and onCue with generic event data", async () => {
+  it("wires cue events to latestEventRef and onCue with generic event data", async () => {
     const transport = createClockTransport(new FakeClock());
     const onCue = vi.fn<(event: TimelineCueEvent<CaptionEvent>) => void>();
     const { result } = renderHook(() => useTimeline<CaptionEvent>({ project, transport, onCue }));
@@ -92,9 +130,9 @@ describe("useTimeline", () => {
     expect(onCue).toHaveBeenCalledWith(expect.objectContaining({
       event: expect.objectContaining({ id: "intro" }),
     }));
-    expect(result.current.latestEvent).toMatchObject({ event: { id: "intro" } });
+    expect(result.current.latestEventRef.current).toMatchObject({ event: { id: "intro" } });
 
-    const latest = result.current.latestEvent;
+    const latest = result.current.latestEventRef.current;
     if (latest && "event" in latest) {
       const text: string | undefined = latest.event.data?.text;
       expect(text).toBe("Intro");
@@ -221,5 +259,35 @@ describe("useTimeline", () => {
     const { result } = renderHook(() => useTimeline({ project: typedProject, onCue }));
 
     expect(result.current.engine?.getProject()).toBe(typedProject);
+  });
+
+  it("mutates latestEventRef on every natural cue without a rerender per cue", async () => {
+    vi.useFakeTimers();
+    try {
+      const clock = new TickingFakeClock();
+      const transport = createClockTransport(clock);
+      let renders = 0;
+      const { result } = renderHook(() => {
+        renders += 1;
+        return useTimeline<CaptionEvent>({ project, transport, lookaheadMs: 1000 });
+      });
+
+      await act(async () => {
+        await result.current.play();
+      });
+      expect(result.current.latestEventRef.current).toMatchObject({ event: { id: "intro" } });
+      const rendersAfterPlay = renders;
+
+      // Default timing is bpm 120 (500ms/beat); the "middle" cue is at beat 2 (1000ms).
+      await act(async () => {
+        clock.advance(1000);
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+
+      expect(result.current.latestEventRef.current).toMatchObject({ event: { id: "middle" } });
+      expect(renders).toBe(rendersAfterPlay);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

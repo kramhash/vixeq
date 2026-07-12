@@ -18,6 +18,44 @@ class FakeClock implements PlaybackClock {
   clearTimer = () => undefined;
 }
 
+/**
+ * Unlike {@link FakeClock} above (whose `setTimer` is a no-op stub), this
+ * clock actually queues and fires the engine's internal step-scheduling
+ * timers when advanced, so natural (non-command) "tick" step events fire —
+ * mirroring `packages/core/src/SequencerEngine.test.ts`'s fixture.
+ */
+class TickingFakeClock implements PlaybackClock {
+  currentTime = 0;
+  private nextTimerId = 1;
+  private timers: Array<{ id: number; callback: () => void; dueAt: number }> = [];
+
+  now = () => this.currentTime;
+
+  setTimer = (callback: () => void, delayMs: number): unknown => {
+    const id = this.nextTimerId;
+    this.nextTimerId += 1;
+    this.timers.push({ id, callback, dueAt: this.currentTime + delayMs });
+    return id;
+  };
+
+  clearTimer = (timerId: unknown): void => {
+    this.timers = this.timers.filter((timer) => timer.id !== timerId);
+  };
+
+  advance(ms: number): void {
+    const target = this.currentTime + ms;
+    while (true) {
+      this.timers.sort((left, right) => left.dueAt - right.dueAt);
+      const timer = this.timers[0];
+      if (!timer || timer.dueAt > target) break;
+      this.timers.shift();
+      this.currentTime = timer.dueAt;
+      timer.callback();
+    }
+    this.currentTime = target;
+  }
+}
+
 const createDeferredPlayTransport = (): {
   transport: PlaybackTransport;
   resolvePlay: () => Promise<void>;
@@ -148,5 +186,53 @@ describe("SequencePlayer", () => {
     render(<SequencePlayer project={project} onProjectChange={() => undefined} />);
 
     expect((await screen.findByRole("alert")).textContent).toContain("Project failed to load");
+  });
+
+  it("repaints the playing-step highlight on every natural tick, not only on commands", async () => {
+    vi.useFakeTimers();
+    try {
+      const ref = createRef<SequencePlayerRef>();
+      const clock = new TickingFakeClock();
+      const transport = createClockTransport(clock, { durationMs: 20_000 });
+      const project = createProject({ bpm: 120, stepCount: 4, trackCount: 1 });
+      render(
+        <SequencePlayer ref={ref} project={project} transport={transport} onProjectChange={() => undefined} />,
+      );
+
+      await act(async () => {
+        await ref.current?.play();
+      });
+      expect(screen.getByText("Step 1")).toBeTruthy();
+
+      // bpm 120 / stepsPerBeat 4 (default) -> 125ms/step; advance through natural ticks
+      // (no seek/play/pause command involved) and confirm the highlight still moves.
+      await act(async () => {
+        clock.advance(125 * 2);
+        await vi.advanceTimersByTimeAsync(125 * 2);
+      });
+      expect(screen.getByText("Step 3")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("resets the step highlight to Step 1 after stop, even from a non-zero step", async () => {
+    // Regression test: stop() resets the engine's step position but emits no "step"
+    // event (only a "playback" event), so the highlight must be reset independently
+    // of the step-event path. Unlike PB-UI-001 above, this does not seek to a
+    // position that happens to land back on step 0 before stopping.
+    const ref = createRef<SequencePlayerRef>();
+    const clock = new FakeClock();
+    const transport = createClockTransport(clock, { durationMs: 20_000 });
+    const project = createProject({ bpm: 120, stepCount: 4, trackCount: 1 });
+    render(<SequencePlayer ref={ref} project={project} transport={transport} onProjectChange={() => undefined} />);
+
+    await act(async () => { await ref.current?.play(); });
+    await act(async () => { await ref.current?.seekStep(2); });
+    expect(screen.getByText("Step 3")).toBeTruthy();
+
+    await act(async () => { await ref.current?.stop(); });
+    expect(screen.getByText("Step 1")).toBeTruthy();
+    expect(transport.getPositionMs()).toBe(0);
   });
 });

@@ -15,6 +15,11 @@ import {
 } from "@vixeq/core";
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 
+/**
+ * Name of a `useTimeline` command while it sits at the head of the internal
+ * command queue (queued or actively running). Reflected on
+ * {@link UseTimelineState.pendingOperation}.
+ */
 export type TimelinePendingOperation =
   | "play"
   | "pause"
@@ -26,43 +31,126 @@ export type TimelinePendingOperation =
   | "setTransportLoop"
   | "setLoop";
 
+/**
+ * Union of the engine events that can be surfaced through
+ * {@link UseTimelineState.latestEventRef}: a scheduled `TimelineCueEvent`, a
+ * `TimelinePlaybackEvent` (play/pause/stop/seek/error transitions), or a
+ * `TimelineProjectEvent` emitted after a `setProject` hot-swap.
+ */
 export type TimelineLatestEvent<TEvent extends TimelineEvent = TimelineEvent> =
   | TimelineCueEvent<TEvent>
   | TimelinePlaybackEvent
   | TimelineProjectEvent<TEvent>;
 
+/** Options accepted by {@link useTimeline}. */
 export type UseTimelineOptions<TEvent extends TimelineEvent = TimelineEvent> = {
+  /**
+   * The sparse-cue timeline project to play. Passing a new reference
+   * hot-swaps the running engine's project via `setProject` instead of
+   * recreating the engine, unless construction previously failed for this
+   * exact object.
+   */
   project: TimelineProject<TEvent>;
+  /**
+   * Playback transport to drive the engine's clock. Defaults to
+   * `createClockTransport(browserClock)`, which the hook creates and
+   * disposes itself. Pass an explicit transport to share a clock across
+   * multiple engines or hooks.
+   */
   transport?: PlaybackTransport;
+  /** Forwarded to `TimelineEngine`'s constructor; bounds the scheduling lookahead window in milliseconds. */
   lookaheadMs?: number;
+  /**
+   * Engine-local loop flag: when `true`, playback repeats from beat 0 once
+   * it reaches the end of the timeline. Defaults to `false`; can also be
+   * changed at runtime via {@link UseTimelineState.setLoop}.
+   */
   loop?: boolean;
+  /** Forwarded to `TimelineEngine`'s constructor as `missedCuePolicy`; controls whether skipped intermediate cues are emitted or coalesced. */
   missedCuePolicy?: MissedStepPolicy;
+  /**
+   * Optional domain validator invoked once per event after Core's
+   * structural checks; throw inside it to reject a domain-invalid event.
+   */
   eventValidator?: TimelineEventValidator<TEvent>;
+  /** Called with every `TimelineCueEvent` the engine schedules. */
   onCue?: (event: TimelineCueEvent<TEvent>) => void;
+  /** Called on every playback state transition (play/pause/stop/seek/error). */
   onPlaybackChange?: (event: TimelinePlaybackEvent) => void;
+  /**
+   * Called with the engine's current `ChannelPosition` on every rAF tick
+   * while playing, and after seeks/project swaps. Use this (or
+   * {@link UseTimelineState.positionRef}) instead of `latestEventRef` for
+   * continuous progress UI, since position updates do not trigger a React
+   * re-render on their own.
+   */
   onPosition?: (position: ChannelPosition) => void;
+  /**
+   * Called when constructing the engine, or hot-swapping its project, throws.
+   * The error is also captured on {@link UseTimelineState.projectError}
+   * without throwing during render.
+   */
   onProjectError?: (error: Error) => void;
+  /**
+   * Called when a queued transport command (play/pause/stop/seek/...)
+   * rejects. The error is also captured on
+   * {@link UseTimelineState.transportError}; the rejected promise returned
+   * by the corresponding command method still rejects as well.
+   */
   onTransportError?: (error: unknown) => void;
 };
 
+/** State and controls returned by {@link useTimeline}. */
 export type UseTimelineState<TEvent extends TimelineEvent = TimelineEvent> = {
   /** The underlying TimelineEngine instance, or null when construction fails. */
   engine: TimelineEngine<TEvent> | null;
+  /** Current playback state, updated on every playback transition. */
   playbackState: PlaybackState;
+  /**
+   * Ref holding the engine's current `ChannelPosition`. Updated on every rAF
+   * tick while playing and after seeks/project swaps, without forcing a
+   * re-render — read it inside animation callbacks instead of depending on
+   * hook state for continuous progress.
+   */
   positionRef: MutableRefObject<ChannelPosition>;
-  latestEvent: TimelineLatestEvent<TEvent> | null;
+  /**
+   * Ref holding the most recent cue, playback, or project event emitted by
+   * the engine. Updated on every cue (not just once per frame), without
+   * forcing a re-render — read it inside imperative code, not during
+   * render. Consumers that need to repaint on every cue should track
+   * `onCue` into their own state instead, since a ref mutation does not
+   * itself schedule a render.
+   */
+  latestEventRef: MutableRefObject<TimelineLatestEvent<TEvent> | null>;
+  /**
+   * Error from the most recent engine construction or `setProject` call, or
+   * `null` if it succeeded. Construction/hot-swap failures are captured here
+   * rather than thrown during render.
+   */
   projectError: Error | null;
+  /** Error from the most recently rejected transport command, or `null`. */
   transportError: unknown | null;
+  /** The command currently at the head of the queue (running or waiting), or `null` if idle. */
   pendingOperation: TimelinePendingOperation | null;
+  /** `true` while any command is queued or running, i.e. `pendingOperation !== null`. */
   isBusy: boolean;
+  /** Starts or resumes playback. */
   play: () => Promise<void>;
+  /** Pauses playback, retaining the current position. */
   pause: () => Promise<void>;
+  /** Stops playback and resets position to the start. */
   stop: () => Promise<void>;
+  /** Plays if paused/stopped, or pauses if currently playing. */
   toggle: () => Promise<void>;
+  /** Seeks to an absolute position in milliseconds. */
   seekPositionMs: (positionMs: number) => Promise<void>;
+  /** Seeks to a specific beat. */
   seekBeat: (beat: number) => Promise<void>;
+  /** Sets the transport's playback rate (must be a finite number greater than 0). */
   setPlaybackRate: (rate: number) => Promise<void>;
+  /** Sets whether the transport loops at its known duration. */
   setTransportLoop: (loop: boolean) => Promise<void>;
+  /** Sets the engine-local loop flag (repeat from beat 0 at timeline end), independent of transport looping. */
   setLoop: (loop: boolean) => Promise<void>;
 };
 
@@ -99,8 +187,38 @@ const cancelScheduledFrame = (frameId: ReturnType<typeof setTimeout> | number): 
 };
 
 /**
- * Owns a TimelineEngine lifecycle, hot-swaps TimelineProject updates, and
- * exposes Playback v2 controls for sparse cue scheduling.
+ * Owns a `TimelineEngine` lifecycle: constructs it from a
+ * `TimelineProject<TEvent>` (sparse, arbitrary cue events at beat
+ * positions), hot-swaps the project when a new reference is passed, and
+ * disposes the engine (and any transport the hook created) on unmount.
+ * Commands are serialized through an internal queue, so calling several in a
+ * row runs them one after another in order rather than racing.
+ *
+ * Construction and project-hot-swap failures are captured on
+ * `projectError`/`onProjectError` instead of throwing during render.
+ * Continuous playback position is exposed both as `positionRef` (read
+ * without a re-render) and via the `onPosition` callback, since it changes
+ * every animation frame while playing.
+ *
+ * @typeParam TEvent - The application-defined cue event type carried by the timeline.
+ * @param options - Project, transport, and callback configuration. See {@link UseTimelineOptions}.
+ * @returns Playback state, position, latest event, errors, and transport controls. See {@link UseTimelineState}.
+ *
+ * @example
+ * ```tsx
+ * function CueTimeline({ project }: { project: TimelineProject<MyCueEvent> }) {
+ *   const { playbackState, play, pause } = useTimeline({
+ *     project,
+ *     onCue: (event) => console.log("cue fired", event.event),
+ *   });
+ *
+ *   return (
+ *     <button onClick={() => (playbackState === "playing" ? pause() : play())}>
+ *       {playbackState === "playing" ? "Pause" : "Play"}
+ *     </button>
+ *   );
+ * }
+ * ```
  */
 export function useTimeline<TEvent extends TimelineEvent = TimelineEvent>(
   options: UseTimelineOptions<TEvent>,
@@ -123,7 +241,7 @@ export function useTimeline<TEvent extends TimelineEvent = TimelineEvent>(
 
   const [engine, setEngine] = useState<TimelineEngine<TEvent> | null>(null);
   const [playbackState, setPlaybackState] = useState<PlaybackState>("stopped");
-  const [latestEvent, setLatestEvent] = useState<TimelineLatestEvent<TEvent> | null>(null);
+  const latestEventRef = useRef<TimelineLatestEvent<TEvent> | null>(null);
   const [projectError, setProjectError] = useState<Error | null>(null);
   const [transportError, setTransportError] = useState<unknown | null>(null);
   const [pendingOperation, setPendingOperation] = useState<TimelinePendingOperation | null>(null);
@@ -231,12 +349,12 @@ export function useTimeline<TEvent extends TimelineEvent = TimelineEvent>(
     setProjectError(null);
 
     const offCue = newEngine.on("cue", (event) => {
-      setLatestEvent(event);
+      latestEventRef.current = event;
       onCueRef.current?.(event);
     });
     const offPlayback = newEngine.on("playback", (event) => {
       setPlaybackState(event.snapshot.state);
-      setLatestEvent(event);
+      latestEventRef.current = event;
       positionRef.current = newEngine.getPosition();
       onPositionRef.current?.(positionRef.current);
       if (event.type === "error") {
@@ -246,7 +364,7 @@ export function useTimeline<TEvent extends TimelineEvent = TimelineEvent>(
       onPlaybackChangeRef.current?.(event);
     });
     const offProject = newEngine.on("project", (event) => {
-      setLatestEvent(event);
+      latestEventRef.current = event;
       positionRef.current = newEngine.getPosition();
       onPositionRef.current?.(positionRef.current);
     });
@@ -392,7 +510,7 @@ export function useTimeline<TEvent extends TimelineEvent = TimelineEvent>(
     engine,
     playbackState,
     positionRef,
-    latestEvent,
+    latestEventRef,
     projectError,
     transportError,
     pendingOperation,

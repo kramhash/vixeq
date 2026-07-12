@@ -13,6 +13,11 @@ import {
 } from "@vixeq/core";
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 
+/**
+ * Name of a `useSequencerEngine` command while it sits at the head of the
+ * internal command queue (queued or actively running). Reflected on
+ * {@link SequencerEngineHookState.pendingOperation}.
+ */
 export type SequencerEnginePendingOperation =
   | "play"
   | "pause"
@@ -23,43 +28,117 @@ export type SequencerEnginePendingOperation =
   | "setPlaybackRate"
   | "setTransportLoop";
 
+/**
+ * Union of the engine events that can be surfaced through
+ * {@link SequencerEngineHookState.latestEventRef}: a scheduled `StepEvent`, a
+ * `SequencerPlaybackEvent` (play/pause/stop/seek/error transitions), or a
+ * `ProjectEvent` emitted after a `setProject` hot-swap.
+ */
 export type SequencerEngineLatestEvent =
   | StepEvent
   | SequencerPlaybackEvent
   | ProjectEvent;
 
+/** Options accepted by {@link useSequencerEngine}. */
 export type SequencerEngineHookOptions = {
+  /**
+   * The step-sequencer project to play. Passing a new reference hot-swaps
+   * the running engine's project via `setProject` instead of recreating the
+   * engine, unless construction previously failed for this exact object.
+   */
   project: SequenceProject;
+  /**
+   * Playback transport to drive the engine's clock. Defaults to
+   * `createClockTransport(browserClock)`, which the hook creates and
+   * disposes itself. Pass an explicit transport to share a clock across
+   * multiple engines or hooks.
+   */
   transport?: PlaybackTransport;
+  /** Forwarded to `SequencerEngine`'s constructor; bounds the scheduling lookahead window in milliseconds. */
   lookaheadMs?: number;
+  /** Forwarded to `SequencerEngine`'s constructor; controls whether skipped intermediate steps are emitted or coalesced. */
   missedStepPolicy?: MissedStepPolicy;
+  /** Called with every `StepEvent` the engine schedules. */
   onStep?: (event: StepEvent) => void;
+  /** Called on every playback state transition (play/pause/stop/seek/error). */
   onPlaybackChange?: (event: SequencerPlaybackEvent) => void;
+  /**
+   * Called with the engine's current `ChannelPosition` on every rAF tick
+   * while playing, and after seeks/project swaps. Use this (or
+   * {@link SequencerEngineHookState.positionRef}) instead of `latestEventRef`
+   * for continuous progress UI, since position updates do not trigger a
+   * React re-render on their own.
+   */
   onPosition?: (position: ChannelPosition) => void;
+  /**
+   * Called when constructing the engine, or hot-swapping its project, throws.
+   * The error is also captured on
+   * {@link SequencerEngineHookState.projectError} without throwing during
+   * render.
+   */
   onProjectError?: (error: Error) => void;
+  /**
+   * Called when a queued transport command (play/pause/stop/seek/...)
+   * rejects. The error is also captured on
+   * {@link SequencerEngineHookState.transportError}; the rejected promise
+   * returned by the corresponding command method still rejects as well.
+   */
   onTransportError?: (error: unknown) => void;
 };
 
+/** State and controls returned by {@link useSequencerEngine}. */
 export type SequencerEngineHookState = {
   /** The underlying SequencerEngine instance, or null when construction fails. */
   engine: SequencerEngine | null;
+  /** Current playback state, updated on every playback transition. */
   playbackState: PlaybackState;
+  /**
+   * Ref holding the engine's current `ChannelPosition`. Updated on every rAF
+   * tick while playing and after seeks/project swaps, without forcing a
+   * re-render — read it inside animation callbacks instead of depending on
+   * hook state for continuous progress.
+   */
   positionRef: MutableRefObject<ChannelPosition>;
-  latestEvent: SequencerEngineLatestEvent | null;
+  /**
+   * Ref holding the most recent step, playback, or project event emitted by
+   * the engine. Updated on every step (not just once per frame), without
+   * forcing a re-render — read it inside imperative code, not during
+   * render. Consumers that need to repaint on every step (e.g. a moving
+   * playhead) should track `onStep` into their own state instead, since a
+   * ref mutation does not itself schedule a render.
+   */
+  latestEventRef: MutableRefObject<SequencerEngineLatestEvent | null>;
+  /**
+   * Error from the most recent engine construction or `setProject` call, or
+   * `null` if it succeeded. Construction/hot-swap failures are captured here
+   * rather than thrown during render.
+   */
   projectError: Error | null;
+  /** Error from the most recently rejected transport command, or `null`. */
   transportError: unknown | null;
+  /** The command currently at the head of the queue (running or waiting), or `null` if idle. */
   pendingOperation: SequencerEnginePendingOperation | null;
+  /** `true` while any command is queued or running, i.e. `pendingOperation !== null`. */
   isBusy: boolean;
+  /** Starts or resumes playback. */
   play: () => Promise<void>;
+  /** Pauses playback, retaining the current position. */
   pause: () => Promise<void>;
+  /** Stops playback and resets position to the start. */
   stop: () => Promise<void>;
+  /** Plays if paused/stopped, or pauses if currently playing. */
   toggle: () => Promise<void>;
+  /** Seeks to an absolute position in milliseconds. */
   seekPositionMs: (positionMs: number) => Promise<void>;
+  /** Seeks to a specific step index. */
   seekStep: (stepIndex: number) => Promise<void>;
+  /** Sets the transport's playback rate (must be a finite number greater than 0). */
   setPlaybackRate: (rate: number) => Promise<void>;
+  /** Sets whether the transport loops at its known duration. */
   setTransportLoop: (loop: boolean) => Promise<void>;
 };
 
+/** State and controls returned by {@link useSequencePlayer}, identical to {@link SequencerEngineHookState}. */
 export type SequencePlayerHookState = SequencerEngineHookState;
 
 class MissingEngineError extends Error {
@@ -94,6 +173,39 @@ const cancelScheduledFrame = (frameId: ReturnType<typeof setTimeout> | number): 
   clearTimeout(frameId as ReturnType<typeof setTimeout>);
 };
 
+/**
+ * Owns a `SequencerEngine` lifecycle: constructs it from a `SequenceProject`,
+ * hot-swaps the project when a new reference is passed, and disposes the
+ * engine (and any transport the hook created) on unmount. Commands
+ * (`play`/`pause`/`stop`/seeks/rate/loop changes) are serialized through an
+ * internal queue, so calling several in a row runs them one after another in
+ * order rather than racing.
+ *
+ * Construction and project-hot-swap failures are captured on
+ * `projectError`/`onProjectError` instead of throwing during render.
+ * Continuous playback position is exposed both as `positionRef` (read
+ * without a re-render) and via the `onPosition` callback, since it changes
+ * every animation frame while playing.
+ *
+ * @param options - Project, transport, and callback configuration. See {@link SequencerEngineHookOptions}.
+ * @returns Playback state, position, latest event, errors, and transport controls. See {@link SequencerEngineHookState}.
+ *
+ * @example
+ * ```tsx
+ * function StepSequencer({ project }: { project: SequenceProject }) {
+ *   const { playbackState, isBusy, play, pause, positionRef } = useSequencerEngine({
+ *     project,
+ *     onProjectError: (error) => console.error("Invalid project", error),
+ *   });
+ *
+ *   return (
+ *     <button disabled={isBusy} onClick={() => (playbackState === "playing" ? pause() : play())}>
+ *       {playbackState === "playing" ? "Pause" : "Play"}
+ *     </button>
+ *   );
+ * }
+ * ```
+ */
 export function useSequencerEngine(options: SequencerEngineHookOptions): SequencerEngineHookState {
   const { project, transport, lookaheadMs, missedStepPolicy } = options;
   const onStepRef = useLatestRef(options.onStep);
@@ -113,7 +225,7 @@ export function useSequencerEngine(options: SequencerEngineHookOptions): Sequenc
 
   const [engine, setEngine] = useState<SequencerEngine | null>(null);
   const [playbackState, setPlaybackState] = useState<PlaybackState>("stopped");
-  const [latestEvent, setLatestEvent] = useState<SequencerEngineLatestEvent | null>(null);
+  const latestEventRef = useRef<SequencerEngineLatestEvent | null>(null);
   const [projectError, setProjectError] = useState<Error | null>(null);
   const [transportError, setTransportError] = useState<unknown | null>(null);
   const [pendingOperation, setPendingOperation] = useState<SequencerEnginePendingOperation | null>(null);
@@ -219,12 +331,12 @@ export function useSequencerEngine(options: SequencerEngineHookOptions): Sequenc
     setProjectError(null);
 
     const offStep = newEngine.on("step", (event) => {
-      setLatestEvent(event);
+      latestEventRef.current = event;
       onStepRef.current?.(event);
     });
     const offPlayback = newEngine.on("playback", (event) => {
       setPlaybackState(event.snapshot.state);
-      setLatestEvent(event);
+      latestEventRef.current = event;
       positionRef.current = newEngine.getPosition();
       onPositionRef.current?.(positionRef.current);
       if (event.type === "error") {
@@ -234,7 +346,7 @@ export function useSequencerEngine(options: SequencerEngineHookOptions): Sequenc
       onPlaybackChangeRef.current?.(event);
     });
     const offProject = newEngine.on("project", (event) => {
-      setLatestEvent(event);
+      latestEventRef.current = event;
       positionRef.current = newEngine.getPosition();
       onPositionRef.current?.(positionRef.current);
     });
@@ -357,7 +469,7 @@ export function useSequencerEngine(options: SequencerEngineHookOptions): Sequenc
     engine,
     playbackState,
     positionRef,
-    latestEvent,
+    latestEventRef,
     projectError,
     transportError,
     pendingOperation,
@@ -373,6 +485,22 @@ export function useSequencerEngine(options: SequencerEngineHookOptions): Sequenc
   };
 }
 
+/**
+ * Alias for {@link useSequencerEngine} with a playback-focused name. Accepts
+ * the same options and returns the same state shape; use whichever name
+ * reads better at the call site.
+ *
+ * @param options - See {@link SequencerEngineHookOptions}.
+ * @returns See {@link SequencePlayerHookState}.
+ *
+ * @example
+ * ```tsx
+ * function Player({ project }: { project: SequenceProject }) {
+ *   const { play, pause, playbackState } = useSequencePlayer({ project });
+ *   return <button onClick={() => play()}>{playbackState}</button>;
+ * }
+ * ```
+ */
 export function useSequencePlayer(options: SequencerEngineHookOptions): SequencePlayerHookState {
   return useSequencerEngine(options);
 }

@@ -6,6 +6,17 @@
 
 - `@vixeq/core`: `default` preset added to `presets`.
 
+### Breaking
+
+- `@vixeq/react`: `useSequencerEngine`/`useSequencePlayer`, `useArrangement`,
+  and `useTimeline` replace the `useState`-backed `latestEvent` field with
+  `latestEventRef` (a `MutableRefObject`), so components that don't read it no
+  longer re-render on every step/cue. `@vixeq/player-react`'s
+  `SequencePlayerTransportState` mirrors the same rename.
+  `SequencePlayer`'s own playhead highlight behavior is unaffected — it
+  resets its internal step-highlight state on `stop()` to match. See the
+  [render-frugal migration guide](./docs/migrations/0.9-react-render-frugal.md).
+
 ### Notes
 
 - New brand assets (`brand/header.png` README hero banner, `brand/player.gif`

@@ -69,6 +69,9 @@ Deliver:
 - browser E2E
 - multi-example Pages deployment
 - finalized support and semver documentation
+- React hooks render-frugal refactor: `latestEvent` state → `latestEventRef`
+  (task table R6; see the render-frugal migration guide and its independent
+  second-reviewer pass)
 
 ### 1.0.0-rc.1 and 1.0.0
 
@@ -315,7 +318,7 @@ where applicable:
 - `engine`
 - `playbackState`
 - `positionRef`
-- `latestEvent`
+- `latestEventRef`
 - `projectError`
 - `transportError`
 - `play`, `pause`, `stop`, `toggle`
@@ -329,6 +332,30 @@ onPosition?.(position)
 ```
 
 This prevents full component rerenders on every animation frame.
+
+The latest discrete event (step/cue, playback transition, or project
+hot-swap) is likewise exposed as a ref, not `useState`:
+
+```ts
+latestEventRef.current // StepEvent | SequencerPlaybackEvent | ProjectEvent | null
+onStep?.(event)
+onPlaybackChange?.(event)
+```
+
+Rationale: a hook consumer that never reads the latest event still paid for
+a `useState` update on every scheduled step (up to hundreds of times per
+second at high `stepsPerBeat` × `bpm`), regardless of whether it read the
+field. A repository-wide audit found exactly one consumer reading the
+`useState`-backed field (`@vixeq/player-react`'s `SequencePlayer`, for its
+playhead highlight); every other consumer either read step data via the
+`onStep`/`onCue` callback into its own state, or paid the re-render for
+nothing. `positionRef` already established the ref-for-continuous-data
+pattern; `latestEventRef` extends the same pattern to discrete events.
+Consumers that must repaint on every step (e.g. a moving playhead) do so by
+tracking `onStep` into local state, exactly as `SequencePlayer` does
+internally — they are not expected to read `latestEventRef` inside a render
+and re-render from it, since a ref mutation does not itself schedule a
+render.
 
 Error rules:
 
@@ -468,8 +495,10 @@ ranges.
 - Add a large fixture (target: 100,000 events) to prevent algorithmic
   regression without using unstable wall-clock timing as a CI threshold.
 
-Add `useTimeline()` in `@vixeq/react`. It exposes discrete React state and a
-mutable position ref, and it does not connect to `useAnimatedChannels`.
+Add `useTimeline()` in `@vixeq/react`. Discrete cue/playback/project events
+are exposed via `latestEventRef` (a mutable ref, not `useState`) plus the
+`onCue`/`onPlaybackChange` callbacks, alongside the mutable position ref; it
+does not connect to `useAnimatedChannels`.
 
 ## 8. ArrangementProject v2
 
@@ -543,8 +572,15 @@ Coverage gates:
 
 API and package gates:
 
-- Use API Extractor and commit one `.api.md` report per public package.
-- CI fails on unreviewed API report differences.
+- Use API Extractor and commit one `.api.md` report per public package
+  (`packages/{core,react,player-react}/etc/*.api.md`; `core` has two, one per
+  entry point — `core.api.md` and `core-dom.api.md`).
+- CI fails on unreviewed API report differences (`pnpm api:check`, run by
+  `.github/workflows/ci.yml` on every pull request).
+- After an intentional public API change, run `pnpm api:update` to
+  regenerate the affected report(s) locally, review the diff, and commit
+  the updated `.api.md` file(s) in the same change as the API modification
+  (rule 6 of the collaboration protocol below).
 - Use `publint` and Are The Types Wrong on packed packages.
 - Test clean ESM/CJS/type/SSR imports and player CSS exports from tarballs.
 - Official examples consume packed prerelease packages before stable release.
@@ -642,12 +678,13 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | T6 | 0.8 | Integrate Timeline v2 into `website-pulse` | T3, T5 | done | Codex (author), Claude (reviewer, paperwork for SequencerEngine fix) | `examples/website-pulse/`, `packages/core/src/SequencerEngine.ts` (P3 loop-resume regression fix surfaced by this task) |
 | T7 | 0.8 | Add v1-to-v2 migration fixtures and beta smoke tests | T2, T4, T6 | done | Codex (author), Claude (reviewer, N1 fix author) | Core tests, fixtures, docs |
 | T8 | 0.8 | Promote 0.8.0 stable release docs and package versions | T7 | done | Codex (author), Claude (reviewer, CHANGELOG fix, npm publish + registry smoke) | package metadata, README/API docs, release docs |
-| R0 | 0.9 | Add API Extractor reports and API-diff CI | P8, T7 | pending | — | package configs, `.github/` |
+| R0 | 0.9 | Add API Extractor reports and API-diff CI | P8, T7 | done | Claude (author + reviewer) | package configs, `.github/` |
 | R1 | 0.9 | Add coverage configuration and behavior-matrix gates | P8, T7 | pending | — | Vitest configs, CI |
 | R2 | 0.9 | Add Node/React/TypeScript/package compatibility fixtures | P8, T7 | pending | — | fixtures, CI |
 | R3 | 0.9 | Add three-browser media and product E2E | T6 | pending | — | Playwright tests, CI |
 | R4 | 0.9 | Build multi-example Pages index and deploy workflow | T6 | pending | — | apps/site or deploy scripts, `.github/` |
 | R5 | 0.9 | Finalize support, semver, migration, and release docs | R0–R4 | pending | — | root/package docs |
+| R6 | 0.9 | React hooks render-frugal: `latestEvent` state → `latestEventRef` | P6, T5 | done | Claude (author + reviewer) | `packages/react/src/`, `packages/player-react/src/SequencePlayer.tsx` |
 
 ### Integration order
 

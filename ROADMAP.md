@@ -215,6 +215,8 @@ to the same timing map without building a DAW editor.
 - [ ] Add pull-request CI for typecheck, tests, builds, API reports, coverage, compatibility, package smoke tests, and browser E2E.
 - [ ] Polish `website-pulse`, `cycling-workout`, and playground release fixtures.
 - [ ] Publish a Pages index with `/playground/`, `/website-pulse/`, and `/cycling-workout/`.
+- [x] React hooks render-frugal refactor: `latestEvent` state → `latestEventRef` ref
+  (see the render-frugal migration guide).
 
 All public packages use lockstep versions, including prereleases, through these milestones.
 

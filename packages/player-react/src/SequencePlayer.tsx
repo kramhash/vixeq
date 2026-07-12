@@ -29,11 +29,20 @@ import {
   type PointerEvent,
 } from "react";
 
+/** A single addressable step: which track it belongs to and its index within that track's steps. */
 export type SelectedStep = {
   trackId: string;
   stepIndex: number;
 };
 
+/**
+ * Discriminates why a {@link SequencePlayerProjectChange} fired, so a consumer can persist,
+ * batch, or selectively react to edits without diffing the whole project.
+ *
+ * `"project:replace"` is reserved for callers that swap in an entirely new project themselves;
+ * `SequencePlayer` never dispatches it internally (all edits from its own UI report one of the
+ * other, more specific reasons).
+ */
 export type SequencePlayerChangeReason =
   | "bpm"
   | "track:add"
@@ -44,6 +53,14 @@ export type SequencePlayerChangeReason =
   | "step:value"
   | "project:replace";
 
+/**
+ * Payload passed to {@link SequencePlayerProps.onProjectChange} for every edit made through the
+ * player's UI (BPM field, add/remove/rename/enable a track, click or drag a step's value).
+ *
+ * `trackId` is present for track- and step-level reasons ("track:remove", "track:rename",
+ * "track:enabled", "step:toggle", "step:value"); `stepIndex` is present only for the step-level
+ * reasons ("step:toggle", "step:value"). Both are omitted for "bpm" and "track:add".
+ */
 export type SequencePlayerProjectChange = {
   project: SequenceProject;
   reason: SequencePlayerChangeReason;
@@ -51,32 +68,79 @@ export type SequencePlayerProjectChange = {
   stepIndex?: number;
 };
 
+/**
+ * Shape of the live transport/engine state produced by the `useSequencePlayer` hook (from
+ * `@vixeq/react`), mirrored here for consumers who want to build their own transport UI instead
+ * of relying on the built-in bar that {@link SequencePlayer} renders when
+ * `showTransportControls` is true.
+ */
 export type SequencePlayerTransportState = {
   playbackState: PlaybackState;
   positionRef: MutableRefObject<ChannelPosition>;
   pendingOperation: SequencerEnginePendingOperation | null;
   isBusy: boolean;
-  latestEvent: SequencerEngineLatestEvent | null;
+  latestEventRef: MutableRefObject<SequencerEngineLatestEvent | null>;
   projectError: Error | null;
   transportError: unknown | null;
 };
 
+/**
+ * Imperative handle exposed via `ref` on {@link SequencePlayer} / {@link StandaloneSequencePlayer}.
+ * Every method proxies to the underlying `SequencerEngine`/`PlaybackTransport` through the
+ * `useSequencePlayer` command queue, so calls made in quick succession are serialized rather than
+ * racing each other.
+ */
 export type SequencePlayerRef = {
+  /** Start (or resume) playback. */
   play: () => Promise<void>;
+  /** Pause playback, retaining the current transport position. */
   pause: () => Promise<void>;
+  /** Stop playback and reset the transport position. */
   stop: () => Promise<void>;
+  /** Pause if currently playing, otherwise play. */
   toggle: () => Promise<void>;
+  /** Seek playback to a specific step index. */
   seekStep: (stepIndex: number) => Promise<void>;
+  /** Seek playback to a specific transport position, in milliseconds. */
   seekPositionMs: (positionMs: number) => Promise<void>;
+  /** Change the playback rate (1 = normal speed). */
   setPlaybackRate: (rate: number) => Promise<void>;
+  /** Enable or disable transport looping. */
   setTransportLoop: (loop: boolean) => Promise<void>;
 };
 
+/**
+ * Shared prop surface between {@link SequencePlayer} (controlled) and
+ * {@link StandaloneSequencePlayer} (uncontrolled, see {@link StandaloneSequencePlayerProps}).
+ */
 type SequencePlayerBaseProps = {
+  /**
+   * The project to render and play. The player is fully controlled: it never mutates `project`
+   * in place, so this should be the same value most recently reported via `onProjectChange`
+   * (or the initial project on first render).
+   */
   project: SequenceProject;
+  /**
+   * Called whenever the player produces an edited project — from the BPM field, the track
+   * add/remove/rename/enable controls, or clicking/dragging a step cell. The component does not
+   * update itself; the caller must store `change.project` and pass it back in as `project`
+   * (see the `@example` on {@link SequencePlayer}).
+   */
   onProjectChange: (change: SequencePlayerProjectChange) => void;
+  /**
+   * Fired on every sequencer step boundary during playback (the underlying `SequencerEngine`'s
+   * `"step"` event). Use for lightweight, beat-synced side effects outside of React state.
+   */
   onStep?: (event: StepEvent) => void;
+  /**
+   * Fired on transport/playback state changes (play, pause, stop, seek, rate/loop change,
+   * buffering, end, error) reported by the underlying `SequencerEngine`.
+   */
   onPlaybackChange?: (event: SequencerPlaybackEvent) => void;
+  /**
+   * Fired whenever the selected step cell changes, either from a click or programmatically;
+   * `null` when the selection is cleared.
+   */
   onSelectedStepChange?: (selectedStep: SelectedStep | null) => void;
   /**
    * Called with the underlying SequencerEngine when it becomes available, and
@@ -84,35 +148,64 @@ type SequencePlayerBaseProps = {
    * Pass the received engine to useAnimatedChannels for zero-re-render animation.
    */
   onEngineChange?: (engine: SequencerEngine | null) => void;
+  /**
+   * Optional external `PlaybackTransport` to drive playback timing (e.g. synced to an audio or
+   * video element). When omitted, the engine drives its own internal clock.
+   */
   transport?: PlaybackTransport;
+  /**
+   * Whether to render the built-in Play/Stop/BPM transport bar. Defaults to `true`; set to
+   * `false` to render only the step grid and inspector and drive playback via `ref` instead
+   * ({@link SequencePlayerRef}).
+   */
   showTransportControls?: boolean;
+  /** Extra class name(s) appended to the root `<section>` element, alongside `"vixeq-player"`. */
   className?: string;
+  /** Inline styles applied to the root `<section>` element (merged with the internal `--vixeq-step-count` custom property). */
   style?: CSSProperties;
 };
 
+/** Props for {@link SequencePlayer}, documented on each field above. */
 export type SequencePlayerProps = SequencePlayerBaseProps;
 
+/**
+ * Props for {@link StandaloneSequencePlayer}. Identical to {@link SequencePlayerProps} except
+ * `project`/`onProjectChange` are replaced by an optional uncontrolled `defaultProject` (used
+ * once to seed internal state) and an optional `onProjectChange` observer callback.
+ */
 export type StandaloneSequencePlayerProps = Omit<SequencePlayerBaseProps, "project" | "onProjectChange"> & {
+  /**
+   * Initial project used to seed the component's internal state on mount (read once via a lazy
+   * `useState` initializer — later changes to this prop are ignored). Defaults to a 4-lane empty
+   * project created with `createProject`.
+   */
   defaultProject?: SequenceProject;
+  /**
+   * Optional observer invoked after every edit, in addition to the component updating its own
+   * internal project state. Unlike {@link SequencePlayerProps.onProjectChange}, this does not
+   * need to write the project back anywhere — it is notification-only.
+   */
   onProjectChange?: (change: SequencePlayerProjectChange) => void;
 };
 
 const formatValue = (value: number): string => value.toFixed(2);
 
-const hasStepIndex = (event: SequencerEngineLatestEvent | null): event is StepEvent | Extract<SequencerEngineLatestEvent, { stepIndex: number }> =>
-  event !== null && "stepIndex" in event;
-
+/**
+ * Derives the currently playing step index for the grid/readout highlight.
+ * Sourced from the component's own `onStep`-tracked state (see
+ * `latestStep` below) rather than the hook's `latestEventRef`, since a ref
+ * mutation does not itself schedule a re-render — {@link SequencePlayer}
+ * needs a repaint on every step, so it tracks step events into local state
+ * instead of reading the ref during render.
+ */
 const deriveCurrentStep = (
   project: SequenceProject,
-  latestEvent: SequencerEngineLatestEvent | null,
+  latestStep: StepEvent | null,
   position: ChannelPosition,
 ): number => {
   const stepCount = Math.max(1, project.stepCount);
-  if (hasStepIndex(latestEvent)) {
-    return ((latestEvent.stepIndex % stepCount) + stepCount) % stepCount;
-  }
-  if (latestEvent && "snapshot" in latestEvent && "stepIndex" in latestEvent.snapshot) {
-    return ((latestEvent.snapshot.stepIndex % stepCount) + stepCount) % stepCount;
+  if (latestStep !== null) {
+    return ((latestStep.stepIndex % stepCount) + stepCount) % stepCount;
   }
 
   const stepDurationMs = 60_000 / project.bpm / project.stepsPerBeat;
@@ -125,6 +218,35 @@ const readPointerValue = (event: PointerEvent<HTMLElement>): number => {
   return Math.min(1, Math.max(0, ratio));
 };
 
+/**
+ * Editable, controlled React GUI for a {@link SequenceProject}: a per-track step grid, a value
+ * inspector for the selected step, and (optionally) a built-in transport bar (Play/Pause, Stop,
+ * BPM). Playback is driven by the `useSequencePlayer` hook from `@vixeq/react`, so scheduling,
+ * position tracking, and the step/playback event stream all come from a real `SequencerEngine`
+ * rather than being simulated in the UI.
+ *
+ * The component never mutates `project` in place. Every edit — BPM change, add/remove/rename/
+ * enable a track, click or drag a step's value — is reported via `onProjectChange`, and the
+ * caller is expected to feed the updated project back in as the `project` prop. Attach a `ref`
+ * ({@link SequencePlayerRef}) to drive playback imperatively (e.g. from external transport UI,
+ * keyboard shortcuts, or tests) independently of the built-in transport bar.
+ *
+ * @example
+ * ```tsx
+ * function Editor() {
+ *   const [project, setProject] = useState(() =>
+ *     createProject({ trackNames: ["Kick", "Snare"] }),
+ *   );
+ *
+ *   return (
+ *     <SequencePlayer
+ *       project={project}
+ *       onProjectChange={(change) => setProject(change.project)}
+ *     />
+ *   );
+ * }
+ * ```
+ */
 export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>(function SequencePlayer(
   {
     project,
@@ -141,10 +263,30 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
   ref,
 ) {
   const [selected, setSelected] = useState<SelectedStep | null>(null);
+  const [latestStep, setLatestStep] = useState<StepEvent | null>(null);
   const draggingRef = useRef(false);
   const pointerStartRef = useRef<{ x: number; y: number; trackId: string; stepIndex: number } | null>(null);
-  const player = useSequencePlayer({ project, onStep, onPlaybackChange, transport });
-  const currentStep = deriveCurrentStep(project, player.latestEvent, player.positionRef.current);
+  const handleStep = useCallback(
+    (event: StepEvent) => {
+      setLatestStep(event);
+      onStep?.(event);
+    },
+    [onStep],
+  );
+  const handlePlaybackChange = useCallback(
+    (event: SequencerPlaybackEvent) => {
+      // stop() resets the engine's step position but emits no "step" event, so the
+      // step-grid/readout highlight must be reset here too, or it stays frozen on the
+      // last-played step instead of following the transport back to position 0.
+      if (event.type === "stop") {
+        setLatestStep(null);
+      }
+      onPlaybackChange?.(event);
+    },
+    [onPlaybackChange],
+  );
+  const player = useSequencePlayer({ project, onStep: handleStep, onPlaybackChange: handlePlaybackChange, transport });
+  const currentStep = deriveCurrentStep(project, latestStep, player.positionRef.current);
   const isPlaying = player.playbackState === "playing";
   const primaryLabel = player.pendingOperation
     ? "Working..."
@@ -488,6 +630,16 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
   );
 });
 
+/**
+ * Uncontrolled convenience wrapper around {@link SequencePlayer}: it owns the `project` state
+ * itself (seeded once from `defaultProject`, or a default 4-lane project) instead of requiring
+ * the host to store it. Every edit updates that internal state automatically; the optional
+ * `onProjectChange` prop is still invoked afterward, purely as an observer.
+ *
+ * Reach for this when you just want a working player without wiring up controlled state; use
+ * {@link SequencePlayer} directly when the host application needs to own or persist the project
+ * (e.g. save to disk, undo/redo, sync across clients).
+ */
 export const StandaloneSequencePlayer = forwardRef<SequencePlayerRef, StandaloneSequencePlayerProps>(
   function StandaloneSequencePlayer({ defaultProject, onProjectChange, ...props }, ref) {
     const [project, setProject] = useState(() => defaultProject ?? createProject({ trackNames: ["Lane 1", "Lane 2", "Lane 3", "Lane 4"] }));
