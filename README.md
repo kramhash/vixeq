@@ -58,6 +58,11 @@ pnpm --filter vixeq-example-cycling-workout dev
 
 The hosted playground demonstrates the full package stack: https://kramhash.github.io/vixeq/
 
+## Documentation
+
+Guides and the generated API reference for all three packages are published at
+https://kramhash.github.io/vixeq/docs/.
+
 <img src="brand/player.gif" alt="Vixeq playground: dark theme, step editing, and PNG export" width="480" />
 
 ## Package Status

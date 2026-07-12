@@ -76,6 +76,35 @@ const reportListenerError = (
   }
 };
 
+/**
+ * Plays and samples a single looping {@link SequenceProject}.
+ *
+ * The engine owns step scheduling (emitting `"step"` events at each step
+ * boundary), transport control (play/pause/stop/seek), and continuous
+ * channel sampling — interpolated 0–1 values per track, e.g. for driving
+ * animation via {@link SequencerEngine.sampleChannels}. It drives itself off
+ * a `PlaybackTransport` — either one you supply (to sync against an
+ * `<audio>` element or other external clock) or, if `transport` is omitted
+ * from the constructor options, an Engine-owned transport backed by the
+ * browser clock (`browserClock`, via `createClockTransport`), which the
+ * engine disposes automatically.
+ *
+ * The project is treated as looping forever; use
+ * {@link SequencerEngine.setProject} to swap in a new `SequenceProject`
+ * without resetting playback — position is preserved proportionally by beat.
+ *
+ * @example
+ * ```ts
+ * const engine = new SequencerEngine(createProject());
+ * const unsubscribe = engine.on("step", (event) => {
+ *   console.log(event.stepIndex, event.tracks);
+ * });
+ * await engine.play();
+ * // ...
+ * unsubscribe();
+ * engine.dispose();
+ * ```
+ */
 export class SequencerEngine {
   private project: SequenceProject;
   private readonly transport: PlaybackTransport;
@@ -98,6 +127,18 @@ export class SequencerEngine {
   private projectAnchor: ProjectPositionAnchor | null = null;
   private readonly pendingCommandEvents: PlaybackTransportEvent["type"][] = [];
 
+  /**
+   * @param project - Initial {@link SequenceProject} to load. Validated
+   *   eagerly against {@link validateProject}.
+   * @param options - See {@link SequencerEngineOptions}. All fields are
+   *   optional; omitting `transport` gives the engine its own browser-clock
+   *   transport (created via `createClockTransport(browserClock)`), which it
+   *   owns and disposes automatically.
+   * @throws {TypeError} if `options` is not an object, or `project` fails
+   *   validation.
+   * @throws {RangeError} if `options.lookaheadMs` is provided but not a
+   *   finite, non-negative number.
+   */
   constructor(project: SequenceProject, options: SequencerEngineOptions = {}) {
     if (!isRecord(options)) {
       throw new TypeError("SequencerEngine options must be an object.");
@@ -150,24 +191,60 @@ export class SequencerEngine {
     };
   }
 
+  /**
+   * Start (or resume) playback on the underlying transport.
+   *
+   * When resuming from `"stopped"` or `"ended"`, immediately emits a
+   * `"step"` event (`cause: "play"`) for the current position, then
+   * schedules the next tick.
+   *
+   * @returns A promise that resolves once the transport has started.
+   * @throws {PlaybackError} with code `"TRANSPORT_DISPOSED"` if the
+   *   transport has been disposed (e.g. the underlying `<audio>` element
+   *   was torn down).
+   */
   play(): Promise<void> {
     this.assertLive();
     if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
     return this.runTransportCommand("play", () => this.transport.play());
   }
 
+  /**
+   * Pause playback on the underlying transport. Position is preserved; call
+   * {@link SequencerEngine.play} to resume from the same spot.
+   *
+   * @returns A promise that resolves once the transport has paused.
+   * @throws {PlaybackError} with code `"TRANSPORT_DISPOSED"` if the
+   *   transport has been disposed.
+   */
   pause(): Promise<void> {
     this.assertLive();
     if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
     return this.runTransportCommand("pause", () => this.transport.pause());
   }
 
+  /**
+   * Stop playback and reset the logical position back to step 0.
+   *
+   * @returns A promise that resolves once the transport has stopped.
+   * @throws {PlaybackError} with code `"TRANSPORT_DISPOSED"` if the
+   *   transport has been disposed.
+   */
   stop(): Promise<void> {
     this.assertLive();
     if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
     return this.runTransportCommand("stop", () => this.transport.stop());
   }
 
+  /**
+   * Seek to an absolute logical position, in milliseconds.
+   *
+   * @param positionMs - Target position; must be finite and non-negative.
+   * @returns A promise that resolves once the seek completes.
+   * @throws {RangeError} if `positionMs` is not finite or is negative.
+   * @throws {PlaybackError} with code `"TRANSPORT_DISPOSED"` if the
+   *   transport has been disposed.
+   */
   seekPositionMs(positionMs: number): Promise<void> {
     this.assertLive();
     assertFiniteNonNegative(positionMs, "positionMs");
@@ -175,12 +252,28 @@ export class SequencerEngine {
     return this.runTransportCommand("seek", () => this.transport.seekMs(positionMs));
   }
 
+  /**
+   * Seek to the start of a specific step in the project's step grid.
+   * Convenience wrapper around {@link SequencerEngine.seekPositionMs}.
+   *
+   * @param stepIndex - Integer index in `[0, project.stepCount)`.
+   * @returns A promise that resolves once the seek completes.
+   * @throws {RangeError} if `stepIndex` is not an integer in range.
+   */
   seekStep(stepIndex: number): Promise<void> {
     this.assertLive();
     assertStepIndex(stepIndex, this.project.stepCount);
     return this.seekPositionMs(stepIndex * this.getStepDurationMs());
   }
 
+  /**
+   * Tear down the engine: clears any pending scheduling timer, unsubscribes
+   * from the transport, and clears all listeners. If the engine created its
+   * own transport (i.e. `transport` was omitted from the constructor
+   * options), that transport is disposed too — a transport you supplied
+   * yourself is left untouched. Safe to call more than once; subsequent
+   * calls are no-ops. After disposal, most other methods throw.
+   */
   dispose(): void {
     if (this.disposed) {
       return;
@@ -197,6 +290,18 @@ export class SequencerEngine {
     }
   }
 
+  /**
+   * Swap in a new {@link SequenceProject} while preserving playback position
+   * proportionally by beat (e.g. beat 3.5 of the old project maps to beat
+   * 3.5 of the new one, re-scaled for any BPM change) instead of resetting
+   * to 0. Emits a `"project"` event describing which channel values changed
+   * as a result of the swap.
+   *
+   * No-op if `project` is reference-equal to the currently loaded project.
+   *
+   * @param project - The new project to load. Validated eagerly.
+   * @throws {TypeError} if `project` fails {@link validateProject}.
+   */
   setProject(project: SequenceProject): void {
     this.assertLive();
     assertValidProject(project);
@@ -260,11 +365,30 @@ export class SequencerEngine {
     };
   }
 
+  /**
+   * Sample every track's value at the engine's current logical position,
+   * interpolating between the active step and the next.
+   *
+   * @param easing - Easing curve applied to the interpolation phase between
+   *   steps. Defaults to {@link linear}.
+   * @returns A record of trackId → 0–1 value; disabled tracks sample to 0.
+   */
   sampleChannels(easing: EasingFunction = linear): Record<string, number> {
     this.assertLive();
     return this.sampleProjectChannels(this.project, this.getLogicalPositionMs(), easing);
   }
 
+  /**
+   * Sample every track's value at an arbitrary logical position, without
+   * affecting playback state. Useful for scrubbing/preview UIs.
+   *
+   * @param timeMs - Logical position, in ms, to sample at; must be finite
+   *   and non-negative.
+   * @param easing - Easing curve applied to the interpolation phase between
+   *   steps. Defaults to {@link linear}.
+   * @returns A record of trackId → 0–1 value; disabled tracks sample to 0.
+   * @throws {RangeError} if `timeMs` is not finite or is negative.
+   */
   sampleChannelsAt(timeMs: number, easing: EasingFunction = linear): Record<string, number> {
     this.assertLive();
     assertFiniteNonNegative(timeMs, "timeMs");

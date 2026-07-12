@@ -3,6 +3,17 @@ import type { SequenceProject } from "./types";
 const makeSteps = (active: number[], values?: Record<number, number>): number[] =>
   Array.from({ length: 16 }, (_, index) => (active.includes(index) ? values?.[index] ?? 1 : 0));
 
+/**
+ * Built-in example {@link SequenceProject}s, keyed by name (`"default"`,
+ * `"pulse"`, `"alternating"`). Useful as starting points for demos, tests, or
+ * a "load preset" UI — pass one directly to `new SequencerEngine(...)`, or as
+ * the seed state for the `project.ts` editing helpers.
+ *
+ * @example
+ * ```ts
+ * const engine = new SequencerEngine(presets.pulse);
+ * ```
+ */
 export const presets: Record<string, SequenceProject> = {
   default: {
     version: 1,

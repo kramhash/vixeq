@@ -1,0 +1,33 @@
+/* Vixeq brand palette, sourced from apps/playground/src/styles.css */
+:root {
+  --sl-color-accent-low: #142522;
+  --sl-color-accent: #2f8790;
+  --sl-color-accent-high: #93e3e9;
+
+  --sl-color-white: #edf5f2;
+  --sl-color-gray-1: #edf5f2;
+  --sl-color-gray-2: #c7d3ce;
+  --sl-color-gray-3: rgb(233 255 248 / 60%);
+  --sl-color-gray-4: #2a302b;
+  --sl-color-gray-5: #1c211d;
+  --sl-color-gray-6: #151916;
+  --sl-color-black: #0e1210;
+
+  --sl-font: "SUSE Mono", ui-monospace, monospace;
+}
+
+:root[data-theme="light"] {
+  --sl-color-accent-low: #d9f4f6;
+  --sl-color-accent: #1f6b73;
+  --sl-color-accent-high: #0e454c;
+
+  --sl-color-white: #0e1210;
+  --sl-color-gray-1: #151916;
+  --sl-color-gray-2: #2a302b;
+  --sl-color-gray-3: #4a534d;
+  --sl-color-gray-4: #bdc7bd;
+  --sl-color-gray-5: #e4e9e3;
+  --sl-color-gray-6: #f3f6f2;
+  --sl-color-gray-7: #fbfcfa;
+  --sl-color-black: #ffffff;
+}

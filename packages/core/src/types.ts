@@ -43,6 +43,14 @@ export type StepEvent = {
   timestamp?: number;
 };
 
+/**
+ * What triggered a {@link StepEvent}.
+ *
+ * `"loop"` is emitted when an attached transport wraps its position on a
+ * natural loop: the engine emits one `"loop"`-caused step immediately at the
+ * wrapped position, re-anchoring step emission so it does not permanently
+ * stop advancing after the first loop.
+ */
 export type StepEventCause = "play" | "tick" | "seek" | "project-change" | "loop";
 
 export type TransportEvent =
@@ -169,10 +177,36 @@ export type ChannelPosition = {
 };
 
 export type SequencerEngineOptions = {
+  /**
+   * The playback clock/transport driving this engine. Supply your own (e.g.
+   * wrapping an `<audio>` element) to keep step and channel timing in sync
+   * with an external clock. If omitted, the engine creates and owns a
+   * transport backed by the browser clock (`browserClock`, via
+   * `createClockTransport`) and disposes it automatically when the engine
+   * itself is disposed.
+   */
   transport?: PlaybackTransport;
+  /**
+   * How far ahead (in ms) the engine schedules its next internal tick.
+   * Smaller values reduce worst-case step-emission latency at the cost of
+   * more timer churn. Default 25.
+   */
   lookaheadMs?: number;
+  /**
+   * How to handle a scheduling gap where more than one step boundary was
+   * crossed since the last tick (e.g. after a slow frame or tab
+   * backgrounding). `"emit"` (default) emits a `"step"` event for every
+   * skipped step in order; `"skip"` emits only the most recent step and
+   * drops the ones in between.
+   */
   missedStepPolicy?: MissedStepPolicy;
+  /** Convenience shorthand for `engine.on("step", onStep)`, registered during construction. */
   onStep?: SequencerEventHandler<"step">;
+  /**
+   * Called when a `"step"`, `"playback"`, or `"project"` listener throws.
+   * If omitted (or if this callback itself throws), the error is routed to
+   * `globalThis.reportError` when available, otherwise `console.error`.
+   */
   onListenerError?: (error: unknown, context: ListenerErrorContext) => void;
 };
 

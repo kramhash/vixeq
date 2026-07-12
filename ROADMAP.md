@@ -254,6 +254,14 @@ These tasks run in parallel with the release cycles above:
 
 - **Update `README.md`**: list the current examples and keep the scope, package status, and exclusions aligned with shipped behavior.
 - **Preset expansion**: add more named presets to `presets.ts` (e.g., triplet, waltz, slow pulse, burst). Started with a `default` preset; the named rhythmic variants are still open.
+- **Docs site (`apps/docs`)** ✓: a VitePress + TypeDoc reference site, published to
+  `/docs/` alongside the playground. TSDoc comments in `packages/*/src` are now the
+  primary source for the public API reference (generated on every build via
+  `pnpm --filter vixeq-docs docs:api`); the old hand-written `docs/api/*.md` files
+  were retired in favor of it. This is independent of **R0** (0.9.0 — committed API
+  Extractor reports for CI diffing, a machine-readable contract check) and **R4**
+  (0.9.0 — a Pages index unifying `/playground/`, `/website-pulse/`, and
+  `/cycling-workout/`), neither of which this work replaces.
 
 ## Explicitly Out of Scope
 
