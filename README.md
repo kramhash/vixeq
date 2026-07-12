@@ -1,4 +1,4 @@
-<img src="brand/header.png" alt="Vixeq One pulse. Any motion."  />
+<img src="brand/header.png" alt="Vixeq — One pulse, Any motion" />
 
 Vixeq is a UI-agnostic step sequencer engine for `0.0` to `1.0` control values.
 
@@ -57,6 +57,8 @@ pnpm --filter vixeq-example-cycling-workout dev
 - `examples/cycling-workout`: editable interval cycling targets played as a non-musical arrangement.
 
 The hosted playground demonstrates the full package stack: https://kramhash.github.io/vixeq/
+
+<img src="brand/player.gif" alt="Vixeq playground: dark theme, step editing, and PNG export" width="480" />
 
 ## Package Status
 

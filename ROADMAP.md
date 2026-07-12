@@ -253,7 +253,7 @@ All public packages use lockstep versions, including prereleases, through these 
 These tasks run in parallel with the release cycles above:
 
 - **Update `README.md`**: list the current examples and keep the scope, package status, and exclusions aligned with shipped behavior.
-- **Preset expansion**: add more named presets to `presets.ts` (e.g., triplet, waltz, slow pulse, burst).
+- **Preset expansion**: add more named presets to `presets.ts` (e.g., triplet, waltz, slow pulse, burst). Started with a `default` preset; the named rhythmic variants are still open.
 
 ## Explicitly Out of Scope
 

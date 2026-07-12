@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added
+
+- `@vixeq/core`: `default` preset added to `presets`.
+
+### Notes
+
+- New brand assets (`brand/header.png` README hero banner, `brand/player.gif`
+  demo capture) and a redrawn `brand/vixeq-logo.svg` (rounded-corner grid
+  cells instead of plain rects).
+
 ## 0.8.0 - 2026-07-11
 
 Stable release of Timing/Timeline/Arrangement v2, promoting the 0.8 beta
