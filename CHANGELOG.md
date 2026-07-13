@@ -5,6 +5,11 @@
 ### Added
 
 - `@vixeq/core`: `default` preset added to `presets`.
+- Final pre-1.0 release-readiness docs:
+  [`SUPPORT.md`](./SUPPORT.md),
+  [`docs/migrations/README.md`](./docs/migrations/README.md),
+  [`docs/release/0.9-release-checklist.md`](./docs/release/0.9-release-checklist.md), and
+  [`docs/release/1.0-release-checklist.md`](./docs/release/1.0-release-checklist.md).
 
 ### Breaking
 

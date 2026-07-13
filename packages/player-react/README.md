@@ -2,6 +2,14 @@
 
 Embeddable React sequence player GUI for `@vixeq/core` projects.
 
+## Support
+
+The current React peer range, TypeScript range, CSS export checks, SSR
+expectations, and semver policy are documented in the repository
+[support policy](https://github.com/kramhash/vixeq/blob/main/SUPPORT.md).
+`@vixeq/player-react` supports React `>=18 <20` and ships
+`@vixeq/player-react/styles.css` as a public export.
+
 ```tsx
 import { SequencePlayer } from "@vixeq/player-react";
 import "@vixeq/player-react/styles.css";

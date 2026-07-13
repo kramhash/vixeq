@@ -10,6 +10,14 @@ It is designed to run independently from any UI framework and can be used as the
 npm install @vixeq/core
 ```
 
+## Support
+
+The current Node, TypeScript, browser, package-format, and semver policy is
+documented in the repository
+[support policy](https://github.com/kramhash/vixeq/blob/main/SUPPORT.md).
+`@vixeq/core` has no runtime npm dependencies and keeps DOM helpers in the
+separate `@vixeq/core/dom` subpath.
+
 ## Usage
 
 ```ts
@@ -195,9 +203,13 @@ duration field. The pure functions behind the engine (`resolveArrangementStep`,
 
 ## Package Status
 
-This package is currently in early development. It intentionally stays UI-agnostic, while React hooks and GUI components live in separate packages.
+This package is in the pre-1.0 release-readiness line. It intentionally stays
+UI-agnostic, while React hooks and GUI components live in separate packages.
 
-The current scope is the engine, immutable project helpers, track transforms, validation, presets, smoothing helpers, timeline utilities, envelope primitives, optional browser audio transport helpers, and a DOM utilities subpath. It does not include MIDI, storage, or UI.
+The current scope is the engine, immutable project helpers, track transforms,
+validation, presets, smoothing helpers, timeline utilities, envelope
+primitives, optional browser audio transport helpers, and a DOM utilities
+subpath. It does not include MIDI, storage, or UI.
 
 The core API is intentionally small:
 

@@ -2,6 +2,13 @@
 
 React hooks for `@vixeq/core`.
 
+## Support
+
+The current React peer range, TypeScript range, SSR expectations, and semver
+policy are documented in the repository
+[support policy](https://github.com/kramhash/vixeq/blob/main/SUPPORT.md).
+`@vixeq/react` supports React `>=18 <20`.
+
 ```tsx
 import { useSequencerEngine } from "@vixeq/react";
 

@@ -12,7 +12,8 @@ Two first-class use cases illustrate the breadth:
 ## Guiding Principles
 
 - **Core stays dependency-free.** `@vixeq/core` will never take a runtime dependency.
-- **Respect backward compatibility.** Even in early development, breaking changes are documented in `CHANGELOG.md` with a migration note.
+- **Respect backward compatibility.** Before 1.0, breaking changes are
+  documented in `CHANGELOG.md` with a migration note.
 - **Separation of concerns.** Pure logic (`core`) → hooks (`react`) → GUI (`player-react`). Each layer is independently usable.
 - **Examples over documentation.** A working, runnable example is worth more than prose.
 
@@ -238,6 +239,9 @@ to the same timing map without building a DAW editor.
   `scripts/build-pages.mjs` assembles `_site/` and also publishes
   `/arrangement-demo/` and `/docs/`; `.github/workflows/pages.yml` builds and
   deploys the artifact, with a builder test wired into CI.
+- [x] Finalize support, semver, migration, and release documentation before
+  `1.0.0-rc.1` (`SUPPORT.md`, the migration guide index, and the 1.0 release
+  checklist).
 - [x] React hooks render-frugal refactor: `latestEvent` state → `latestEventRef` ref
   (see the render-frugal migration guide).
 
@@ -266,7 +270,8 @@ All public packages use lockstep versions, including prereleases, through these 
 - [ ] Confirm every 0.7–0.9 and RC gate is complete.
 - [ ] Publish `@vixeq/core`, `@vixeq/react`, and `@vixeq/player-react` at the same `1.0.0` version.
 - [ ] Remove the README and package README early-development and pre-1.0 stability disclaimers.
-- [ ] Document the compatibility matrix, semver policy, and support policy.
+- [ ] Confirm the compatibility matrix, semver policy, and support policy still
+  match the final published `1.0.0` artifacts.
 - [ ] Deprecate public APIs with `@deprecated` and migration notes for at least two minor releases; remove them only in the next major release, except for security or correctness emergencies.
 - [ ] Use a tag-triggered release workflow that runs typecheck, tests, builds, E2E, API checks, and packed-package smoke tests before publishing with npm provenance and creating a GitHub Release.
 - [ ] Run a post-publish clean-install smoke test.

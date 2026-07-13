@@ -63,11 +63,23 @@ The hosted playground demonstrates the full package stack: https://kramhash.gith
 Guides and the generated API reference for all three packages are published at
 https://kramhash.github.io/vixeq/docs/.
 
+Release and upgrade references:
+
+- [Support policy](./SUPPORT.md) for Node, React, TypeScript, browser,
+  package, and semver support targets.
+- [Migration guide index](./docs/migrations/README.md) for breaking pre-1.0
+  changes.
+- [0.9 release checklist](./docs/release/0.9-release-checklist.md) for the
+  release-readiness stable publish.
+- [1.0 release checklist](./docs/release/1.0-release-checklist.md) for RC and
+  stable release gates.
+
 <img src="brand/player.gif" alt="Vixeq playground: dark theme, step editing, and PNG export" width="480" />
 
 ## Package Status
 
-This project is currently in early development. The package surface is intentionally split by responsibility:
+This project is in the pre-1.0 release-readiness line. The package surface is
+intentionally split by responsibility:
 
 - `@vixeq/core`: UI-agnostic sequencer engine, immutable project helpers, validation, timeline utilities, and presets.
 - `@vixeq/react`: React hooks for driving the core engine without any GUI.
@@ -91,7 +103,9 @@ The current release line is focused on proving the engine and package boundaries
 - copyable examples
 - a hosted playground demo
 
-It does not include an audio engine, MIDI support, DAW-style timeline editing UI, URL sharing, or production stability guarantees.
+It does not include an audio engine, MIDI support, DAW-style timeline editing UI,
+or URL sharing. The active support matrix and semver policy are documented in
+[SUPPORT.md](./SUPPORT.md).
 
 See [ROADMAP.md](./ROADMAP.md) for planned directions.
 
