@@ -123,6 +123,13 @@ describe("createDecayEnvelope", () => {
     expect(env.sample(0)).toBeCloseTo(excited, 5);
   });
 
+  it("defaults decay-envelope trigger input to full scale", () => {
+    const env = createDecayEnvelope(config);
+    env.trigger(0);
+
+    expect(env.sample(0)).toBeCloseTo(exciteSmoothedValue(0, 1, config), 5);
+  });
+
   it("decays after trigger using exponential decay", () => {
     const env = createDecayEnvelope(config);
     env.trigger(0, 1);

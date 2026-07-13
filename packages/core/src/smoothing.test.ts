@@ -6,6 +6,7 @@ describe("smoothing utilities", () => {
     expect(clamp01(-1)).toBe(0);
     expect(clamp01(0.5)).toBe(0.5);
     expect(clamp01(2)).toBe(1);
+    expect(clamp01(Number.NaN)).toBe(0);
   });
 
   it("excites a value with impact and lift", () => {
@@ -17,6 +18,10 @@ describe("smoothing utilities", () => {
 
     expect(exciteSmoothedValue(0.75, 0, config)).toBe(0.75);
     expect(decaySmoothedValue(1, 1, config)).toBeGreaterThan(0.5);
+  });
+
+  it("supports rest-relative excitation when impact dominates lift", () => {
+    expect(exciteSmoothedValue(0.5, 1, { decayRate: 1, impact: 1, lift: 0.1, rest: 0.5 })).toBe(1);
   });
 
   it("decays toward zero by default", () => {

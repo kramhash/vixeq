@@ -4,9 +4,12 @@ import {
   addTrack,
   clearTrack,
   createProject,
+  createTrack,
   randomizeTrack,
   removeTrack,
+  renameTrack,
   rotateTrackSteps,
+  setProjectBpm,
   setStepValue,
   setTrackEnabled,
   toggleStep,
@@ -21,6 +24,20 @@ describe("project utilities", () => {
     expect(project.stepCount).toBe(16);
     expect(project.tracks).toHaveLength(4);
     expect(project.tracks[0].steps).toHaveLength(16);
+  });
+
+  it("createTrack normalizes malformed track options", () => {
+    const track = createTrack({
+      name: "  ",
+      stepCount: 3,
+      steps: [-1, 0.5, 2],
+      enabled: false,
+    });
+
+    expect(track.name).toBe("Track");
+    expect(track.enabled).toBe(false);
+    expect(track.steps).toHaveLength(3);
+    expect(track.steps.slice(0, 3)).toEqual([0, 0.5, 1]);
   });
 
   it("updates step values immutably and clamps values", () => {
@@ -130,6 +147,33 @@ describe("project utilities", () => {
     expect(withTrack.tracks).toHaveLength(2);
     expect(disabled.tracks[1].enabled).toBe(false);
     expect(removed.tracks).toHaveLength(1);
+  });
+
+  it("returns the same project for track limit and missing-track operations", () => {
+    const maxProject = createProject({ trackCount: SEQUENCER_LIMITS.maxTracks });
+    const oneTrack = createProject({ trackCount: 1 });
+
+    expect(addTrack(maxProject)).toBe(maxProject);
+    expect(removeTrack(oneTrack, oneTrack.tracks[0].id)).toBe(oneTrack);
+    expect(removeTrack(maxProject, "missing")).toBe(maxProject);
+    expect(setStepValue(oneTrack, "missing", 0, 1)).not.toBe(oneTrack);
+  });
+
+  it("renames tracks with trimmed names and keeps the old name for blank input", () => {
+    const project = createProject({ trackCount: 1, trackNames: ["Gate"] });
+    const trackId = project.tracks[0].id;
+    const renamed = renameTrack(project, trackId, "  Pulse  ");
+    const blank = renameTrack(renamed, trackId, "  ");
+
+    expect(renamed.tracks[0].name).toBe("Pulse");
+    expect(blank.tracks[0].name).toBe("Pulse");
+  });
+
+  it("clamps project bpm updates", () => {
+    const project = createProject();
+
+    expect(setProjectBpm(project, 0).bpm).toBe(SEQUENCER_LIMITS.minBpm);
+    expect(setProjectBpm(project, 999).bpm).toBe(SEQUENCER_LIMITS.maxBpm);
   });
 
   it("createProject defaults stepsPerBeat to 4", () => {

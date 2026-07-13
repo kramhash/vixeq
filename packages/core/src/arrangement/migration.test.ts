@@ -90,6 +90,75 @@ describe("migrateArrangementProject", () => {
     expect(invalidPattern.ok).toBe(false);
     expect(invalidSection.ok).toBe(false);
   });
+
+  it("rejects non-object and wrong-version v1 inputs", () => {
+    const nonObject = migrateArrangementProject(null, { durationBeats: 8 });
+    const wrongVersion = migrateArrangementProject({ ...validV1(), version: 2 }, { durationBeats: 8 });
+
+    expect(nonObject.ok).toBe(false);
+    expect(!nonObject.ok && nonObject.errors[0]).toMatchObject({
+      code: "ARRANGEMENT_INVALID",
+      path: "$",
+    });
+    expect(wrongVersion.ok).toBe(false);
+    expect(!wrongVersion.ok && wrongVersion.errors.some((issue) => issue.code === "ARRANGEMENT_VERSION")).toBe(
+      true,
+    );
+  });
+
+  it("rejects missing pattern collections and non-array sections", () => {
+    const missingPatterns = migrateArrangementProject(
+      { ...validV1(), patterns: null } as unknown as ArrangementProjectV1,
+      { durationBeats: 8 },
+    );
+    const nonArraySections = migrateArrangementProject(
+      { ...validV1(), sections: "bad" } as unknown as ArrangementProjectV1,
+      { durationBeats: 8 },
+    );
+
+    expect(missingPatterns.ok).toBe(false);
+    expect(!missingPatterns.ok && missingPatterns.errors.some((issue) => issue.code === "ARRANGEMENT_PATTERNS")).toBe(
+      true,
+    );
+    expect(nonArraySections.ok).toBe(false);
+    expect(!nonArraySections.ok && nonArraySections.errors.some((issue) => issue.code === "ARRANGEMENT_SECTIONS")).toBe(
+      true,
+    );
+  });
+
+  it("rejects malformed, duplicate, and overlapping sections", () => {
+    const malformedSections = migrateArrangementProject(
+      {
+        ...validV1(),
+        sections: [
+          "bad",
+          { id: "", patternId: "intro", startBeat: -1, endBeat: Number.NaN },
+          { id: "dup", patternId: "intro", startBeat: 0, endBeat: 1 },
+          { id: "dup", patternId: "intro", startBeat: 2, endBeat: 1 },
+        ],
+      } as unknown as ArrangementProjectV1,
+      { durationBeats: 8 },
+    );
+    const overlapping = migrateArrangementProject(
+      {
+        ...validV1(),
+        sections: [
+          { id: "a", patternId: "intro", startBeat: 0, endBeat: 4 },
+          { id: "b", patternId: "intro", startBeat: 3, endBeat: 5 },
+        ],
+      },
+      { durationBeats: 8 },
+    );
+
+    expect(malformedSections.ok).toBe(false);
+    expect(!malformedSections.ok && malformedSections.errors.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining(["ARRANGEMENT_SECTION", "ARRANGEMENT_SECTION_ID", "ARRANGEMENT_SECTION_RANGE"]),
+    );
+    expect(overlapping.ok).toBe(false);
+    expect(!overlapping.ok && overlapping.errors.some((issue) => issue.code === "ARRANGEMENT_SECTION_OVERLAP")).toBe(
+      true,
+    );
+  });
 });
 
 describe("v1-to-v2 migration fixtures", () => {

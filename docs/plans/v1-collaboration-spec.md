@@ -587,12 +587,12 @@ Coverage gates:
 - Configuration status (R1, done): `pnpm test:coverage` (per-package
   `vitest run --coverage`, provider `v8`) enforces these thresholds and is
   runnable locally/manually. It is not yet wired into `.github/workflows/ci.yml`
-  because actual measured coverage does not yet meet the thresholds — Core is
-  at ~79% branches (target 90%) and all six 100%-tier files
-  (`playbackTransport.ts`, the three Engines, `timing.ts`, both `migration.ts`
-  files) fall short; React (~90%) and player-react (~90%) already clear 85%.
-  Wiring `test:coverage` into CI is deferred until the Core gap is closed by
-  additional tests (separate follow-up work, not part of R1).
+  because actual measured coverage does not yet meet all thresholds — the RC0
+  follow-up has lifted Core above the global 90% branch target, but the
+  100%-tier files still have gaps in `playbackTransport.ts`, the three Engines,
+  and `arrangement/migration.ts`. React (~90%) and player-react (~90%) already
+  clear 85%. Wiring `test:coverage` into CI is deferred until the remaining
+  Core critical-file gaps are closed by additional tests.
 - `pnpm behavior:check` (new script, `scripts/check-behavior-matrix.mjs`)
   operationalizes the "behavior-matrix gates" deliverable: it parses
   `docs/behavior/*-matrix.md` and fails if any row marked `covered` has no
@@ -600,7 +600,9 @@ Coverage gates:
   rows marked `covered` without a backing test ID; 23 were mechanical
   labeling fixes (the test already existed, just untagged) and one
   (`AR-011`) was a genuine gap with no assertion anywhere — downgraded to
-  `planned` rather than fabricated.
+  `planned` rather than fabricated. The RC0 follow-up now covers AR-011 and
+  the remaining Playback planned rows, leaving the matrix at 191 covered,
+  0 planned, and 0 blocked rows.
 
 API and package gates:
 
@@ -763,6 +765,7 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | R4 | 0.9 | Build multi-example Pages index and deploy workflow | T6 | done | Codex (author), Claude (reviewer) | apps/site or deploy scripts, `.github/` |
 | R5 | 0.9 | Finalize support, semver, migration, and release docs | R0–R4 | done | Codex (author), Claude (reviewer) | root/package docs |
 | R6 | 0.9 | React hooks render-frugal: `latestEvent` state → `latestEventRef` | P6, T5 | done | Claude (author + reviewer) | `packages/react/src/`, `packages/player-react/src/SequencePlayer.tsx` |
+| RC0 | 1.0-rc | Close planned behavior rows and Core coverage gate gaps before API freeze | R0–R6 | done | Codex (author), Claude (reviewer) | `docs/behavior/`, `packages/core/src/` tests |
 
 ### Integration order
 

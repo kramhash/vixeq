@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SequencerEngine } from "./SequencerEngine";
+import { createMediaElementTransport } from "./audioClock";
 import { createClockTransport, type PlaybackTransport } from "./playbackTransport";
-import { createProject, setProjectBpm, setStepValue } from "./project";
+import { createProject, renameTrack, setProjectBpm, setStepValue } from "./project";
 import { easeOutQuad } from "./easing";
 import type { EnginePlaybackEvent, PlaybackClock, ProjectEvent, StepEvent } from "./types";
 
@@ -40,6 +41,44 @@ class FakeClock implements PlaybackClock {
 
   jumpWithoutRunningTimers(ms: number): void {
     this.currentTime += ms;
+  }
+}
+
+class FakeMedia {
+  currentTime = 0;
+  duration = 2;
+  paused = true;
+  ended = false;
+  playbackRate = 1;
+  loop = false;
+  error: MediaError | null = null;
+  play = vi.fn(async () => {
+    this.paused = false;
+    this.dispatch("play");
+  });
+  pause = vi.fn(() => {
+    this.paused = true;
+    this.dispatch("pause");
+  });
+  private listeners = new Map<string, EventListener[]>();
+
+  addEventListener(event: string, listener: EventListener): void {
+    const listeners = this.listeners.get(event) ?? [];
+    listeners.push(listener);
+    this.listeners.set(event, listeners);
+  }
+
+  removeEventListener(event: string, listener: EventListener): void {
+    this.listeners.set(
+      event,
+      (this.listeners.get(event) ?? []).filter((candidate) => candidate !== listener),
+    );
+  }
+
+  dispatch(event: string): void {
+    for (const listener of [...(this.listeners.get(event) ?? [])]) {
+      listener(new Event(event));
+    }
   }
 }
 
@@ -84,6 +123,21 @@ describe("SequencerEngine — Playback v2", () => {
       },
     ]);
     expect(engine.getPlaybackState()).toBe("playing");
+  });
+
+  it("validates constructor options and registers the onStep convenience handler", async () => {
+    const onStep = vi.fn();
+
+    expect(() => new SequencerEngine(createProject(), null as unknown as Record<string, never>)).toThrow(TypeError);
+
+    const engine = new SequencerEngine(createProject(), {
+      transport: buildTransport().transport,
+      onStep,
+    });
+
+    await engine.play();
+
+    expect(onStep).toHaveBeenCalledWith(expect.objectContaining({ stepIndex: 0, cause: "play" }));
   });
 
   it("PB-EN-002 emits natural tick steps from transport position", async () => {
@@ -255,6 +309,13 @@ describe("SequencerEngine — Playback v2", () => {
     expect(engine.sampleChannels()[trackId]).toBeCloseTo(0.5);
   });
 
+  it("validates pure sampling positions", () => {
+    const engine = new SequencerEngine(createProject());
+
+    expect(() => engine.sampleChannelsAt(-1)).toThrow(RangeError);
+    expect(() => engine.sampleChannelsAt(Number.NaN)).toThrow(RangeError);
+  });
+
   it("PB-EN-011 PB-EN-011A setProject preserves fractional beat without seeking transport", async () => {
     const { transport } = buildTransport();
     let project = createProject({ bpm: 120, stepCount: 4, trackCount: 1 });
@@ -293,7 +354,7 @@ describe("SequencerEngine — Playback v2", () => {
     expect(engine.getPosition()).toEqual({ positionMs: 0, beat: 0 });
   });
 
-  it("PB-EN-027 adopts an already-playing transport without synthetic step events", async () => {
+  it("PB-TR-027 PB-EN-027 adopts an already-playing transport without synthetic step events", async () => {
     const { clock, transport } = buildTransport();
     await transport.play();
     clock.advance(STEP_MS * 2);
@@ -365,7 +426,7 @@ describe("SequencerEngine — Playback v2", () => {
     expect(steps.at(-1)).toMatchObject({ stepIndex: 0, scheduledPositionMs: 0 });
   });
 
-  it("PB-EN-019 PB-EN-026 one Engine disposal leaves a borrowed shared transport usable", async () => {
+  it("PB-TR-026 PB-EN-019 PB-EN-026 one Engine disposal leaves a borrowed shared transport usable", async () => {
     const { transport } = buildTransport();
     const project = createProject();
     const first = new SequencerEngine(project, { transport });
@@ -416,6 +477,37 @@ describe("SequencerEngine — Playback v2", () => {
     });
   });
 
+  it("falls back when listener error reporting itself throws", async () => {
+    const originalReportError = globalThis.reportError;
+    const reportError = vi.fn();
+    Object.defineProperty(globalThis, "reportError", {
+      configurable: true,
+      value: reportError,
+    });
+    const { transport } = buildTransport();
+    const healthy = vi.fn();
+    const engine = new SequencerEngine(createProject(), {
+      transport,
+      onListenerError: () => {
+        throw new Error("reporting failed");
+      },
+    });
+    engine.on("playback", () => {
+      throw new Error("listener failed");
+    });
+    engine.on("playback", healthy);
+
+    await engine.play();
+
+    expect(healthy).toHaveBeenCalledOnce();
+    expect(reportError).toHaveBeenCalledWith(expect.any(Error));
+
+    Object.defineProperty(globalThis, "reportError", {
+      configurable: true,
+      value: originalReportError,
+    });
+  });
+
   it("PB-EN-018 transport disposal detaches the Engine at the cached position", async () => {
     const { clock, transport } = buildTransport();
     const engine = new SequencerEngine(createProject(), { transport });
@@ -430,6 +522,89 @@ describe("SequencerEngine — Playback v2", () => {
     expect(engine.getPosition().positionMs).toBe(20);
     expect(playback.at(-1)).toMatchObject({ type: "error", cause: "transport" });
     await expect(engine.play()).rejects.toMatchObject({ code: "TRANSPORT_DISPOSED" });
+  });
+
+  it("PB-EN-018A preserves stopped, paused, and ended local state when the transport is disposed", async () => {
+    const stopped = buildTransport();
+    const stoppedEngine = new SequencerEngine(createProject(), { transport: stopped.transport });
+    stopped.transport.dispose();
+
+    expect(stoppedEngine.getPlaybackState()).toBe("stopped");
+    expect(stoppedEngine.getPosition().positionMs).toBe(0);
+
+    const paused = buildTransport();
+    const pausedEngine = new SequencerEngine(createProject(), { transport: paused.transport });
+    await pausedEngine.play();
+    paused.clock.advance(20);
+    await pausedEngine.pause();
+    paused.transport.dispose();
+
+    expect(pausedEngine.getPlaybackState()).toBe("paused");
+    expect(pausedEngine.getPosition().positionMs).toBe(20);
+
+    const ended = buildTransport(100);
+    const endedEngine = new SequencerEngine(createProject(), { transport: ended.transport });
+    await endedEngine.play();
+    ended.clock.advance(100);
+    ended.transport.dispose();
+
+    expect(endedEngine.getPlaybackState()).toBe("ended");
+    expect(endedEngine.getPosition().positionMs).toBe(100);
+  });
+
+  it("PB-CH-002 samples media transport position without a clock-domain input", () => {
+    const media = new FakeMedia();
+    media.currentTime = STEP_MS / 2 / 1000;
+    let project = createProject({ bpm: 120, stepCount: 4, trackCount: 1 });
+    const trackId = project.tracks[0].id;
+    project = setStepValue(project, trackId, 0, 0);
+    project = setStepValue(project, trackId, 1, 1);
+    const engine = new SequencerEngine(project, {
+      transport: createMediaElementTransport(media as unknown as HTMLMediaElement),
+    });
+
+    expect(engine.sampleChannels()[trackId]).toBeCloseTo(0.5);
+
+    media.currentTime = STEP_MS / 1000;
+    media.dispatch("seeked");
+
+    expect(engine.sampleChannels()[trackId]).toBe(1);
+  });
+
+  it("PB-CH-005 PB-CH-006 PB-CH-007 PB-CH-009 reports precise Sequence project event metadata without synthetic steps", () => {
+    let project = createProject({ bpm: 120, stepCount: 4, trackCount: 2 });
+    const firstTrackId = project.tracks[0].id;
+    const secondTrackId = project.tracks[1].id;
+    project = setStepValue(project, firstTrackId, 0, 0);
+    project = setStepValue(project, secondTrackId, 0, 0);
+    const engine = new SequencerEngine(project);
+    const projects: ProjectEvent[] = [];
+    const steps: StepEvent[] = [];
+    engine.on("project", (event) => projects.push(event));
+    engine.on("step", (event) => steps.push(event));
+
+    engine.setProject(renameTrack(project, firstTrackId, "Renamed"));
+    const activeValueProject = setStepValue(projects[0].project, firstTrackId, 0, 1);
+    engine.setProject(activeValueProject);
+
+    expect(projects[0]).toMatchObject({
+      changedChannelIds: [],
+      positionMs: 0,
+      beat: 0,
+      stepIndex: 0,
+    });
+    expect(projects[0]).not.toHaveProperty("timestamp");
+    expect(projects[1].changedChannelIds).toEqual([firstTrackId]);
+    expect(projects[1].previousChannels).toEqual({
+      [firstTrackId]: 0,
+      [secondTrackId]: 0,
+    });
+    expect(projects[1].channels).toEqual({
+      [firstTrackId]: 1,
+      [secondTrackId]: 0,
+    });
+    expect(projects[1]).not.toHaveProperty("timestamp");
+    expect(steps).toEqual([]);
   });
 
   it("PB-EN-028 maps external transport events to playback cause transport", async () => {

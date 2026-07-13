@@ -7,6 +7,7 @@ import type { PlaybackClock } from "./types";
 
 class FakeClock implements PlaybackClock {
   currentTime = 0;
+  ignoreClears = false;
   private nextTimerId = 1;
   private timers: Array<{ id: number; dueAt: number; callback: () => void }> = [];
 
@@ -22,6 +23,7 @@ class FakeClock implements PlaybackClock {
   }
 
   clearTimer(timerId: unknown): void {
+    if (this.ignoreClears) return;
     this.timers = this.timers.filter((timer) => timer.id !== timerId);
   }
 
@@ -325,6 +327,38 @@ describe("createClockTransport", () => {
     });
   });
 
+  it("reports listener failures through global reportError when no handler is configured", async () => {
+    const reportError = vi.fn();
+    vi.stubGlobal("reportError", reportError);
+    const transport = createClockTransport(new FakeClock());
+    transport.subscribe(() => {
+      throw new Error("listener failed");
+    });
+
+    await transport.play();
+
+    expect(reportError).toHaveBeenCalledWith(expect.any(Error));
+    vi.unstubAllGlobals();
+  });
+
+  it("falls back to reportError when onListenerError itself throws", async () => {
+    const reportError = vi.fn();
+    vi.stubGlobal("reportError", reportError);
+    const transport = createClockTransport(new FakeClock(), {
+      onListenerError: () => {
+        throw new Error("reporting failed");
+      },
+    });
+    transport.subscribe(() => {
+      throw new Error("listener failed");
+    });
+
+    await transport.play();
+
+    expect(reportError).toHaveBeenCalledWith(expect.objectContaining({ message: "reporting failed" }));
+    vi.unstubAllGlobals();
+  });
+
   it("PB-TR-025 supports multiple independent subscribers", async () => {
     const transport = createClockTransport(new FakeClock());
     const first = vi.fn();
@@ -364,6 +398,37 @@ describe("createClockTransport", () => {
     expect(() => transport.play()).toThrowError(
       expect.objectContaining({ code: "TRANSPORT_DISPOSED" }),
     );
+  });
+
+  it("ignores stale boundary timers after pause and disposal", async () => {
+    const clock = new FakeClock();
+    clock.ignoreClears = true;
+    const transport = createClockTransport(clock, { durationMs: 100 });
+    const events: PlaybackTransportEvent[] = [];
+    transport.subscribe((event) => events.push(event));
+
+    await transport.play();
+    await transport.pause();
+    clock.runNextTimer();
+    await transport.play();
+    transport.dispose();
+    clock.runNextTimer();
+
+    expect(eventTypes(events)).toEqual(["play", "pause", "play", "dispose"]);
+  });
+
+  it("pause is a no-op if settling playback reaches the end first", async () => {
+    const clock = new FakeClock();
+    const transport = createClockTransport(clock, { durationMs: 100 });
+    const events: PlaybackTransportEvent[] = [];
+    transport.subscribe((event) => events.push(event));
+
+    await transport.play();
+    clock.jumpWithoutRunningTimers(150);
+    await transport.pause();
+
+    expect(transport.getPlaybackState()).toBe("ended");
+    expect(eventTypes(events)).toEqual(["play", "ended"]);
   });
 
   it("rejects an operation queued before disposal", async () => {

@@ -98,6 +98,32 @@ describe("migrateTimelineProject", () => {
     expect(result.ok && validateTimelineProject(result.project).ok).toBe(true);
   });
 
+  it("MIG-004 merges converted removed fields with existing JSON-compatible event data", () => {
+    const result = migrateTimelineProject(
+      v1Project({
+        events: [
+          {
+            id: "e1",
+            trackId: "a",
+            beat: 0,
+            value: 0.75,
+            data: { label: "legacy" },
+          },
+        ],
+      }),
+      {
+        durationBeats: 4,
+        onRemovedField: (event) => ({ legacyValue: event.value ?? null }),
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.project.events[0].data).toEqual({
+      label: "legacy",
+      legacyValue: 0.75,
+    });
+  });
+
   it("MIG-004 onRemovedField returning undefined blocks migration with ok:false", () => {
     const result = migrateTimelineProject(
       v1Project({ events: [{ id: "e1", trackId: "a", beat: 0, value: 0.75 }] }),
@@ -128,6 +154,20 @@ describe("migrateTimelineProject", () => {
     expect(!result.ok && result.errors.some((issue) => issue.code === "TIMELINE_DURATION_BEATS_REQUIRED")).toBe(
       true,
     );
+  });
+
+  it("treats omitted tracks and events as empty migration collections", () => {
+    const result = migrateTimelineProject(
+      v1Project({
+        tracks: undefined as unknown as TimelineProjectV1["tracks"],
+        events: undefined as unknown as TimelineProjectV1["events"],
+      }),
+      { durationBeats: 4 },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.project.tracks).toEqual([]);
+    expect(result.ok && result.project.events).toEqual([]);
   });
 
   it("a fully valid migration produces output that satisfies strict validateTimelineProject", () => {

@@ -6,6 +6,8 @@ import {
   normalizeTimelineProject,
   removeTimelineTrack,
   updateTimelineEvent,
+  removeTimelineEvent,
+  setTimelineTrackEnabled,
   validateTimelineProject,
 } from "./index";
 import * as timelineModule from "./index";
@@ -38,6 +40,39 @@ describe("TimelineProject v2 construction", () => {
 
     expect(project.events[0].trackId).toBeNull();
     expect(validateTimelineProject(project).ok).toBe(true);
+  });
+
+  it("normalizes malformed tracks, events, ids, and JSON data deterministically", () => {
+    const project = normalizeTimelineProject({
+      version: 2,
+      timing: { tempos: [{ beat: 0, bpm: 120 }], startPositionMs: 0 },
+      durationBeats: Number.NaN,
+      tracks: [
+        null,
+        { id: " track-a ", name: "  Track A  ", enabled: false, data: { keep: true, drop: () => 1 } },
+        { id: "track-a", name: "", enabled: "yes", data: { nested: [1, undefined, 2] } },
+      ],
+      events: [
+        null,
+        { id: " event-a ", trackId: " track-a ", beat: Number.NaN, type: "", data: { keep: 1, drop: undefined } },
+        { id: "event-a", trackId: "", beat: 0.5, type: " cue " },
+      ],
+    });
+
+    expect(project.durationBeats).toBe(4);
+    expect(project.tracks).toMatchObject([
+      { id: "track-a", name: "Track A", enabled: false, data: { keep: true } },
+      { id: "track-1", name: "Track 2", enabled: true, data: { nested: [1, 2] } },
+    ]);
+    expect(project.events.map((event) => [event.id, event.trackId, event.beat, event.type])).toEqual([
+      ["event-a", " track-a ", 0, "event"],
+      ["event-1", null, 0.5, " cue "],
+    ]);
+  });
+
+  it("single-item normalizers generate deterministic standalone ids", () => {
+    expect(timelineModule.normalizeTimelineTrack({ name: "A" }).id).toBe("track-1");
+    expect(timelineModule.normalizeTimelineEvent({ beat: 2, type: "cue" }).id).toBe("event-1");
   });
 });
 
@@ -257,6 +292,34 @@ describe("TimelineProject v2 strict validation", () => {
     expect(result.ok).toBe(false);
     expect(!result.ok && result.errors.some((issue) => issue.path === "timing")).toBe(true);
   });
+
+  it("rejects non-object projects, malformed arrays, and malformed item fields with precise paths", () => {
+    const nonObject = validateTimelineProject(null);
+    const malformed = validateTimelineProject({
+      version: 2,
+      timing: "bad",
+      durationBeats: "four",
+      tracks: [null, { id: "", enabled: "yes" }],
+      events: [null, { id: "", trackId: 123, beat: "zero", type: "" }],
+    });
+
+    expect(nonObject.ok).toBe(false);
+    expect(!nonObject.ok && nonObject.errors[0].path).toBe("$");
+    expect(malformed.ok).toBe(false);
+    expect(!malformed.ok && malformed.errors.map((issue) => issue.path)).toEqual(expect.arrayContaining([
+      "timing",
+      "durationBeats",
+      "tracks.0",
+      "tracks.1.id",
+      "tracks.1.name",
+      "tracks.1.enabled",
+      "events.0",
+      "events.1.id",
+      "events.1.trackId",
+      "events.1.beat",
+      "events.1.type",
+    ]));
+  });
 });
 
 describe("TL-010 event ordering", () => {
@@ -344,6 +407,27 @@ describe("TL-016 strict update helpers reject invalid input without mutating the
     const project = validProject();
 
     expect(() => updateTimelineEvent(project, "e1", { beat: 100 })).toThrow(TypeError);
+  });
+
+  it("strict helpers validate track enablement and event removal results", () => {
+    const disabled = setTimelineTrackEnabled(validProject(), "a", false);
+    const removed = removeTimelineEvent(disabled, "e1");
+
+    expect(disabled.tracks[0].enabled).toBe(false);
+    expect(removed.events).toEqual([]);
+    expect(() => setTimelineTrackEnabled(validProject(), "a", "no" as unknown as boolean)).toThrow(TypeError);
+  });
+
+  it("strict helpers pass domain validators through add/update event paths", () => {
+    const project = validProject();
+    const validator = (event: TimelineEvent): void => {
+      if (event.type === "blocked") {
+        throw new Error("blocked event");
+      }
+    };
+
+    expect(() => addTimelineEvent(project, { trackId: "a", beat: 1, type: "blocked" }, validator)).toThrow(TypeError);
+    expect(() => updateTimelineEvent(project, "e1", { type: "blocked" }, validator)).toThrow(TypeError);
   });
 });
 

@@ -59,6 +59,31 @@ afterEach(() => {
 });
 
 describe("TimelineEngine", () => {
+  it("validates constructor options and registers the onCue convenience handler", async () => {
+    vi.useFakeTimers();
+    const project = projectWithEvents(1, [{ id: "zero", beat: 0, type: "cue" }]);
+    const onCue = vi.fn();
+
+    expect(() => new TimelineEngine(project, null as unknown as Record<string, never>)).toThrow(TypeError);
+    expect(() => new TimelineEngine(project, { lookaheadMs: -1 })).toThrow(RangeError);
+    expect(() => new TimelineEngine(project, { loop: "yes" as unknown as boolean })).toThrow(TypeError);
+    expect(() => new TimelineEngine(project, { missedCuePolicy: "drop" as unknown as "emit" })).toThrow(TypeError);
+    expect(() => new TimelineEngine(project, {
+      eventValidator: () => {
+        throw new Error("domain invalid");
+      },
+    })).toThrow(TypeError);
+
+    const engine = new TimelineEngine(project, {
+      transport: createClockTransport(new FakeClock()),
+      onCue,
+    });
+
+    await engine.play();
+
+    expect(onCue).toHaveBeenCalledWith(expect.objectContaining({ event: expect.objectContaining({ id: "zero" }) }));
+  });
+
   it("TL-EN-004 TL-EN-008 dispatches cue events from play and natural ticks", async () => {
     vi.useFakeTimers();
     const clock = new FakeClock();
@@ -119,6 +144,56 @@ describe("TimelineEngine", () => {
     expect(engine.getPlaybackState()).toBe("ended");
     expect(transport.getPlaybackState()).toBe("playing");
     expect(playbackTypes).toContain("ended");
+  });
+
+  it("replays from local ended while the shared transport keeps running", async () => {
+    vi.useFakeTimers();
+    const clock = new FakeClock();
+    const transport = createClockTransport(clock);
+    const engine = new TimelineEngine(projectWithEvents(1, [{ id: "zero", beat: 0, type: "cue" }]), {
+      transport,
+      lookaheadMs: 10,
+    });
+    const playback: string[] = [];
+    const cues: string[] = [];
+    engine.on("playback", (event) => playback.push(`${event.type}:${event.previousState}`));
+    engine.on("cue", (event) => cues.push(`${event.event.id}:${event.scheduledPositionMs}`));
+
+    await engine.play();
+    await tickEngine(clock, 1_000);
+    playback.length = 0;
+    cues.length = 0;
+
+    await engine.play();
+
+    expect(transport.getPlaybackState()).toBe("playing");
+    expect(playback).toEqual(["play:ended"]);
+    expect(cues).toEqual(["zero:0"]);
+  });
+
+  it("seeks then plays when replaying from ended after the transport stopped", async () => {
+    vi.useFakeTimers();
+    const clock = new FakeClock();
+    const transport = createClockTransport(clock, { durationMs: 1_000 });
+    const engine = new TimelineEngine(projectWithEvents(1, [{ id: "zero", beat: 0, type: "cue" }]), {
+      transport,
+      lookaheadMs: 10,
+    });
+    const playback: string[] = [];
+    const cues: string[] = [];
+    engine.on("playback", (event) => playback.push(`${event.type}:${event.previousState}`));
+    engine.on("cue", (event) => cues.push(event.event.id));
+
+    await engine.play();
+    clock.advance(1_000);
+    playback.length = 0;
+    cues.length = 0;
+
+    await engine.play();
+
+    expect(transport.getPlaybackState()).toBe("playing");
+    expect(playback).toEqual(["play:ended"]);
+    expect(cues).toEqual(["zero"]);
   });
 
   it("TL-EN-007 dispatches local loop boundaries in time order and includes beat-0 cues each iteration", async () => {
@@ -187,6 +262,27 @@ describe("TimelineEngine", () => {
 
     expect(engine.getPosition()).toEqual({ positionMs: 1_500, beat: 1.5 });
     expect(cues).toEqual(["future"]);
+  });
+
+  it("setProject no-ops for the same reference and transitions to ended when the next project is shorter", async () => {
+    vi.useFakeTimers();
+    const clock = new FakeClock();
+    const transport = createClockTransport(clock);
+    const project = projectWithEvents(4, [{ id: "future", beat: 3, type: "cue" }]);
+    const engine = new TimelineEngine(project, { transport });
+    const projectEvents: unknown[] = [];
+    const playback: string[] = [];
+    engine.on("project", (event) => projectEvents.push(event));
+    engine.on("playback", (event) => playback.push(`${event.type}:${event.snapshot.state}`));
+
+    await engine.play();
+    clock.advance(3_000);
+    engine.setProject(project);
+    engine.setProject(projectWithEvents(2, [{ id: "short", beat: 1, type: "cue" }]));
+
+    expect(projectEvents).toHaveLength(1);
+    expect(engine.getPlaybackState()).toBe("ended");
+    expect(playback.at(-1)).toBe("ended:ended");
   });
 
   it("missedCuePolicy skip discards late cues but keeps on-time cues", async () => {
@@ -270,6 +366,103 @@ describe("TimelineEngine", () => {
     expect(cues).toHaveLength(1);
     expect(cues[0]).toMatchObject({ scheduledPositionMs: 100, transportPositionMs: 5_000 });
     expect(cues[0].lateByMs).toBeGreaterThan(0);
+  });
+
+  it("setLoop off while past the local duration transitions to ended", async () => {
+    vi.useFakeTimers();
+    const clock = new FakeClock();
+    const transport = createClockTransport(clock);
+    const engine = new TimelineEngine(projectWithEvents(1, [{ id: "zero", beat: 0, type: "cue" }]), {
+      transport,
+      loop: true,
+      lookaheadMs: 10,
+    });
+    const playback: string[] = [];
+    engine.on("playback", (event) => playback.push(`${event.type}:${event.snapshot.state}`));
+
+    await engine.play();
+    clock.advance(1_500);
+    engine.setLoop(false);
+
+    expect(engine.getPlaybackState()).toBe("ended");
+    expect(playback.at(-2)).toBe("loopchange:ended");
+    expect(playback.at(-1)).toBe("ended:ended");
+  });
+
+  it("maps external transport state changes and disposal to playback snapshots", async () => {
+    vi.useFakeTimers();
+    const clock = new FakeClock();
+    const transport = createClockTransport(clock, { durationMs: 2_000 });
+    const engine = new TimelineEngine(projectWithEvents(2, [{ id: "one", beat: 1, type: "cue" }]), {
+      transport,
+    });
+    const playback: string[] = [];
+    engine.on("playback", (event) => playback.push(`${event.type}:${event.cause}:${event.snapshot.state}`));
+
+    await transport.seekMs(500);
+    await transport.setPlaybackRate(2);
+    transport.dispose();
+
+    expect(playback).toEqual([
+      "seek:transport:paused",
+      "ratechange:transport:paused",
+      "error:transport:paused",
+    ]);
+    await expect(engine.play()).rejects.toMatchObject({ code: "TRANSPORT_DISPOSED" });
+  });
+
+  it("preserves paused and ended state when the transport is disposed", async () => {
+    vi.useFakeTimers();
+    const pausedClock = new FakeClock();
+    const pausedTransport = createClockTransport(pausedClock);
+    const pausedEngine = new TimelineEngine(projectWithEvents(2, []), { transport: pausedTransport });
+    await pausedEngine.play();
+    pausedClock.advance(400);
+    await pausedEngine.pause();
+    pausedTransport.dispose();
+
+    expect(pausedEngine.getPlaybackState()).toBe("paused");
+    expect(pausedEngine.getPosition().positionMs).toBe(400);
+
+    const endedClock = new FakeClock();
+    const endedTransport = createClockTransport(endedClock, { durationMs: 1_000 });
+    const endedEngine = new TimelineEngine(projectWithEvents(1, []), { transport: endedTransport });
+    await endedEngine.play();
+    endedClock.advance(1_000);
+    endedTransport.dispose();
+
+    expect(endedEngine.getPlaybackState()).toBe("ended");
+    expect(endedEngine.getPosition().positionMs).toBe(1_000);
+  });
+
+  it("validates seekPositionMs and public APIs after disposal", async () => {
+    const transport = createClockTransport(new FakeClock());
+    const engine = new TimelineEngine(projectWithEvents(2, []), { transport });
+
+    await engine.seekPositionMs(500);
+    expect(engine.getPosition()).toEqual({ positionMs: 500, beat: 0.5 });
+    expect(() => engine.seekPositionMs(-1)).toThrow(RangeError);
+    expect(() => engine.seekPositionMs(2_001)).toThrow(RangeError);
+
+    engine.dispose();
+    engine.dispose();
+
+    expect(transport.getPlaybackState()).toBe("paused");
+    expect(() => engine.getProject()).toThrowError(expect.objectContaining({ code: "TRANSPORT_DISPOSED" }));
+    expect(() => engine.on("cue", () => undefined)).toThrowError(expect.objectContaining({ code: "TRANSPORT_DISPOSED" }));
+    expect(() => engine.setProject(projectWithEvents(2, []))).toThrowError(expect.objectContaining({ code: "TRANSPORT_DISPOSED" }));
+    expect(() => engine.play()).toThrowError(expect.objectContaining({ code: "TRANSPORT_DISPOSED" }));
+  });
+
+  it("rejects controls after transport disposal", async () => {
+    const transport = createClockTransport(new FakeClock());
+    const engine = new TimelineEngine(projectWithEvents(2, []), { transport });
+    transport.dispose();
+
+    await expect(engine.pause()).rejects.toMatchObject({ code: "TRANSPORT_DISPOSED" });
+    await expect(engine.stop()).rejects.toMatchObject({ code: "TRANSPORT_DISPOSED" });
+    await expect(engine.seekBeat(1)).rejects.toMatchObject({ code: "TRANSPORT_DISPOSED" });
+    await expect(engine.seekPositionMs(500)).rejects.toMatchObject({ code: "TRANSPORT_DISPOSED" });
   });
 
   it("TL-EN-001 does not implement ChannelSource (no sampleChannels methods)", () => {

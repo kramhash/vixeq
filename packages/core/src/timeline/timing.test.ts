@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { beatToMs, createTimingMap, msToBeat, normalizeTimingMap, validateTimingMap } from "./index";
+import {
+  beatToMs,
+  createTimingMap,
+  msToBeat,
+  normalizeTempoEvent,
+  normalizeTempos,
+  normalizeTimingMap,
+  validateTimingMap,
+} from "./index";
 import type { TimingMap } from "./types";
 
 describe("TimingMap v2", () => {
@@ -46,6 +54,36 @@ describe("TimingMap v2", () => {
     expect(beats).toEqual([0, 4, 8]);
     // Equal-beat duplicates keep the first occurrence in stable-sorted order.
     expect(timing.tempos.find((tempo) => tempo.beat === 4)?.bpm).toBe(90);
+  });
+
+  it("normalizes missing tempos and malformed tempo event fields", () => {
+    expect(normalizeTempos(undefined)).toEqual([{ beat: 0, bpm: 120 }]);
+    expect(normalizeTempos([])).toEqual([{ beat: 0, bpm: 120 }]);
+
+    expect(normalizeTempoEvent({ beat: Number.NaN, bpm: Number.NaN }, 3)).toEqual({ beat: 3, bpm: 120 });
+    expect(normalizeTempoEvent({ beat: -4, bpm: 60 })).toEqual({ beat: 0, bpm: 60 });
+  });
+
+  it("normalizes empty input and preserves already-timing-shaped input", () => {
+    expect(normalizeTimingMap(undefined)).toEqual({
+      tempos: [{ beat: 0, bpm: 120 }],
+      startPositionMs: 0,
+    });
+
+    expect(
+      normalizeTimingMap({
+        tempos: [{ beat: 0, bpm: 90 }],
+        startPositionMs: 250,
+      }),
+    ).toEqual({
+      tempos: [{ beat: 0, bpm: 90 }],
+      startPositionMs: 250,
+    });
+
+    expect(normalizeTimingMap({ startPositionMs: 125 })).toEqual({
+      tempos: [{ beat: 0, bpm: 120 }],
+      startPositionMs: 125,
+    });
   });
 
   it("TM-006 validateTimingMap accepts a valid map without throwing", () => {
@@ -106,6 +144,13 @@ describe("TimingMap v2", () => {
     expect(() => validateTimingMap(nonFinite)).toThrow(RangeError);
   });
 
+  it("validateTimingMap rejects empty tempos and non-finite tempo beats", () => {
+    expect(() => validateTimingMap({ tempos: [], startPositionMs: 0 })).toThrow(RangeError);
+    expect(() =>
+      validateTimingMap({ tempos: [{ beat: Number.NaN, bpm: 120 }], startPositionMs: 0 }),
+    ).toThrow(RangeError);
+  });
+
   it("TM-011 validateTimingMap rejects wrong-typed fields with TypeError", () => {
     expect(() => validateTimingMap(null as unknown as TimingMap)).toThrow(TypeError);
     expect(() => validateTimingMap({ tempos: "not-an-array", startPositionMs: 0 } as unknown as TimingMap)).toThrow(
@@ -143,6 +188,36 @@ describe("TimingMap v2", () => {
 
     expect(beatToMs(timing, 4)).toBe(2000);
     expect(beatToMs(timing, 5)).toBe(3000);
+  });
+
+  it("beatToMs clamps negative beats and stops inside the first tempo segment", () => {
+    const timing = createTimingMap({
+      tempos: [
+        { beat: 0, bpm: 120 },
+        { beat: 4, bpm: 60 },
+      ],
+      startPositionMs: 250,
+    });
+
+    expect(beatToMs(timing, -2)).toBe(250);
+    expect(beatToMs(timing, 2)).toBe(1250);
+  });
+
+  it("msToBeat converts inside an intermediate tempo segment", () => {
+    const timing = createTimingMap({
+      tempos: [
+        { beat: 0, bpm: 120 },
+        { beat: 4, bpm: 60 },
+        { beat: 8, bpm: 240 },
+      ],
+      startPositionMs: 0,
+    });
+
+    expect(msToBeat(timing, 3_000)).toBe(5);
+  });
+
+  it("msToBeat rejects structurally invalid empty tempo maps", () => {
+    expect(() => msToBeat({ tempos: [], startPositionMs: 0 }, 1)).toThrow(TypeError);
   });
 
   it("TM-014 msToBeat is the inverse of beatToMs", () => {

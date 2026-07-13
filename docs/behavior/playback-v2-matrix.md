@@ -1,9 +1,8 @@
 # Playback v2 Behavior Matrix
 
-- Status: 103 of 112 rows `covered` as of 0.9.0 R1; remaining `planned` rows:
-  PB-TR-026, PB-TR-027, PB-EN-018A, PB-CH-002, PB-CH-005, PB-CH-006,
-  PB-CH-007, PB-CH-008, PB-CH-009. CI (`pnpm behavior:check`) fails if a
-  `covered` row's ID is not found in any test.
+- Status: 112 of 112 rows `covered` as of the RC0 follow-up. CI
+  (`pnpm behavior:check`) fails if a `covered` row's ID is not found in any
+  test.
 - Normative contract: [`playback-v2.md`](playback-v2.md)
 
 Each matrix ID is stable. Tests added during P1–P7 must include the ID in the
@@ -57,8 +56,8 @@ Status values: `planned`, `covered`, `blocked`.
 | PB-TR-023 | listener queues another operation | reentrant operation runs after current operation | covered |
 | PB-TR-024 | listener throws | other listeners run and Promise still resolves | covered |
 | PB-TR-025 | multiple subscribers share transport | all receive one ordered event stream independently | covered |
-| PB-TR-026 | one Engine disposes | shared transport and second Engine remain active | planned |
-| PB-TR-027 | attach during playback | snapshot adopted; no synthetic step/cue | planned |
+| PB-TR-026 | one Engine disposes | shared transport and second Engine remain active | covered |
+| PB-TR-027 | attach during playback | snapshot adopted; no synthetic step/cue | covered |
 | PB-TR-028 | transport dispose | dispose event precedes listener removal | covered |
 | PB-TR-029 | repeated transport dispose | no-op and no second event | covered |
 | PB-TR-030 | use transport after dispose | getters/actions/subscribe throw TRANSPORT_DISPOSED | covered |
@@ -87,7 +86,7 @@ Status values: `planned`, `covered`, `blocked`.
 | PB-EN-016 | local Project end on shared transport | Engine ends; transport and peers continue | covered |
 | PB-EN-017 | transport end | all attached Engines enter ended | covered |
 | PB-EN-018 | transport dispose while playing | cache final position, become paused, controls reject | covered |
-| PB-EN-018A | transport dispose while stopped/paused/ended | preserve local state and cached position | planned |
+| PB-EN-018A | transport dispose while stopped/paused/ended | preserve local state and cached position | covered |
 | PB-EN-019 | Engine dispose | idempotent; borrowed transport survives | covered |
 | PB-EN-020 | Engine API after dispose | update/sample/subscribe/controls throw | covered |
 | PB-EN-021 | Engine listener throws | peers/listeners/scheduler continue | covered |
@@ -105,14 +104,14 @@ Status values: `planned`, `covered`, `blocked`.
 | ID | Scenario | Expected result | Status |
 | --- | --- | --- | --- |
 | PB-CH-001 | sampleChannels with browser transport | uses Engine logical position | covered |
-| PB-CH-002 | sampleChannels with media transport | phase follows media position without clock-domain input | planned |
+| PB-CH-002 | sampleChannels with media transport | phase follows media position without clock-domain input | covered |
 | PB-CH-003 | sample while paused/buffering/ended | returns frozen position values | covered |
 | PB-CH-004 | sampleChannelsAt | evaluates Project-relative milliseconds independent of state | covered |
-| PB-CH-005 | metadata-only Project change | project event has no changedChannelIds | planned |
-| PB-CH-006 | active value change | project event contains only affected channel IDs | planned |
-| PB-CH-007 | normal Project change | no synthetic StepEvent | planned |
-| PB-CH-008 | Project-shortening reposition | one destination step with cause project-change | planned |
-| PB-CH-009 | Sequence Project event | positionMs/beat/stepIndex present; no timestamp | planned |
+| PB-CH-005 | metadata-only Project change | project event has no changedChannelIds | covered |
+| PB-CH-006 | active value change | project event contains only affected channel IDs | covered |
+| PB-CH-007 | normal Project change | no synthetic StepEvent | covered |
+| PB-CH-008 | Project-shortening reposition | one destination step with cause project-change | covered |
+| PB-CH-009 | Sequence Project event | positionMs/beat/stepIndex present; no timestamp | covered |
 | PB-CH-010 | Arrangement section transition | scheduled/current positions, lateByMs, and cause present | covered |
 | PB-EV-001 | Envelope pause/resume | transport-position sampling freezes and resumes decay | covered |
 | PB-EV-002 | seek or stop | all Envelopes reset before destination trigger | covered |

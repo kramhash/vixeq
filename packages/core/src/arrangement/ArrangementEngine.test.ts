@@ -110,6 +110,27 @@ describe("ArrangementEngine — Playback v2", () => {
     expect(engine.getPlaybackState()).toBe("playing");
   });
 
+  it("validates constructor options and registers onStep/onSection convenience handlers", async () => {
+    const { transport } = buildTransport();
+    const onStep = vi.fn();
+    const onSection = vi.fn();
+
+    expect(() => new ArrangementEngine(buildArrangement(), null as unknown as Record<string, never>)).toThrow(TypeError);
+    expect(() => new ArrangementEngine(buildArrangement(), { lookaheadMs: -1 })).toThrow(RangeError);
+    expect(() => new ArrangementEngine(buildArrangement(), { loop: "yes" as unknown as boolean })).toThrow(TypeError);
+
+    const engine = new ArrangementEngine(buildArrangement(), {
+      transport,
+      onStep,
+      onSection,
+    });
+
+    await engine.play();
+
+    expect(onStep).toHaveBeenCalledWith(expect.objectContaining({ stepIndex: 0, cause: "play" }));
+    expect(onSection).toHaveBeenCalledWith(expect.objectContaining({ section: expect.objectContaining({ id: "s1" }) }));
+  });
+
   it("PB-CH-003 pauses and samples the frozen logical position", async () => {
     const { clock, transport } = buildTransport();
     const arrangement = buildArrangement();
@@ -256,6 +277,27 @@ describe("ArrangementEngine — Playback v2", () => {
     ]);
   });
 
+  it("replays from local ended after the transport itself reached ended", async () => {
+    const clock = new FakeClock();
+    const transport = createClockTransport(clock, { durationMs: BEAT_MS * 6 });
+    const engine = new ArrangementEngine(buildArrangement(), { transport, lookaheadMs: 1000 });
+    const playback: string[] = [];
+    const steps: string[] = [];
+    engine.on("playback", (event) => playback.push(`${event.type}:${event.previousState}`));
+    engine.on("step", (event) => steps.push(`${event.cause}:${event.stepIndex}`));
+
+    await engine.play();
+    clock.advance(BEAT_MS * 6);
+    playback.length = 0;
+    steps.length = 0;
+
+    await engine.play();
+
+    expect(transport.getPlaybackState()).toBe("playing");
+    expect(playback).toEqual(["play:ended"]);
+    expect(steps).toEqual(["play:0"]);
+  });
+
   it("PB-EN-022 PB-EN-023 PB-EN-024 changes local loop without mutating transport loop", () => {
     const { transport } = buildTransport();
     const engine = new ArrangementEngine(buildArrangement(), { transport });
@@ -271,6 +313,24 @@ describe("ArrangementEngine — Playback v2", () => {
       { type: "loopchange", cause: "command", snapshot: { projectLoop: true, transportLoop: false } },
     ]);
     expect(transport.getLoop()).toBe(false);
+  });
+
+  it("setLoop off while past the local duration transitions to ended and emits the terminal section", async () => {
+    const { clock, transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport, loop: true, lookaheadMs: 1000 });
+    const playback: string[] = [];
+    const sections: ArrangementSectionEvent[] = [];
+    engine.on("playback", (event) => playback.push(`${event.type}:${event.snapshot.state}`));
+    engine.on("section", (event) => sections.push(event));
+
+    await engine.play();
+    clock.advance(BEAT_MS * 7);
+    engine.setLoop(false);
+
+    expect(engine.getPlaybackState()).toBe("ended");
+    expect(playback.at(-2)).toBe("loopchange:ended");
+    expect(playback.at(-1)).toBe("ended:ended");
+    expect(sections.at(-1)).toMatchObject({ section: null, cause: "tick" });
   });
 
   it("PB-EN-011 PB-EN-025 setArrangement preserves fractional beat without seeking transport", async () => {
@@ -314,10 +374,12 @@ describe("ArrangementEngine — Playback v2", () => {
     expect(engine.getPosition()).toMatchObject({ beat: 2, positionMs: BEAT_MS * 2 });
   });
 
-  it("PB-EN-015 AR-010 shortens a looping project by modulo and keeps playing", async () => {
+  it("PB-EN-015 PB-CH-008 AR-010 AR-011 shortens a looping project by modulo, emits the destination step, and keeps playing", async () => {
     const { clock, transport } = buildTransport();
     const arrangement = buildArrangement();
     const engine = new ArrangementEngine(arrangement, { transport, loop: true });
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
 
     await engine.play();
     clock.advance(BEAT_MS * 5);
@@ -330,6 +392,10 @@ describe("ArrangementEngine — Playback v2", () => {
 
     expect(engine.getPlaybackState()).toBe("playing");
     expect(engine.getPosition()).toMatchObject({ beat: 1, positionMs: BEAT_MS });
+    expect(steps.map((event) => `${event.cause}:${event.stepIndex}`)).toEqual([
+      "play:0",
+      "project-change:1",
+    ]);
   });
 
   it("PB-EN-013 PB-EN-013A validates constructor and preserves state on invalid hot-swap", async () => {
@@ -364,6 +430,51 @@ describe("ArrangementEngine — Playback v2", () => {
     expect(transport.getPlaybackState()).toBe("playing");
     expect(() => engine.sampleChannels()).toThrow();
     expect(() => engine.on("step", () => undefined)).toThrow();
+  });
+
+  it("maps external transport changes, errors, and disposal to playback events", async () => {
+    const { transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+    const playback: string[] = [];
+    engine.on("playback", (event) => playback.push(`${event.type}:${event.cause}:${event.snapshot.state}`));
+
+    await transport.seekMs(BEAT_MS);
+    await transport.setPlaybackRate(2);
+    transport.dispose();
+
+    expect(playback).toEqual([
+      "seek:transport:paused",
+      "ratechange:transport:paused",
+      "error:transport:paused",
+    ]);
+    await expect(engine.play()).rejects.toMatchObject({ code: "TRANSPORT_DISPOSED" });
+  });
+
+  it("isolates Arrangement listener failures", async () => {
+    const { transport } = buildTransport();
+    const onListenerError = vi.fn();
+    const healthy = vi.fn();
+    const engine = new ArrangementEngine(buildArrangement(), { transport, onListenerError });
+    engine.on("section", () => {
+      throw new Error("section listener failed");
+    });
+    engine.on("section", healthy);
+
+    await engine.play();
+
+    expect(healthy).toHaveBeenCalledOnce();
+    expect(onListenerError).toHaveBeenCalledWith(expect.any(Error), {
+      source: "engine",
+      eventName: "section",
+    });
+  });
+
+  it("validates pure sampling positions", () => {
+    const { transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+
+    expect(() => engine.sampleChannelsAt(-1)).toThrow(RangeError);
+    expect(() => engine.sampleChannelsAt(Number.NaN)).toThrow(RangeError);
   });
 
   it("exposes ArrangementEngine through the generic ChannelSource surface", () => {
