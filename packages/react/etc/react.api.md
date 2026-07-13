@@ -45,6 +45,9 @@ export type ArrangementLatestEvent = StepEvent | ArrangementPlaybackEvent | Arra
 // @public
 export type ArrangementPendingOperation = "play" | "pause" | "stop" | "toggle" | "seekPositionMs" | "seekBeat" | "setPlaybackRate" | "setTransportLoop" | "setLoop";
 
+// @public (undocumented)
+export type MotionPreference = "system" | "reduce" | "no-preference";
+
 // @public
 export type SequencePlayerHookState = SequencerEngineHookState;
 
@@ -183,10 +186,6 @@ export type UseTimelineState<TEvent extends TimelineEvent = TimelineEvent> = {
     setTransportLoop: (loop: boolean) => Promise<void>;
     setLoop: (loop: boolean) => Promise<void>;
 };
-
-// Warnings were encountered during analysis:
-//
-// dist/index.d.ts:183:5 - (ae-forgotten-export) The symbol "MotionPreference" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

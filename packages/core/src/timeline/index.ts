@@ -24,7 +24,14 @@ export {
 } from "./project";
 export { getEventsAtBeat, getEventsInBeatRange, getNextEvents } from "./query";
 export { migrateTimelineProject } from "./migration";
-export type { TimelineMigrationOptions, TimelineProjectV1 } from "./migration";
+export type {
+  TempoEventV1,
+  TimelineEventV1,
+  TimelineMigrationOptions,
+  TimelineProjectV1,
+  TimelineTrackV1,
+  TimingMapV1,
+} from "./migration";
 export type {
   CreateTimelineProjectOptions,
   CreateTimingMapOptions,

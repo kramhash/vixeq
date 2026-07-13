@@ -138,7 +138,7 @@ export const validateTimingMap = (timing: TimingMap): void => {
 };
 
 /**
- * Pure conversion: beat -> transport-relative milliseconds. Assumes `timing`
+ * Pure conversion: beat `->` transport-relative milliseconds. Assumes `timing`
  * is already a valid `TimingMap` (see `createTimingMap`/`normalizeTimingMap`
  * to construct one, or `validateTimingMap` to check strictly). Never repairs.
  */
@@ -164,7 +164,7 @@ export const beatToMs = (timing: TimingMap, beat: number): number => {
 };
 
 /**
- * Pure conversion: transport-relative milliseconds -> beat. Assumes `timing`
+ * Pure conversion: transport-relative milliseconds `->` beat. Assumes `timing`
  * is already a valid `TimingMap`. Never repairs.
  */
 export const msToBeat = (timing: TimingMap, ms: number): number => {

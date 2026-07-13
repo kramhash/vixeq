@@ -9,8 +9,8 @@
     "typecheck": "pnpm -r typecheck",
     "dev": "pnpm --filter vixeq-playground dev",
     "smoke:pack": "node scripts/pack-smoke.mjs",
-    "api:check": "pnpm -r --if-present run api:check",
-    "api:update": "pnpm -r --if-present run api:update"
+    "api:check": "pnpm --filter @vixeq/core --filter @vixeq/react --filter @vixeq/player-react run api:check",
+    "api:update": "pnpm --filter @vixeq/core --filter @vixeq/react --filter @vixeq/player-react run api:update"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "^7.58.9",

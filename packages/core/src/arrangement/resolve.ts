@@ -23,7 +23,7 @@ export const arrangementDurationBeats = (arrangement: ArrangementProject): numbe
 
 export type SectionLookup = {
   section: ArrangementSection;
-  /** Beat position relative to the section's own start (always >= 0). */
+  /** Beat position relative to the section's own start (always `>= 0`). */
   localBeat: number;
 };
 

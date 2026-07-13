@@ -80,8 +80,6 @@ export type ArrangementMigrationOptions = {
     durationBeats?: number;
 };
 
-// Warning: (ae-forgotten-export) The symbol "MigrationResult" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
 export type ArrangementMigrationResult = MigrationResult<ArrangementProject>;
 
@@ -375,6 +373,16 @@ export const migrateArrangementProject: (input: unknown, options?: ArrangementMi
 export const migrateTimelineProject: (project: TimelineProjectV1, options: TimelineMigrationOptions) => MigrationResult<TimelineProject>;
 
 // @public (undocumented)
+export type MigrationResult<T> = {
+    ok: true;
+    project: T;
+    warnings: MigrationIssue[];
+} | {
+    ok: false;
+    errors: MigrationIssue[];
+};
+
+// @public (undocumented)
 export type MissedStepPolicy = "emit" | "skip";
 
 // @public
@@ -630,6 +638,9 @@ export type SequencerEngineOptions = {
 };
 
 // @public (undocumented)
+export type SequencerEventHandler<TEventName extends SequencerEventName> = (event: SequencerEventMap[TEventName]) => void;
+
+// @public (undocumented)
 export type SequencerEventMap = {
     step: StepEvent;
     playback: SequencerPlaybackEvent;
@@ -718,6 +729,12 @@ export type TempoEvent = {
 };
 
 // @public (undocumented)
+export type TempoEventV1 = {
+    beat: number;
+    bpm: number;
+};
+
+// @public (undocumented)
 export type TimelineCueEvent<TEvent extends TimelineEvent = TimelineEvent> = {
     event: TEvent;
     iteration: number;
@@ -791,6 +808,17 @@ export type TimelineEventMap<TEvent extends TimelineEvent = TimelineEvent> = {
 // @public (undocumented)
 export type TimelineEventName = keyof TimelineEventMap;
 
+// @public (undocumented)
+export type TimelineEventV1 = {
+    id: string;
+    trackId: string;
+    beat: number;
+    durationBeats?: number;
+    value?: number;
+    type?: string;
+    data?: Record<string, unknown>;
+};
+
 // @public
 export type TimelineEventValidator<TEvent extends TimelineEvent = TimelineEvent> = (event: TEvent) => void;
 
@@ -850,9 +878,24 @@ export type TimelineTrack = {
 };
 
 // @public (undocumented)
+export type TimelineTrackV1 = {
+    id: string;
+    name: string;
+    enabled: boolean;
+    type?: string;
+    data?: Record<string, unknown>;
+};
+
+// @public (undocumented)
 export type TimingMap = {
     tempos: TempoEvent[];
     startPositionMs: number;
+};
+
+// @public (undocumented)
+export type TimingMapV1 = {
+    tempos: TempoEventV1[];
+    offsetMs: number;
 };
 
 // @public
@@ -928,10 +971,7 @@ export type ValidationResult = {
 
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:221:5 - (ae-forgotten-export) The symbol "SequencerEventHandler" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:1174:5 - (ae-forgotten-export) The symbol "TimingMapV1" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:1175:5 - (ae-forgotten-export) The symbol "TimelineTrackV1" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:1187:5 - (ae-forgotten-export) The symbol "TimelineEventV1" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:210:5 - (ae-forgotten-export) The symbol "MigrationIssue" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

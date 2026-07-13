@@ -54,7 +54,7 @@ export type SequencePlayerChangeReason =
   | "project:replace";
 
 /**
- * Payload passed to {@link SequencePlayerProps.onProjectChange} for every edit made through the
+ * Payload passed to {@link SequencePlayerBaseProps.onProjectChange} for every edit made through the
  * player's UI (BPM field, add/remove/rename/enable a track, click or drag a step's value).
  *
  * `trackId` is present for track- and step-level reasons ("track:remove", "track:rename",
@@ -113,7 +113,7 @@ export type SequencePlayerRef = {
  * Shared prop surface between {@link SequencePlayer} (controlled) and
  * {@link StandaloneSequencePlayer} (uncontrolled, see {@link StandaloneSequencePlayerProps}).
  */
-type SequencePlayerBaseProps = {
+export type SequencePlayerBaseProps = {
   /**
    * The project to render and play. The player is fully controlled: it never mutates `project`
    * in place, so this should be the same value most recently reported via `onProjectChange`
@@ -182,7 +182,7 @@ export type StandaloneSequencePlayerProps = Omit<SequencePlayerBaseProps, "proje
   defaultProject?: SequenceProject;
   /**
    * Optional observer invoked after every edit, in addition to the component updating its own
-   * internal project state. Unlike {@link SequencePlayerProps.onProjectChange}, this does not
+   * internal project state. Unlike {@link SequencePlayerBaseProps.onProjectChange}, this does not
    * need to write the project back anywhere — it is notification-only.
    */
   onProjectChange?: (change: SequencePlayerProjectChange) => void;
@@ -219,7 +219,7 @@ const readPointerValue = (event: PointerEvent<HTMLElement>): number => {
 };
 
 /**
- * Editable, controlled React GUI for a {@link SequenceProject}: a per-track step grid, a value
+ * Editable, controlled React GUI for a {@link @vixeq/core#SequenceProject}: a per-track step grid, a value
  * inspector for the selected step, and (optionally) a built-in transport bar (Play/Pause, Stop,
  * BPM). Playback is driven by the `useSequencePlayer` hook from `@vixeq/react`, so scheduling,
  * position tracking, and the step/playback event stream all come from a real `SequencerEngine`

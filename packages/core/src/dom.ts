@@ -12,12 +12,14 @@ export type BindChannelsOptions = {
  * @param options  - Optional precision (default 4 decimal places).
  *
  * @example
+ * ```ts
  * bindChannelsToElement(rootEl, values, {
  *   kick:  "--pulse-beat",
  *   bass:  "--pulse-cta",
  *   eq:    "--pulse-eq",
  *   mood:  "--pulse-mood",
  * });
+ * ```
  */
 export function bindChannelsToElement(
   element: HTMLElement,

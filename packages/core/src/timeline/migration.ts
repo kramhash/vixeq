@@ -2,16 +2,19 @@ import type { MigrationIssue, MigrationResult } from "../types";
 import { isRecord, sortTimelineEvents, toJsonCompatible } from "./project";
 import type { JsonObject, TimelineEvent, TimelineProject, TimelineTrack } from "./types";
 
-// Locally-scoped v1 shapes: the public v1 TimelineProject type no longer
-// exists (replaced by v2). These describe only what migration needs to read
-// from existing v1-schema data. Fields are trusted to already match this
-// shape structurally; migration does not re-validate v1 structural
-// correctness beyond the specific fields it transforms.
+// Legacy v1 shapes: the v1 TimelineProject type itself no longer exists
+// (replaced by v2). These describe only what migration needs to read from
+// existing v1-schema data. Fields are trusted to already match this shape
+// structurally; migration does not re-validate v1 structural correctness
+// beyond the specific fields it transforms. Exported (rather than kept
+// module-private) because they are reachable through the public
+// `TimelineProjectV1` parameter type below, so callers can type their
+// pre-migration data.
 
-type TempoEventV1 = { beat: number; bpm: number };
-type TimingMapV1 = { tempos: TempoEventV1[]; offsetMs: number };
-type TimelineTrackV1 = { id: string; name: string; enabled: boolean; type?: string; data?: Record<string, unknown> };
-type TimelineEventV1 = {
+export type TempoEventV1 = { beat: number; bpm: number };
+export type TimingMapV1 = { tempos: TempoEventV1[]; offsetMs: number };
+export type TimelineTrackV1 = { id: string; name: string; enabled: boolean; type?: string; data?: Record<string, unknown> };
+export type TimelineEventV1 = {
   id: string;
   trackId: string;
   beat: number;

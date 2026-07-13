@@ -23,10 +23,22 @@ export type SelectedStep = {
     stepIndex: number;
 };
 
-// Warning: (ae-forgotten-export) The symbol "SequencePlayerBaseProps" needs to be exported by the entry point index.d.ts
-//
 // @public
 export const SequencePlayer: react.ForwardRefExoticComponent<SequencePlayerBaseProps & react.RefAttributes<SequencePlayerRef>>;
+
+// @public
+export type SequencePlayerBaseProps = {
+    project: SequenceProject;
+    onProjectChange: (change: SequencePlayerProjectChange) => void;
+    onStep?: (event: StepEvent) => void;
+    onPlaybackChange?: (event: SequencerPlaybackEvent) => void;
+    onSelectedStepChange?: (selectedStep: SelectedStep | null) => void;
+    onEngineChange?: (engine: SequencerEngine | null) => void;
+    transport?: PlaybackTransport;
+    showTransportControls?: boolean;
+    className?: string;
+    style?: CSSProperties;
+};
 
 // @public
 export type SequencePlayerChangeReason = "bpm" | "track:add" | "track:remove" | "track:rename" | "track:enabled" | "step:toggle" | "step:value" | "project:replace";

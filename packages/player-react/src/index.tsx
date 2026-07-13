@@ -2,6 +2,7 @@ export {
   SequencePlayer,
   StandaloneSequencePlayer,
   type SelectedStep,
+  type SequencePlayerBaseProps,
   type SequencePlayerChangeReason,
   type SequencePlayerProjectChange,
   type SequencePlayerProps,

@@ -1,0 +1,19 @@
+{
+  // Used by API Extractor (see api-extractor.json's `compiler.tsconfigFilePath`)
+  // instead of tsconfig.json. It deliberately omits tsconfig.json's `paths`
+  // alias (which points @vixeq/core at core's *source* for live cross-package
+  // type-checking during local dev). API Extractor resolves module specifiers
+  // it finds in the rolled-up dist/index.d.ts, and following that dev-only
+  // alias makes it try to analyze core's full source implementation instead
+  // of the published dist/index.d.ts shape, which crashes with an internal
+  // error on unrelated private implementation details. Without `paths`,
+  // @vixeq/core resolves the normal way (through the pnpm workspace
+  // node_modules symlink, honoring core's package.json `types` field) --
+  // exactly how a real npm consumer resolves it.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}

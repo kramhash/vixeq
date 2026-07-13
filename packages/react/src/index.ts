@@ -7,7 +7,7 @@ export {
   type SequencerEngineHookState,
   type SequencerEnginePendingOperation,
 } from "./useSequencerEngine";
-export { useAnimatedChannels, type AnimatedChannelsOptions } from "./useAnimatedChannels";
+export { useAnimatedChannels, type AnimatedChannelsOptions, type MotionPreference } from "./useAnimatedChannels";
 export {
   useArrangement,
   type ArrangementLatestEvent,

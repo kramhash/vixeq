@@ -11,7 +11,7 @@ export type MotionPreference = "system" | "reduce" | "no-preference";
 
 export type AnimatedChannelsOptions = {
   /**
-   * Map of trackId -> Envelope. Envelope trigger/sample positions use the
+   * Map of trackId `->` Envelope. Envelope trigger/sample positions use the
    * engine's logical transport position, not rAF or wall-clock timestamps.
    */
   envelopes?: Record<string, Envelope>;
