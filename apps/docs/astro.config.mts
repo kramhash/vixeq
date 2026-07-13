@@ -5,10 +5,10 @@ import starlightTypeDoc, { typeDocSidebarGroup } from "starlight-typedoc";
 // Mirrors the base-path branching in apps/playground/vite.config.ts so the
 // docs site resolves correctly both in local dev and under GitHub Pages,
 // where it is published alongside the playground at /vixeq/docs/.
-const isGithubActions = process.env.GITHUB_ACTIONS === "true";
+const docsBase = process.env.VIXEQ_BASE_PATH ?? (process.env.GITHUB_ACTIONS === "true" ? "/vixeq/docs" : "/");
 
 export default defineConfig({
-  base: isGithubActions ? "/vixeq/docs" : "/",
+  base: docsBase,
 
   integrations: [
     starlight({

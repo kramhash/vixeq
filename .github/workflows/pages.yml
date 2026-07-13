@@ -1,4 +1,4 @@
-name: Deploy Playground
+name: Deploy Examples
 
 on:
   push:
@@ -36,20 +36,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build workspace
-        run: pnpm build
+      - name: Build playground
+        run: pnpm --filter vixeq-playground build
+
+      - name: Build website-pulse example
+        run: pnpm --filter vixeq-example-website-pulse build
+
+      - name: Build cycling-workout example
+        run: pnpm --filter vixeq-example-cycling-workout build
+
+      - name: Build arrangement-demo example
+        run: pnpm --filter vixeq-example-arrangement-demo build
 
       - name: Build docs site
         run: pnpm --filter vixeq-docs build:site
 
       - name: Assemble Pages artifact
-        run: |
-          set -euo pipefail
-          rm -rf _site
-          mkdir -p _site
-          cp -r apps/playground/dist/. _site/
-          mkdir -p _site/docs
-          cp -r apps/docs/dist/. _site/docs/
+        run: node scripts/build-pages.mjs
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

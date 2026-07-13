@@ -44,6 +44,9 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Test Pages artifact builder
+        run: node --test scripts/build-pages.test.mjs
+
       - name: Check public API reports
         run: pnpm api:check
 

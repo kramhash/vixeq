@@ -173,7 +173,7 @@ export const App = () => {
         </div>
       </div>
 
-      <audio ref={audioRef} src="/demo-loop.wav" loop preload="auto" />
+      <audio ref={audioRef} src={`${import.meta.env.BASE_URL}demo-loop.wav`} loop preload="auto" />
     </div>
   );
 };
