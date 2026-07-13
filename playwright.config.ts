@@ -1,5 +1,15 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const firefoxAudioPrefs = {
+  // GitHub Actions' Linux Firefox can leave WebAudio autoplay blocked even
+  // when playback is initiated through Playwright's user-like click. Keep the
+  // product E2E on Firefox by making the automation profile explicitly allow
+  // WebAudio playback.
+  "media.autoplay.default": 0,
+  "media.autoplay.block-webaudio": false,
+  "media.autoplay.blocking_policy": 0,
+};
+
 // R3 browser gate (docs/plans/v1-collaboration-spec.md Section "Browser
 // gates"): run media-transport E2E in Chromium, Firefox, and WebKit against
 // two targets —
@@ -20,7 +30,15 @@ export default defineConfig({
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-    { name: "firefox", use: { ...devices["Desktop Firefox"] } },
+    {
+      name: "firefox",
+      use: {
+        ...devices["Desktop Firefox"],
+        launchOptions: {
+          firefoxUserPrefs: firefoxAudioPrefs,
+        },
+      },
+    },
     { name: "webkit", use: { ...devices["Desktop Safari"] } },
   ],
   webServer: [
