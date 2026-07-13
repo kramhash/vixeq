@@ -47,11 +47,12 @@ behavior is covered by product/example verification when a browser-facing
 change needs it, but mobile browser engines are not a separate support target
 for 1.0.
 
-Known WebKit caveat: Linux headless WebKit does not reliably advance
-`AudioContext.currentTime` in Playwright for the real WebAudio product E2E
-case. WebKit remains in the browser matrix, but the real WebAudio position
-progression assertion capability-skips there when the clock does not advance.
-Deterministic transport behavior and product controls still run in WebKit.
+Known headless WebAudio caveat: Linux headless WebKit and Firefox do not
+reliably start or advance `AudioContext.currentTime` in Playwright for the
+real WebAudio product E2E case. Both browsers remain in the browser matrix,
+but real WebAudio playback start/progression assertions capability-skip when
+that environment cannot start or advance the audio clock. Deterministic
+transport behavior still runs in WebKit and Firefox.
 
 ## Compatibility Gates
 

@@ -657,13 +657,15 @@ Browser gates:
     full-show loop, custom-audio loading (`<input type="file">`),
     undecodable-file error alert, and `prefers-reduced-motion`. `AudioContext`
     timing cannot be driven by Playwright's fake clock and Playwright's
-    Linux WebKit build does not reliably advance `AudioContext.currentTime`
-    headless; the one test asserting real audio position progression
-    capability-gates with a runtime `test.skip` on WebKit when
-    `currentTime` hasn't advanced after a real-time wait, instead of using
-    an unrealistically tight tolerance or skipping WebKit outright. Recorded
-    here for R5's support-policy writeup: WebKit browser E2E coverage for
-    this library does not include real WebAudio position progression.
+    Linux WebKit and Firefox builds do not reliably advance
+    `AudioContext.currentTime` or start WebAudio transport headless in every
+    CI environment; tests asserting real WebAudio playback start/progression
+    capability-gate with a runtime `test.skip` when the browser cannot start
+    or advance that real-audio clock, instead of using an unrealistically
+    tight tolerance or skipping the browser outright. Recorded here for R5's
+    support-policy writeup: WebKit and CI Firefox browser E2E coverage for
+    this library does not include guaranteed real WebAudio position
+    progression.
   - CI: a separate `e2e` job in `.github/workflows/ci.yml` (Ubuntu, single
     Node 22 leg — Playwright's browser install is heavy and orthogonal to
     the Node matrix), running `playwright install --with-deps` then
