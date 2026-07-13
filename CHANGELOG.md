@@ -2,9 +2,21 @@
 
 ## Unreleased
 
+## 0.9.0 - 2026-07-13
+
+Release-readiness stable line for the pre-1.0 API freeze. This release adds
+the API, package, compatibility, browser, Pages, support-policy, and migration
+documentation gates needed before `1.0.0-rc.1`.
+
 ### Added
 
 - `@vixeq/core`: `default` preset added to `presets`.
+- API Extractor reports and API-difference checks for all public packages.
+- Behavior-matrix checking, packed-package smoke coverage, React 18 and
+  TypeScript 5.5 compatibility fixtures, and Chromium/Firefox/WebKit browser
+  E2E coverage.
+- Multi-example Pages artifact and deploy workflow for the official examples
+  and docs index.
 - Final pre-1.0 release-readiness docs:
   [`SUPPORT.md`](./SUPPORT.md),
   [`docs/migrations/README.md`](./docs/migrations/README.md),
@@ -27,6 +39,10 @@
 - New brand assets (`brand/header.png` README hero banner, `brand/player.gif`
   demo capture) and a redrawn `brand/vixeq-logo.svg` (rounded-corner grid
   cells instead of plain rects).
+- `pnpm test:coverage` is configured and runnable, but Core branch coverage is
+  still below the configured R1 thresholds. This is a documented non-blocking
+  gap for `0.9.0` and must be resolved or explicitly re-decided before
+  `1.0.0-rc.1`.
 
 ## 0.8.0 - 2026-07-11
 
