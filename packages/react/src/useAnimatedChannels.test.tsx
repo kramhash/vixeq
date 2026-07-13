@@ -183,7 +183,7 @@ describe("useAnimatedChannels", () => {
     ]);
   });
 
-  it("resets envelopes on seek before the destination step retriggers and on stop", () => {
+  it("PB-EV-002 resets envelopes on seek before the destination step retriggers and on stop", () => {
     const engine = new FakeChannelSource();
     const order: string[] = [];
     const envelope = createEnvelope(1, order);
@@ -199,7 +199,7 @@ describe("useAnimatedChannels", () => {
     expect(order).toEqual(["a:reset", "a:trigger:1000", "a:reset"]);
   });
 
-  it("resets changed project envelopes without retriggering", () => {
+  it("PB-EV-003 resets changed project envelopes without retriggering", () => {
     const engine = new FakeChannelSource();
     const envelopeA = createEnvelope(1);
     const envelopeB = createEnvelope(1);
@@ -221,7 +221,7 @@ describe("useAnimatedChannels", () => {
     expect(envelopeB.trigger).not.toHaveBeenCalled();
   });
 
-  it("samples once, ignores steps, and re-samples explicit changes when motionPreference is reduce", () => {
+  it("PB-RM-001 PB-RM-002 PB-RM-003 samples once, ignores steps, and re-samples explicit changes when motionPreference is reduce", () => {
     const engine = new FakeChannelSource();
     engine.positionMs = 750;
     const onFrame = vi.fn();
@@ -283,7 +283,7 @@ describe("useAnimatedChannels", () => {
     expect(engine.listeners.step.size).toBe(0);
   });
 
-  it("can ignore system reduced motion with no-preference", () => {
+  it("PB-RM-004 can ignore system reduced motion with no-preference", () => {
     vi.stubGlobal("matchMedia", vi.fn(() => ({
       matches: true,
       media: "(prefers-reduced-motion: reduce)",

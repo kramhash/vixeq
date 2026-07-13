@@ -1,6 +1,9 @@
 # Playback v2 Behavior Matrix
 
-- Status: Approved test plan; implementation coverage is `planned`
+- Status: 103 of 112 rows `covered` as of 0.9.0 R1; remaining `planned` rows:
+  PB-TR-026, PB-TR-027, PB-EN-018A, PB-CH-002, PB-CH-005, PB-CH-006,
+  PB-CH-007, PB-CH-008, PB-CH-009. CI (`pnpm behavior:check`) fails if a
+  `covered` row's ID is not found in any test.
 - Normative contract: [`playback-v2.md`](playback-v2.md)
 
 Each matrix ID is stable. Tests added during P1–P7 must include the ID in the

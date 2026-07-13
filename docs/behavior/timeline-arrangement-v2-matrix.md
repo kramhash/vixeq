@@ -1,6 +1,9 @@
 # Timing, Timeline, and Arrangement v2 Behavior Matrix
 
-- Status: Approved test plan; implementation coverage is `planned`
+- Status: 78 of 79 rows `covered` as of 0.9.0 R1; remaining `planned`: AR-011
+  (a step event with `cause: "project-change"` fires on a forced-reposition
+  hot-swap, but no test currently asserts it). CI (`pnpm behavior:check`)
+  fails if a `covered` row's ID is not found in any test.
 - Normative contract: [`timeline-arrangement-v2.md`](timeline-arrangement-v2.md)
 
 Each matrix ID is stable. Tests added during T1–T5 must include the ID in the
@@ -101,7 +104,7 @@ Status values: `planned`, `covered`, `blocked`.
 | AR-008 | tempo change mid-arrangement | beat-to-position conversion changes; section/pattern beat placement unchanged | covered |
 | AR-009 | non-looping hot-swap shortens duration below current beat | moves to new end and transitions to ended | covered |
 | AR-010 | looping hot-swap shortens duration below current beat | modulo into new duration and continues | covered |
-| AR-011 | hot-swap forced reposition | exactly one destination step with cause project-change | covered |
+| AR-011 | hot-swap forced reposition | exactly one destination step with cause project-change | planned |
 
 ## Migration (`MIG-*`)
 

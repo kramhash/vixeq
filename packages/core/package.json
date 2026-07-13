@@ -47,6 +47,7 @@
   "scripts": {
     "build": "tsup src/index.ts src/dom.ts --format esm,cjs --dts --sourcemap",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "api:check": "api-extractor run --verbose -c api-extractor.json && api-extractor run --verbose -c api-extractor.dom.json",
     "api:update": "api-extractor run --local --verbose -c api-extractor.json && api-extractor run --local --verbose -c api-extractor.dom.json"

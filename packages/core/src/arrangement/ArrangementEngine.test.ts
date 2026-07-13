@@ -126,7 +126,7 @@ describe("ArrangementEngine — Playback v2", () => {
     expect(engine.sampleChannels()[introId]).toBeCloseTo(pausedValue);
   });
 
-  it("PB-EN-006 PB-EN-010 seekBeat maps beat to transport position and emits only destination steps", async () => {
+  it("PB-EN-006 PB-EN-010 PB-CH-010 seekBeat maps beat to transport position and emits only destination steps", async () => {
     const { transport } = buildTransport();
     const engine = new ArrangementEngine(buildArrangement(), { transport });
     const playback: EnginePlaybackEvent[] = [];
@@ -296,7 +296,7 @@ describe("ArrangementEngine — Playback v2", () => {
     expect(projects[0]).toMatchObject({ beat: 1.5, positionMs: 1500 });
   });
 
-  it("PB-EN-014 shortens a non-looping project to local ended", async () => {
+  it("PB-EN-014 AR-009 shortens a non-looping project to local ended", async () => {
     const { clock, transport } = buildTransport();
     const arrangement = buildArrangement();
     const engine = new ArrangementEngine(arrangement, { transport });
@@ -314,7 +314,7 @@ describe("ArrangementEngine — Playback v2", () => {
     expect(engine.getPosition()).toMatchObject({ beat: 2, positionMs: BEAT_MS * 2 });
   });
 
-  it("PB-EN-015 shortens a looping project by modulo and keeps playing", async () => {
+  it("PB-EN-015 AR-010 shortens a looping project by modulo and keeps playing", async () => {
     const { clock, transport } = buildTransport();
     const arrangement = buildArrangement();
     const engine = new ArrangementEngine(arrangement, { transport, loop: true });

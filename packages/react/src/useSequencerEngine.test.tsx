@@ -150,7 +150,7 @@ describe("useSequencerEngine", () => {
     vi.unstubAllGlobals();
   });
 
-  it("PB-RE-001 supports StrictMode mount, Playback v2 controls, and borrowed transport cleanup", async () => {
+  it("PB-RE-001 PB-LC-001 supports StrictMode mount, Playback v2 controls, and borrowed transport cleanup", async () => {
     const clock = new FakeClock();
     const transport = createClockTransport(clock, { durationMs: 2000 });
     const project = createProject({ stepCount: 4, trackCount: 1 });

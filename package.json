@@ -10,16 +10,19 @@
     "dev": "pnpm --filter vixeq-playground dev",
     "smoke:pack": "node scripts/pack-smoke.mjs",
     "api:check": "pnpm --filter @vixeq/core --filter @vixeq/react --filter @vixeq/player-react run api:check",
-    "api:update": "pnpm --filter @vixeq/core --filter @vixeq/react --filter @vixeq/player-react run api:update"
+    "api:update": "pnpm --filter @vixeq/core --filter @vixeq/react --filter @vixeq/player-react run api:update",
+    "test:coverage": "pnpm --filter @vixeq/core --filter @vixeq/react --filter @vixeq/player-react run test:coverage",
+    "behavior:check": "node scripts/check-behavior-matrix.mjs"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "^7.58.9",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^20.19.0",
+    "@vitest/coverage-v8": "^3.2.7",
     "jsdom": "^29.1.1",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.7"
   },
   "packageManager": "pnpm@10.12.1"
 }

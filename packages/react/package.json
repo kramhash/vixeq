@@ -46,6 +46,7 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --sourcemap",
     "test": "vitest run --passWithNoTests",
+    "test:coverage": "vitest run --coverage --passWithNoTests",
     "typecheck": "tsc --noEmit",
     "api:check": "api-extractor run --verbose",
     "api:update": "api-extractor run --local --verbose"

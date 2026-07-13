@@ -200,7 +200,7 @@ describe("createDecayEnvelope", () => {
     expect(env.sample(1000)).toBe(0);
   });
 
-  it("does not leak old decay state after reset and backward sampling", () => {
+  it("PB-EV-004 does not leak old decay state after reset and backward sampling", () => {
     const env = createDecayEnvelope(config);
     env.trigger(500, 1);
     expect(env.sample(500)).toBeGreaterThan(0);

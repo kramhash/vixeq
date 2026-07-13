@@ -42,3 +42,6 @@ jobs:
 
       - name: Check public API reports
         run: pnpm api:check
+
+      - name: Behavior-matrix gate
+        run: pnpm behavior:check

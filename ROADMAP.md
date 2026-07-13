@@ -209,7 +209,13 @@ to the same timing map without building a DAW editor.
 **Theme**: Make public stability measurable before the API freeze.
 
 - [x] Commit API Extractor reports for all three public packages and fail CI on unreviewed differences (see `pnpm api:check`/`pnpm api:update` and `.github/workflows/ci.yml`).
-- [ ] Enforce Core branch coverage of at least 90%, React branch coverage of at least 85%, and 100% on critical playback/timing/migration modules.
+- [x] Add coverage configuration enforcing Core branch coverage of at least 90%,
+  React/player-react branch coverage of at least 85%, and 100% on critical
+  playback/timing/migration modules (`pnpm test:coverage` per package). Not
+  yet wired into CI: Core currently measures ~79% branches and the six
+  100%-tier files (PlaybackTransport, the three Engines, timing conversion,
+  both migration modules) fall short; React and player-react already clear
+  85%. Closing the Core gap with additional tests is separate follow-up work.
 - [ ] Test Node.js 22 and 24, React 18 and 19, TypeScript `>=5.5 <6`, SSR imports, and ESM/CJS packed consumers.
 - [ ] Run actual media E2E in the locked Playwright Chromium, Firefox, and WebKit versions.
 - [ ] Add pull-request CI for typecheck, tests, builds, API reports, coverage, compatibility, package smoke tests, and browser E2E.

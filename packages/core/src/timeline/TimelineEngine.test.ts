@@ -59,7 +59,7 @@ afterEach(() => {
 });
 
 describe("TimelineEngine", () => {
-  it("dispatches cue events from play and natural ticks", async () => {
+  it("TL-EN-004 TL-EN-008 dispatches cue events from play and natural ticks", async () => {
     vi.useFakeTimers();
     const clock = new FakeClock();
     const transport = createClockTransport(clock);
@@ -83,7 +83,7 @@ describe("TimelineEngine", () => {
     });
   });
 
-  it("seekBeat emits playback seek without cue events and validates the beat range", async () => {
+  it("TL-EN-002 TL-EN-003 TL-EN-006 seekBeat emits playback seek without cue events and validates the beat range", async () => {
     vi.useFakeTimers();
     const transport = createClockTransport(new FakeClock());
     const engine = new TimelineEngine(projectWithEvents(4, [{ id: "one", beat: 1, type: "cue" }]), {
@@ -102,7 +102,7 @@ describe("TimelineEngine", () => {
     expect(() => engine.seekBeat(5)).toThrow(RangeError);
   });
 
-  it("reaches local ended without stopping a shared transport", async () => {
+  it("TL-EN-011 reaches local ended without stopping a shared transport", async () => {
     vi.useFakeTimers();
     const clock = new FakeClock();
     const transport = createClockTransport(clock);
@@ -121,7 +121,7 @@ describe("TimelineEngine", () => {
     expect(playbackTypes).toContain("ended");
   });
 
-  it("dispatches local loop boundaries in time order and includes beat-0 cues each iteration", async () => {
+  it("TL-EN-007 dispatches local loop boundaries in time order and includes beat-0 cues each iteration", async () => {
     vi.useFakeTimers();
     const clock = new FakeClock();
     const transport = createClockTransport(clock);
@@ -165,7 +165,7 @@ describe("TimelineEngine", () => {
     expect(cues).toEqual(["two"]);
   });
 
-  it("atomically hot-swaps projects, preserves beat position, and avoids retroactive cues", async () => {
+  it("TL-EN-009 TL-EN-010 atomically hot-swaps projects, preserves beat position, and avoids retroactive cues", async () => {
     vi.useFakeTimers();
     const clock = new FakeClock();
     const transport = createClockTransport(clock);
@@ -209,7 +209,7 @@ describe("TimelineEngine", () => {
     expect(cues).toEqual(["current"]);
   });
 
-  it("missedCuePolicy skip keeps only the most-advanced due event when several are due in one tick", async () => {
+  it("TL-EN-005 missedCuePolicy skip keeps only the most-advanced due event when several are due in one tick", async () => {
     // Regression: an earlier implementation filtered each due event
     // independently against lookaheadMs instead of keeping only the last
     // one, so two events closer together than lookaheadMs both fired.
@@ -281,7 +281,7 @@ describe("TimelineEngine", () => {
     expect((engine as unknown as { sampleChannelsAt?: unknown }).sampleChannelsAt).toBeUndefined();
   });
 
-  it("dispatches only the due slice from a 100,000 event fixture", async () => {
+  it("TL-EN-012 TL-EN-013 dispatches only the due slice from a 100,000 event fixture", async () => {
     vi.useFakeTimers();
     const clock = new FakeClock();
     const transport = createClockTransport(clock);

@@ -569,6 +569,26 @@ Coverage gates:
   100% branch coverage.
 - Generated declarations, export-only modules, and examples are excluded.
 - Coverage does not replace the behavior matrix.
+- `@vixeq/player-react` is held to the same 85% branch threshold as React
+  (the spec names no separate number for it; treated as another React-based
+  public package).
+- Configuration status (R1, done): `pnpm test:coverage` (per-package
+  `vitest run --coverage`, provider `v8`) enforces these thresholds and is
+  runnable locally/manually. It is not yet wired into `.github/workflows/ci.yml`
+  because actual measured coverage does not yet meet the thresholds — Core is
+  at ~79% branches (target 90%) and all six 100%-tier files
+  (`playbackTransport.ts`, the three Engines, `timing.ts`, both `migration.ts`
+  files) fall short; React (~90%) and player-react (~90%) already clear 85%.
+  Wiring `test:coverage` into CI is deferred until the Core gap is closed by
+  additional tests (separate follow-up work, not part of R1).
+- `pnpm behavior:check` (new script, `scripts/check-behavior-matrix.mjs`)
+  operationalizes the "behavior-matrix gates" deliverable: it parses
+  `docs/behavior/*-matrix.md` and fails if any row marked `covered` has no
+  matching ID in a test file. It is wired into CI. During R1 this caught 24
+  rows marked `covered` without a backing test ID; 23 were mechanical
+  labeling fixes (the test already existed, just untagged) and one
+  (`AR-011`) was a genuine gap with no assertion anywhere — downgraded to
+  `planned` rather than fabricated.
 
 API and package gates:
 
@@ -679,7 +699,7 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | T7 | 0.8 | Add v1-to-v2 migration fixtures and beta smoke tests | T2, T4, T6 | done | Codex (author), Claude (reviewer, N1 fix author) | Core tests, fixtures, docs |
 | T8 | 0.8 | Promote 0.8.0 stable release docs and package versions | T7 | done | Codex (author), Claude (reviewer, CHANGELOG fix, npm publish + registry smoke) | package metadata, README/API docs, release docs |
 | R0 | 0.9 | Add API Extractor reports and API-diff CI | P8, T7 | done | Claude (author + reviewer) | package configs, `.github/` |
-| R1 | 0.9 | Add coverage configuration and behavior-matrix gates | P8, T7 | pending | — | Vitest configs, CI |
+| R1 | 0.9 | Add coverage configuration and behavior-matrix gates | P8, T7 | done | Claude (author + reviewer) | Vitest configs, CI |
 | R2 | 0.9 | Add Node/React/TypeScript/package compatibility fixtures | P8, T7 | pending | — | fixtures, CI |
 | R3 | 0.9 | Add three-browser media and product E2E | T6 | pending | — | Playwright tests, CI |
 | R4 | 0.9 | Build multi-example Pages index and deploy workflow | T6 | pending | — | apps/site or deploy scripts, `.github/` |
