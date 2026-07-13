@@ -758,7 +758,7 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | R1 | 0.9 | Add coverage configuration and behavior-matrix gates | P8, T7 | done | Claude (author + reviewer) | Vitest configs, CI |
 | R2 | 0.9 | Add Node/React/TypeScript/package compatibility fixtures | P8, T7 | done | Claude (author + reviewer) | fixtures, CI |
 | R3 | 0.9 | Add three-browser media and product E2E | T6 | done | Claude (author + reviewer) | Playwright tests, CI |
-| R4 | 0.9 | Build multi-example Pages index and deploy workflow | T6 | in_progress | Codex | apps/site or deploy scripts, `.github/` |
+| R4 | 0.9 | Build multi-example Pages index and deploy workflow | T6 | done | Codex (author), Claude (reviewer) | apps/site or deploy scripts, `.github/` |
 | R5 | 0.9 | Finalize support, semver, migration, and release docs | R0–R4 | pending | — | root/package docs |
 | R6 | 0.9 | React hooks render-frugal: `latestEvent` state → `latestEventRef` | P6, T5 | done | Claude (author + reviewer) | `packages/react/src/`, `packages/player-react/src/SequencePlayer.tsx` |
 

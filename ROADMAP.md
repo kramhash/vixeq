@@ -234,7 +234,10 @@ to the same timing map without building a DAW editor.
   Browser E2E is now wired (see above); coverage remains unwired pending the
   Core branch-coverage gap (see the coverage item above).
 - [ ] Polish `website-pulse`, `cycling-workout`, and playground release fixtures.
-- [ ] Publish a Pages index with `/playground/`, `/website-pulse/`, and `/cycling-workout/`.
+- [x] Publish a Pages index with `/playground/`, `/website-pulse/`, and `/cycling-workout/`.
+  `scripts/build-pages.mjs` assembles `_site/` and also publishes
+  `/arrangement-demo/` and `/docs/`; `.github/workflows/pages.yml` builds and
+  deploys the artifact, with a builder test wired into CI.
 - [x] React hooks render-frugal refactor: `latestEvent` state → `latestEventRef` ref
   (see the render-frugal migration guide).
 

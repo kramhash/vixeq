@@ -2,13 +2,22 @@ import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import starlightTypeDoc, { typeDocSidebarGroup } from "starlight-typedoc";
 
-// Mirrors the base-path branching in apps/playground/vite.config.ts so the
-// docs site resolves correctly both in local dev and under GitHub Pages,
-// where it is published alongside the playground at /vixeq/docs/.
-const docsBase = process.env.VIXEQ_BASE_PATH ?? (process.env.GITHUB_ACTIONS === "true" ? "/vixeq/docs" : "/");
+// Mirrors scripts/build-pages.mjs's inferPagesBase so the docs base tracks
+// the same repository-name derivation as the rest of the Pages index instead
+// of hardcoding "/vixeq".
+function resolveDocsBase() {
+  if (process.env.VIXEQ_BASE_PATH !== undefined)
+    return process.env.VIXEQ_BASE_PATH;
+  if (process.env.GITHUB_ACTIONS !== "true") return "/";
+  const repository = process.env.GITHUB_REPOSITORY;
+  const name = repository?.includes("/")
+    ? repository.split("/").at(-1)
+    : "vixeq";
+  return `/${name}/docs`;
+}
 
 export default defineConfig({
-  base: docsBase,
+  base: resolveDocsBase(),
 
   integrations: [
     starlight({
@@ -20,7 +29,13 @@ export default defineConfig({
         replacesTitle: true,
       },
       customCss: ["./src/styles/custom.css"],
-      social: [{ icon: "github", href: "https://github.com/kramhash/vixeq", label: "GitHub" }],
+      social: [
+        {
+          icon: "github",
+          href: "https://github.com/kramhash/vixeq",
+          label: "GitHub",
+        },
+      ],
 
       sidebar: [
         {
@@ -38,7 +53,11 @@ export default defineConfig({
 
       plugins: [
         starlightTypeDoc({
-          entryPoints: ["../../packages/core", "../../packages/react", "../../packages/player-react"],
+          entryPoints: [
+            "../../packages/core",
+            "../../packages/react",
+            "../../packages/player-react",
+          ],
           // Per-package packages/{core,react,player-react}/typedoc.json define each
           // package's own entryPoints (core has two: index.ts + dom.ts).
           typeDoc: {
