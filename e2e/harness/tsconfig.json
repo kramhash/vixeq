@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@vixeq/core": ["../../packages/core/src/index.ts"],
+      "@vixeq/core/dom": ["../../packages/core/src/dom.ts"]
+    },
+    "types": ["vite/client"],
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "vite.config.ts"]
+}

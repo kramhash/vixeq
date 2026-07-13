@@ -377,7 +377,9 @@ export const App = () => {
           <div className="live-cue" aria-live="polite">
             <div className="live-cue__meta">
               <span className="live-cue__scene">{activeScene.label}</span>
-              <span>{formatTime(timelinePositionMs)} / {formatTime(brandTimelineDurationMs)}</span>
+              <span data-testid="position-readout">
+                {formatTime(timelinePositionMs)} / {formatTime(brandTimelineDurationMs)}
+              </span>
             </div>
             <p>{caption}</p>
           </div>

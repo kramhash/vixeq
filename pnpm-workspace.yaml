@@ -2,3 +2,17 @@ packages:
   - "packages/*"
   - "apps/*"
   - "examples/*"
+  - "e2e/*"
+
+# Without this, packages/react and packages/player-react (which declare a
+# loose `react: ">=18.0.0 <20.0.0"` peer range with no matching devDependency
+# pin) resolve to a different react version than the examples that alias
+# straight to their source files (see vite.config.ts in each example) --
+# React 19.2.4 there vs React 19.2.7 in e.g. examples/website-pulse. Vite/
+# Rollup then bundle two distinct React copies together, which breaks hooks
+# at runtime ("Cannot read properties of null (reading 'useState')"). Caught
+# by R3's product E2E actually loading a built example in a real browser for
+# the first time; fixed by pinning one resolved version workspace-wide.
+overrides:
+  react: ^19.2.7
+  react-dom: ^19.2.7

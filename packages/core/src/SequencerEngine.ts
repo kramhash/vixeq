@@ -134,9 +134,9 @@ export class SequencerEngine {
    *   optional; omitting `transport` gives the engine its own browser-clock
    *   transport (created via `createClockTransport(browserClock)`), which it
    *   owns and disposes automatically.
-   * @throws {TypeError} if `options` is not an object, or `project` fails
+   * @throws TypeError if `options` is not an object, or `project` fails
    *   validation.
-   * @throws {RangeError} if `options.lookaheadMs` is provided but not a
+   * @throws RangeError if `options.lookaheadMs` is provided but not a
    *   finite, non-negative number.
    */
   constructor(project: SequenceProject, options: SequencerEngineOptions = {}) {
@@ -199,7 +199,7 @@ export class SequencerEngine {
    * schedules the next tick.
    *
    * @returns A promise that resolves once the transport has started.
-   * @throws {PlaybackError} with code `"TRANSPORT_DISPOSED"` if the
+   * @throws {@link PlaybackError} with code `"TRANSPORT_DISPOSED"` if the
    *   transport has been disposed (e.g. the underlying `<audio>` element
    *   was torn down).
    */
@@ -214,7 +214,7 @@ export class SequencerEngine {
    * {@link SequencerEngine.play} to resume from the same spot.
    *
    * @returns A promise that resolves once the transport has paused.
-   * @throws {PlaybackError} with code `"TRANSPORT_DISPOSED"` if the
+   * @throws {@link PlaybackError} with code `"TRANSPORT_DISPOSED"` if the
    *   transport has been disposed.
    */
   pause(): Promise<void> {
@@ -227,7 +227,7 @@ export class SequencerEngine {
    * Stop playback and reset the logical position back to step 0.
    *
    * @returns A promise that resolves once the transport has stopped.
-   * @throws {PlaybackError} with code `"TRANSPORT_DISPOSED"` if the
+   * @throws {@link PlaybackError} with code `"TRANSPORT_DISPOSED"` if the
    *   transport has been disposed.
    */
   stop(): Promise<void> {
@@ -241,8 +241,8 @@ export class SequencerEngine {
    *
    * @param positionMs - Target position; must be finite and non-negative.
    * @returns A promise that resolves once the seek completes.
-   * @throws {RangeError} if `positionMs` is not finite or is negative.
-   * @throws {PlaybackError} with code `"TRANSPORT_DISPOSED"` if the
+   * @throws RangeError if `positionMs` is not finite or is negative.
+   * @throws {@link PlaybackError} with code `"TRANSPORT_DISPOSED"` if the
    *   transport has been disposed.
    */
   seekPositionMs(positionMs: number): Promise<void> {
@@ -258,7 +258,7 @@ export class SequencerEngine {
    *
    * @param stepIndex - Integer index in `[0, project.stepCount)`.
    * @returns A promise that resolves once the seek completes.
-   * @throws {RangeError} if `stepIndex` is not an integer in range.
+   * @throws RangeError if `stepIndex` is not an integer in range.
    */
   seekStep(stepIndex: number): Promise<void> {
     this.assertLive();
@@ -300,7 +300,7 @@ export class SequencerEngine {
    * No-op if `project` is reference-equal to the currently loaded project.
    *
    * @param project - The new project to load. Validated eagerly.
-   * @throws {TypeError} if `project` fails {@link validateProject}.
+   * @throws TypeError if `project` fails {@link validateProject}.
    */
   setProject(project: SequenceProject): void {
     this.assertLive();
@@ -387,7 +387,7 @@ export class SequencerEngine {
    * @param easing - Easing curve applied to the interpolation phase between
    *   steps. Defaults to {@link linear}.
    * @returns A record of trackId → 0–1 value; disabled tracks sample to 0.
-   * @throws {RangeError} if `timeMs` is not finite or is negative.
+   * @throws RangeError if `timeMs` is not finite or is negative.
    */
   sampleChannelsAt(timeMs: number, easing: EasingFunction = linear): Record<string, number> {
     this.assertLive();

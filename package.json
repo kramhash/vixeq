@@ -12,11 +12,13 @@
     "api:check": "pnpm --filter @vixeq/core --filter @vixeq/react --filter @vixeq/player-react run api:check",
     "api:update": "pnpm --filter @vixeq/core --filter @vixeq/react --filter @vixeq/player-react run api:update",
     "test:coverage": "pnpm --filter @vixeq/core --filter @vixeq/react --filter @vixeq/player-react run test:coverage",
-    "behavior:check": "node scripts/check-behavior-matrix.mjs"
+    "behavior:check": "node scripts/check-behavior-matrix.mjs",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@microsoft/api-extractor": "^7.58.9",
+    "@playwright/test": "1.61.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^22.20.1",

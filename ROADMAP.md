@@ -222,8 +222,17 @@ to the same timing map without building a DAW editor.
   fixtures wired into CI; `publint` and Are The Types Wrong also run against
   every packed tarball (`pnpm smoke:pack`). Runner OS stays Ubuntu-only; the
   browser matrix is separate (see the E2E item below).
-- [ ] Run actual media E2E in the locked Playwright Chromium, Firefox, and WebKit versions.
+- [x] Run actual media E2E in the locked Playwright Chromium, Firefox, and WebKit versions.
+  `@playwright/test` pinned at exact `1.61.1`. A deterministic harness
+  (`e2e/harness/`, Playwright Clock API) covers exact-timing
+  play/pause/stop/seek/rate/loop/natural-end/error/shared-Engine-sync
+  assertions (`e2e/tests/media.spec.ts`); `website-pulse`'s real
+  `AudioBuffer` transport is driven end to end with loose tolerances
+  (`e2e/tests/product.spec.ts`), capability-gating WebKit's real audio
+  position progression. Wired into CI as a separate `e2e` job.
 - [ ] Add pull-request CI for typecheck, tests, builds, API reports, coverage, compatibility, package smoke tests, and browser E2E.
+  Browser E2E is now wired (see above); coverage remains unwired pending the
+  Core branch-coverage gap (see the coverage item above).
 - [ ] Polish `website-pulse`, `cycling-workout`, and playground release fixtures.
 - [ ] Publish a Pages index with `/playground/`, `/website-pulse/`, and `/cycling-workout/`.
 - [x] React hooks render-frugal refactor: `latestEvent` state → `latestEventRef` ref

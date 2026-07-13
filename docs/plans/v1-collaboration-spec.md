@@ -634,6 +634,40 @@ Browser gates:
   errors, and shared-Engine synchronization.
 - Use deterministic fake transports for exact timing assertions.
 - Do not use unrealistically tight real-media millisecond tolerances in E2E.
+- Implementation status (R3, done): `@playwright/test` pinned at exact
+  `1.61.1` (no caret) in root `package.json`, per "locked Playwright release".
+  Two suites run across all three projects (`playwright.config.ts`,
+  `chromium`/`firefox`/`webkit`, desktop viewports only — mobile viewports are
+  R4's example-polish scope, not R3's):
+  - `e2e/tests/media.spec.ts` drives a new deterministic harness
+    (`e2e/harness/`, a minimal Vite app) that wires one shared
+    `createClockTransport(browserClock, …)` into both a `SequencerEngine` and
+    a `TimelineEngine`. Determinism comes from Playwright's Clock API
+    (`page.clock.install()` + `page.clock.runFor()`), which fakes
+    `performance.now`/`setTimeout` page-wide — the harness itself uses the
+    shipped `browserClock` unmodified, so the real production code path is
+    under test. Covers play/pause/stop/seek/rate/loop/natural-end/errors
+    (`TRANSPORT_DISPOSED`, seek-past-duration `RangeError`) and
+    shared-Engine synchronization (SequencerEngine and TimelineEngine
+    positions and cue dispatch verified to agree, since both consume one
+    transport).
+  - `e2e/tests/product.spec.ts` drives `examples/website-pulse` end to end
+    (built + `vite preview`) against its real `createAudioBufferTransport`
+    (WebAudio `AudioBuffer`) path: play/pause/stop, scrub, playback rate,
+    full-show loop, custom-audio loading (`<input type="file">`),
+    undecodable-file error alert, and `prefers-reduced-motion`. `AudioContext`
+    timing cannot be driven by Playwright's fake clock and Playwright's
+    Linux WebKit build does not reliably advance `AudioContext.currentTime`
+    headless; the one test asserting real audio position progression
+    capability-gates with a runtime `test.skip` on WebKit when
+    `currentTime` hasn't advanced after a real-time wait, instead of using
+    an unrealistically tight tolerance or skipping WebKit outright. Recorded
+    here for R5's support-policy writeup: WebKit browser E2E coverage for
+    this library does not include real WebAudio position progression.
+  - CI: a separate `e2e` job in `.github/workflows/ci.yml` (Ubuntu, single
+    Node 22 leg — Playwright's browser install is heavy and orthogonal to
+    the Node matrix), running `playwright install --with-deps` then
+    `pnpm test:e2e` on every pull request.
 
 ## 11. Official examples and hosting
 
@@ -723,7 +757,7 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | R0 | 0.9 | Add API Extractor reports and API-diff CI | P8, T7 | done | Claude (author + reviewer) | package configs, `.github/` |
 | R1 | 0.9 | Add coverage configuration and behavior-matrix gates | P8, T7 | done | Claude (author + reviewer) | Vitest configs, CI |
 | R2 | 0.9 | Add Node/React/TypeScript/package compatibility fixtures | P8, T7 | done | Claude (author + reviewer) | fixtures, CI |
-| R3 | 0.9 | Add three-browser media and product E2E | T6 | pending | — | Playwright tests, CI |
+| R3 | 0.9 | Add three-browser media and product E2E | T6 | done | Claude (author + reviewer) | Playwright tests, CI |
 | R4 | 0.9 | Build multi-example Pages index and deploy workflow | T6 | pending | — | apps/site or deploy scripts, `.github/` |
 | R5 | 0.9 | Finalize support, semver, migration, and release docs | R0–R4 | pending | — | root/package docs |
 | R6 | 0.9 | React hooks render-frugal: `latestEvent` state → `latestEventRef` | P6, T5 | done | Claude (author + reviewer) | `packages/react/src/`, `packages/player-react/src/SequencePlayer.tsx` |

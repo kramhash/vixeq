@@ -1,0 +1,16 @@
+{
+  "name": "vixeq-e2e-harness",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4180",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4180",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vixeq/core": "workspace:*",
+    "vite": "^7.0.0"
+  }
+}

@@ -65,3 +65,36 @@ jobs:
       - name: TypeScript minimum-version compatibility fixture
         if: matrix.node-version == 22
         run: SMOKE_TS_VERSION=5.5 pnpm smoke:pack
+
+  e2e:
+    # R3 (spec Section "Browser gates"): actual media-transport E2E in
+    # Chromium, Firefox, and WebKit. A separate job (rather than a step in
+    # `build`) because Playwright's browser install is heavy and orthogonal
+    # to the Node-version matrix; runs once on a single Node version.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace
+        run: pnpm build
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
+
+      - name: Run browser E2E
+        run: pnpm test:e2e
