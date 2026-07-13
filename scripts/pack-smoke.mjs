@@ -10,10 +10,29 @@ const tarballDir = path.join(tempRoot, "tarballs");
 const fixtureConsumerDir = path.join(rootDir, "fixtures", "pack-smoke", "consumer");
 const migrationFixturePath = path.join(rootDir, "fixtures", "migration", "v1-to-v2.json");
 
+// R2 compatibility fixtures (spec Section 10): set SMOKE_REACT_VERSION=18 or
+// SMOKE_TS_VERSION=5.5 to override the consumer fixture's react/react-dom/
+// @types or typescript version instead of deriving it from the live
+// workspace, so the same consumer harness (ESM/CJS/SSR/types/vite-build) can
+// verify the spec's supported minimum/alternate versions without touching
+// the main workspace's own React 19 / TypeScript 5.9 setup. When either is
+// set, the example-app build loop is skipped -- those apps are pinned to the
+// workspace's own versions and aren't part of this peer-range claim.
+const reactVersionOverride = process.env.SMOKE_REACT_VERSION ?? null;
+const tsVersionOverride = process.env.SMOKE_TS_VERSION ?? null;
+const isVersionFixture = Boolean(reactVersionOverride || tsVersionOverride);
+
 const publicPackages = [
   { name: "@vixeq/core", dir: "packages/core" },
   { name: "@vixeq/react", dir: "packages/react" },
-  { name: "@vixeq/player-react", dir: "packages/player-react" },
+  {
+    name: "@vixeq/player-react",
+    dir: "packages/player-react",
+    // `./styles.css` is a plain CSS asset export, not a JS/TS module -- attw
+    // has no types to resolve for it and always reports "Resolution
+    // failed" for non-code entrypoints, so it's excluded from analysis.
+    attwExcludeEntrypoints: ["./styles.css"],
+  },
 ];
 
 const smokeProjects = [
@@ -143,6 +162,28 @@ const packPublicPackages = async () => {
   return tarballs;
 };
 
+// spec Section 10 "API and package gates": publint and Are The Types Wrong
+// on packed packages. attw uses the "node16" profile (ignores "node10"
+// legacy resolution) because the supported matrix (spec Section 10) targets
+// modern Node.js/TypeScript moduleResolution, not the pre-`exports`-field
+// classic resolution algorithm; a subpath export like `@vixeq/core/dom` is
+// expected to fail node10 resolution and that failure is out of scope here.
+const verifyPackedPackages = async (tarballs) => {
+  for (const publicPackage of publicPackages) {
+    const tarballPath = tarballs.get(publicPackage.name);
+    console.log(`\nVerifying packed package: ${publicPackage.name}`);
+    await run("pnpm", ["exec", "publint", tarballPath]);
+
+    // `tarballPath` (the positional arg) must precede `--exclude-entrypoints`,
+    // since that option is variadic and would otherwise swallow it too.
+    const attwArgs = ["exec", "attw", "--profile", "node16", tarballPath];
+    if (publicPackage.attwExcludeEntrypoints?.length) {
+      attwArgs.push("--exclude-entrypoints", ...publicPackage.attwExcludeEntrypoints);
+    }
+    await run("pnpm", attwArgs);
+  }
+};
+
 const prepareTempWorkspace = async (tarballs) => {
   const overrides = Object.fromEntries(
     [...tarballs].map(([name, tarballPath]) => [name, fileSpecFor(tempRoot, tarballPath)]),
@@ -187,18 +228,31 @@ const prepareTempWorkspace = async (tarballs) => {
       "@vixeq/core": fileSpecFor(consumerDir, tarballs.get("@vixeq/core")),
       "@vixeq/react": fileSpecFor(consumerDir, tarballs.get("@vixeq/react")),
       "@vixeq/player-react": fileSpecFor(consumerDir, tarballs.get("@vixeq/player-react")),
-      react: findDependencyVersion(sourcePackageJsons, "react"),
-      "react-dom": findDependencyVersion(sourcePackageJsons, "react-dom"),
+      react: reactVersionOverride ? `${reactVersionOverride}.x` : findDependencyVersion(sourcePackageJsons, "react"),
+      "react-dom": reactVersionOverride
+        ? `${reactVersionOverride}.x`
+        : findDependencyVersion(sourcePackageJsons, "react-dom"),
     },
     devDependencies: {
-      "@types/react": findDependencyVersion(sourcePackageJsons, "@types/react"),
-      "@types/react-dom": findDependencyVersion(sourcePackageJsons, "@types/react-dom"),
+      "@types/react": reactVersionOverride
+        ? `${reactVersionOverride}.x`
+        : findDependencyVersion(sourcePackageJsons, "@types/react"),
+      "@types/react-dom": reactVersionOverride
+        ? `${reactVersionOverride}.x`
+        : findDependencyVersion(sourcePackageJsons, "@types/react-dom"),
       "@vitejs/plugin-react": findDependencyVersion(sourcePackageJsons, "@vitejs/plugin-react"),
-      typescript: findDependencyVersion(sourcePackageJsons, "typescript"),
+      typescript: tsVersionOverride ? `${tsVersionOverride}.x` : findDependencyVersion(sourcePackageJsons, "typescript"),
       vite: findDependencyVersion(sourcePackageJsons, "vite"),
     },
   });
   await cp(migrationFixturePath, path.join(consumerDir, "src", "migration-v1-to-v2.json"));
+
+  if (isVersionFixture) {
+    console.log(
+      `\nVersion fixture active (react=${reactVersionOverride ?? "workspace"}, typescript=${tsVersionOverride ?? "workspace"}); skipping example-app builds.`,
+    );
+    return;
+  }
 
   for (const project of smokeProjects) {
     const sourceDir = path.join(rootDir, project.source);
@@ -229,18 +283,22 @@ await rm(tempRoot, { recursive: true, force: true });
 await mkdir(tarballDir, { recursive: true });
 
 const tarballs = await packPublicPackages();
-await prepareTempWorkspace(tarballs);
 
 for (const tarballPath of tarballs.values()) {
   await assertFileExists(tarballPath);
 }
 
+await verifyPackedPackages(tarballs);
+await prepareTempWorkspace(tarballs);
+
 await run("pnpm", ["install", "--no-lockfile"], { cwd: tempRoot });
 await run("pnpm", ["--filter", "vixeq-pack-smoke-consumer", "run", "smoke"], { cwd: tempRoot });
 
-for (const project of smokeProjects) {
-  const packageJson = await readJson(path.join(tempRoot, project.temp, "package.json"));
-  await run("pnpm", ["--filter", packageJson.name, "run", "build"], { cwd: tempRoot });
+if (!isVersionFixture) {
+  for (const project of smokeProjects) {
+    const packageJson = await readJson(path.join(tempRoot, project.temp, "package.json"));
+    await run("pnpm", ["--filter", packageJson.name, "run", "build"], { cwd: tempRoot });
+  }
 }
 
 console.log("\nPack smoke completed successfully.");

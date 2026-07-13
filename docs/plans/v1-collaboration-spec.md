@@ -560,6 +560,18 @@ Supported matrix for 1.0:
   release. Record exact versions in the support policy.
 - ESM and CJS consumers.
 - SSR imports without browser globals at module evaluation.
+- Implementation status (R2, done): Node 22/24 covered by a
+  `strategy.matrix` in `.github/workflows/ci.yml` (both legs run the full
+  typecheck/build/test/api:check/behavior:check/smoke:pack pipeline). React
+  18 and the TypeScript 5.5 floor are verified by
+  `SMOKE_REACT_VERSION=18 pnpm smoke:pack` and
+  `SMOKE_TS_VERSION=5.5 pnpm smoke:pack` (extensions to
+  `scripts/pack-smoke.mjs`'s existing ESM/CJS/SSR/types/vite-build consumer
+  fixture that override the pinned dependency versions instead of deriving
+  them from the workspace), each wired into CI gated to one Node-matrix leg
+  (`if: matrix.node-version == 22`) since they exercise React/TypeScript
+  boundaries, not Node itself. The runner matrix stays Ubuntu-only; the
+  Chromium/Firefox/WebKit browser matrix is R3's scope, not R2's.
 
 Coverage gates:
 
@@ -604,6 +616,16 @@ API and package gates:
 - Use `publint` and Are The Types Wrong on packed packages.
 - Test clean ESM/CJS/type/SSR imports and player CSS exports from tarballs.
 - Official examples consume packed prerelease packages before stable release.
+- Implementation status (R2, done): `scripts/pack-smoke.mjs` runs `publint`
+  and `attw` (profile `node16`, since the supported matrix targets modern
+  Node/TypeScript module resolution rather than the legacy `node10`
+  algorithm) against each packed tarball right after packing, with
+  `player-react`'s non-code `./styles.css` entrypoint excluded from `attw`
+  analysis. This surfaced and fixed a real dual-package hazard: all three
+  packages' `exports["."].types` (and `@vixeq/core`'s `./dom` subpath) were a
+  single string serving both `import` and `require` conditions, so CJS
+  consumers received ESM-shaped type declarations; each is now split into
+  `{"import": ".../index.d.ts", "require": ".../index.d.cts"}`.
 
 Browser gates:
 
@@ -700,7 +722,7 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | T8 | 0.8 | Promote 0.8.0 stable release docs and package versions | T7 | done | Codex (author), Claude (reviewer, CHANGELOG fix, npm publish + registry smoke) | package metadata, README/API docs, release docs |
 | R0 | 0.9 | Add API Extractor reports and API-diff CI | P8, T7 | done | Claude (author + reviewer) | package configs, `.github/` |
 | R1 | 0.9 | Add coverage configuration and behavior-matrix gates | P8, T7 | done | Claude (author + reviewer) | Vitest configs, CI |
-| R2 | 0.9 | Add Node/React/TypeScript/package compatibility fixtures | P8, T7 | pending | — | fixtures, CI |
+| R2 | 0.9 | Add Node/React/TypeScript/package compatibility fixtures | P8, T7 | done | Claude (author + reviewer) | fixtures, CI |
 | R3 | 0.9 | Add three-browser media and product E2E | T6 | pending | — | Playwright tests, CI |
 | R4 | 0.9 | Build multi-example Pages index and deploy workflow | T6 | pending | — | apps/site or deploy scripts, `.github/` |
 | R5 | 0.9 | Finalize support, semver, migration, and release docs | R0–R4 | pending | — | root/package docs |

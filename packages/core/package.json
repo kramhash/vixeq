@@ -18,12 +18,18 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": {
+        "import": "./dist/index.d.ts",
+        "require": "./dist/index.d.cts"
+      },
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
     "./dom": {
-      "types": "./dist/dom.d.ts",
+      "types": {
+        "import": "./dist/dom.d.ts",
+        "require": "./dist/dom.d.cts"
+      },
       "import": "./dist/dom.js",
       "require": "./dist/dom.cjs"
     }

@@ -13,6 +13,10 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Supported matrix for 1.0 (spec Section 10): Node.js 22 and 24.
+        node-version: [22, 24]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,7 +29,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ matrix.node-version }}
           cache: pnpm
 
       - name: Install dependencies
@@ -45,3 +49,19 @@ jobs:
 
       - name: Behavior-matrix gate
         run: pnpm behavior:check
+
+      - name: Smoke-test packed packages
+        run: pnpm smoke:pack
+
+      # Compatibility fixtures (spec Section 10): verify the spec's supported
+      # minimum/alternate React and TypeScript versions independently of the
+      # workspace's own React 19 / TypeScript 5.9 setup. Run on a single
+      # Node-matrix leg only -- these exercise React/TS boundaries, not Node
+      # itself, so running them on every Node version would be redundant.
+      - name: React 18 compatibility fixture
+        if: matrix.node-version == 22
+        run: SMOKE_REACT_VERSION=18 pnpm smoke:pack
+
+      - name: TypeScript minimum-version compatibility fixture
+        if: matrix.node-version == 22
+        run: SMOKE_TS_VERSION=5.5 pnpm smoke:pack

@@ -18,7 +18,10 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": {
+        "import": "./dist/index.d.ts",
+        "require": "./dist/index.d.cts"
+      },
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     }
@@ -35,7 +38,7 @@
     "hooks"
   ],
   "peerDependencies": {
-    "react": ">=18.0.0"
+    "react": ">=18.0.0 <20.0.0"
   },
   "dependencies": {
     "@vixeq/core": "workspace:*"

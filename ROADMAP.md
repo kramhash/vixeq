@@ -216,7 +216,12 @@ to the same timing map without building a DAW editor.
   100%-tier files (PlaybackTransport, the three Engines, timing conversion,
   both migration modules) fall short; React and player-react already clear
   85%. Closing the Core gap with additional tests is separate follow-up work.
-- [ ] Test Node.js 22 and 24, React 18 and 19, TypeScript `>=5.5 <6`, SSR imports, and ESM/CJS packed consumers.
+- [x] Test Node.js 22 and 24 (CI matrix), React 18 and 19, TypeScript `>=5.5 <6`,
+  SSR imports, and ESM/CJS packed consumers. React 18/TypeScript 5.5 are
+  verified via `SMOKE_REACT_VERSION=18`/`SMOKE_TS_VERSION=5.5 pnpm smoke:pack`
+  fixtures wired into CI; `publint` and Are The Types Wrong also run against
+  every packed tarball (`pnpm smoke:pack`). Runner OS stays Ubuntu-only; the
+  browser matrix is separate (see the E2E item below).
 - [ ] Run actual media E2E in the locked Playwright Chromium, Firefox, and WebKit versions.
 - [ ] Add pull-request CI for typecheck, tests, builds, API reports, coverage, compatibility, package smoke tests, and browser E2E.
 - [ ] Polish `website-pulse`, `cycling-workout`, and playground release fixtures.
