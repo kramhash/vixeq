@@ -8,6 +8,23 @@ Release-readiness stable line for the pre-1.0 API freeze. This release adds
 the API, package, compatibility, browser, Pages, support-policy, and migration
 documentation gates needed before `1.0.0-rc.1`.
 
+### Published
+
+- Promoted `@vixeq/core`, `@vixeq/react`, and `@vixeq/player-react` to
+  `0.9.0` under the `latest` dist-tag.
+  - [`@vixeq/core@0.9.0`](https://www.npmjs.com/package/@vixeq/core/v/0.9.0)
+  - [`@vixeq/react@0.9.0`](https://www.npmjs.com/package/@vixeq/react/v/0.9.0)
+  - [`@vixeq/player-react@0.9.0`](https://www.npmjs.com/package/@vixeq/player-react/v/0.9.0)
+- Keeps the `beta` dist-tag on `0.8.0-beta.1`.
+- Verified release gates before publish: typecheck, build, unit tests,
+  API checks, behavior matrix, packed-package smoke, React 18 and
+  TypeScript 5.5 smoke fixtures, Pages artifact test, browser E2E, and green
+  CI/Pages workflows on `main`.
+- Verified against a clean consumer installing directly from the npm registry
+  (not local tarballs): ESM/CJS imports, Timeline/Arrangement migration APIs,
+  public types, React SSR, package exports, and
+  `@vixeq/player-react/styles.css` Vite resolution all pass.
+
 ### Added
 
 - `@vixeq/core`: `default` preset added to `presets`.
