@@ -42,6 +42,7 @@ export default defineConfig({
           label: "Guide",
           items: [
             { label: "Tutorial", link: "/guide/tutorial/" },
+            { label: "Rhythm game", link: "/guide/rhythm-game/" },
             { label: "Concepts", link: "/guide/concepts/" },
             { label: "@vixeq/core", link: "/guide/core/" },
             { label: "@vixeq/react", link: "/guide/react/" },

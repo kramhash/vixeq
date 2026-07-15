@@ -180,6 +180,8 @@ export function App() {
   [`useSequencerEngine` API](/api/vixeq/react/functions/usesequencerengine/)
 - Prefer a ready-made, editable grid UI instead of a hand-rolled one? See the
   [`@vixeq/player-react` guide](/guide/player-react/)
+- Turn the pulse into a playable timing challenge —
+  [`Build a rhythm game in React`](/guide/rhythm-game/)
 - Multi-pattern songs and cue timelines — [`useArrangement` and
   `useTimeline`](/guide/react/#arrangement-and-timeline-hooks)
 - Copyable example with a richer visual —

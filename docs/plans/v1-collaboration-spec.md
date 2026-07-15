@@ -593,6 +593,13 @@ Coverage gates:
   and `arrangement/migration.ts`. React (~90%) and player-react (~90%) already
   clear 85%. Wiring `test:coverage` into CI is deferred until the remaining
   Core critical-file gaps are closed by additional tests.
+- RC1 keeps the 100% branch threshold for the critical Core files. Threshold
+  reductions and new exclusions are not allowed unless a future approved
+  decision records why the branch is generated, export-only, unreachable, or
+  otherwise outside the intended release gate. Tests added for RC1 must
+  exercise public APIs, exported helpers, or documented behavior; do not add
+  production-only coverage hooks or tests that reach into private Engine
+  internals.
 - `pnpm behavior:check` (new script, `scripts/check-behavior-matrix.mjs`)
   operationalizes the "behavior-matrix gates" deliverable: it parses
   `docs/behavior/*-matrix.md` and fails if any row marked `covered` has no
@@ -765,7 +772,13 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | R4 | 0.9 | Build multi-example Pages index and deploy workflow | T6 | done | Codex (author), Claude (reviewer) | apps/site or deploy scripts, `.github/` |
 | R5 | 0.9 | Finalize support, semver, migration, and release docs | R0–R4 | done | Codex (author), Claude (reviewer) | root/package docs |
 | R6 | 0.9 | React hooks render-frugal: `latestEvent` state → `latestEventRef` | P6, T5 | done | Claude (author + reviewer) | `packages/react/src/`, `packages/player-react/src/SequencePlayer.tsx` |
-| RC0 | 1.0-rc | Close planned behavior rows and Core coverage gate gaps before API freeze | R0–R6 | done | Codex (author), Claude (reviewer) | `docs/behavior/`, `packages/core/src/` tests |
+| RC0 | 1.0-rc | Close planned behavior rows and lift Core global branch coverage above 90% | R0–R6 | done | Codex (author), Claude (reviewer) | `docs/behavior/`, `packages/core/src/` tests |
+| RC1A | 1.0-rc | Close 100% branch gaps in `PlaybackTransport` and Arrangement migration | RC0 | pending | — | `packages/core/src/playbackTransport.test.ts`, `packages/core/src/arrangement/migration.test.ts` |
+| RC1B | 1.0-rc | Close 100% branch gaps in `SequencerEngine` | RC1A | pending | — | `packages/core/src/SequencerEngine.test.ts` |
+| RC1C | 1.0-rc | Close 100% branch gaps in `ArrangementEngine` | RC1B | pending | — | `packages/core/src/arrangement/ArrangementEngine.test.ts` |
+| RC1D | 1.0-rc | Close 100% branch gaps in `TimelineEngine` | RC1C | pending | — | `packages/core/src/timeline/TimelineEngine.test.ts` |
+| RC1E | 1.0-rc | Wire `pnpm test:coverage` into CI and finalize RC coverage gate docs | RC1D | pending | — | `.github/workflows/ci.yml`, `docs/plans/`, `docs/release/` |
+| DOC1 | 1.0-rc | Add React rhythm game tutorial | — | done | Codex (author) | `apps/docs/src/content/docs/guide/`, `apps/docs/astro.config.mts` |
 
 ### Integration order
 

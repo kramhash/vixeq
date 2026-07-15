@@ -174,14 +174,14 @@ Document the public API surface — types, function signatures, options — in a
 **Theme**: Replace clock-domain-dependent playback with one transport-owned,
 testable state model before extending Timeline.
 
-- [ ] Approve the Playback v2 behavioral contract, behavior matrix, and 0.7 migration map.
-- [ ] Replace `SequencerTransport` and direct Engine clock options with shareable `PlaybackTransport`.
-- [ ] Standardize async `play` / `pause` / `stop` / unit-specific seek semantics.
-- [ ] Make `SequencerEngine` always time-driven and remove public `timeDriven` / `originMs`.
-- [ ] Make channel sampling and Envelopes use logical transport position.
-- [ ] Apply strict Engine validation and atomic Project hot-swap.
-- [ ] Align React hooks and `player-react` with playback state, pending operations, errors, position refs, and reduced motion.
-- [ ] Migrate official examples and verify packed `0.7.0-beta.n` packages before stable release.
+- [x] Approve the Playback v2 behavioral contract, behavior matrix, and 0.7 migration map.
+- [x] Replace `SequencerTransport` and direct Engine clock options with shareable `PlaybackTransport`.
+- [x] Standardize async `play` / `pause` / `stop` / unit-specific seek semantics.
+- [x] Make `SequencerEngine` always time-driven and remove public `timeDriven` / `originMs`.
+- [x] Make channel sampling and Envelopes use logical transport position.
+- [x] Apply strict Engine validation and atomic Project hot-swap.
+- [x] Align React hooks and `player-react` with playback state, pending operations, errors, position refs, and reduced motion.
+- [x] Migrate official examples and verify packed `0.7.0-beta.n` packages before stable release.
 
 The approved contract is in
 [`docs/behavior/playback-v2.md`](./docs/behavior/playback-v2.md). Detailed task
@@ -195,13 +195,13 @@ ownership and dependencies are in
 **Theme**: Add variable-tempo cue scheduling and connect Arrangement playback
 to the same timing map without building a DAW editor.
 
-- [ ] Replace `TimingMap.offsetMs` with transport-relative `startPositionMs` and enforce a strict tempo map.
-- [ ] Introduce point-event-only `TimelineProject` v2 with explicit duration and JSON-safe payloads.
-- [ ] Add indexed `TimelineEngine` and `useTimeline()`.
-- [ ] Introduce `ArrangementProject` v2 with shared `TimingMap` and explicit duration.
-- [ ] Add explicit, issue-reporting Timeline and Arrangement v1-to-v2 migration APIs.
-- [ ] Integrate Sequencer animation and Timeline cues over one shared audio transport in `website-pulse`.
-- [ ] Verify packed `0.8.0-beta.n` packages and migration fixtures before stable release.
+- [x] Replace `TimingMap.offsetMs` with transport-relative `startPositionMs` and enforce a strict tempo map.
+- [x] Introduce point-event-only `TimelineProject` v2 with explicit duration and JSON-safe payloads.
+- [x] Add indexed `TimelineEngine` and `useTimeline()`.
+- [x] Introduce `ArrangementProject` v2 with shared `TimingMap` and explicit duration.
+- [x] Add explicit, issue-reporting Timeline and Arrangement v1-to-v2 migration APIs.
+- [x] Integrate Sequencer animation and Timeline cues over one shared audio transport in `website-pulse`.
+- [x] Verify packed `0.8.0-beta.n` packages and migration fixtures before stable release.
 
 ---
 
