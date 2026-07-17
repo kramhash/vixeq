@@ -7,10 +7,10 @@ hero:
   tagline: A UI-agnostic step sequencer engine for 0.0–1.0 control values, with optional React hooks and an embeddable player GUI.
   actions:
     - text: Get Started
-      link: /guide/concepts/
+      link: guide/concepts/
       icon: right-arrow
     - text: API Reference
-      link: /api/readme/
+      link: api/readme/
       icon: external
       variant: minimal
     - text: Playground
@@ -21,9 +21,9 @@ hero:
 
 ## Packages
 
-- **[`@vixeq/core`](/guide/core/)** — UI-agnostic sequencer engine, immutable
+- **[`@vixeq/core`](guide/core/)** — UI-agnostic sequencer engine, immutable
   project helpers, validation, timeline utilities, and presets.
-- **[`@vixeq/react`](/guide/react/)** — React hooks for driving the core
+- **[`@vixeq/react`](guide/react/)** — React hooks for driving the core
   engine — sequencer, arrangement, and timeline — without any GUI.
-- **[`@vixeq/player-react`](/guide/player-react/)** — An embeddable, editable
+- **[`@vixeq/player-react`](guide/player-react/)** — An embeddable, editable
   React sequence player GUI with bundled styles.

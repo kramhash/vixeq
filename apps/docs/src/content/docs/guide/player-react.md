@@ -4,7 +4,7 @@ description: An embeddable, editable React sequence player GUI for Vixeq project
 ---
 
 An embeddable, editable React sequence player GUI for
-[`@vixeq/core`](/guide/core/) projects, with bundled styles. No visualizer,
+[`@vixeq/core`](../core/) projects, with bundled styles. No visualizer,
 app shell, storage, MIDI, or audio engine.
 
 ## Install
@@ -62,7 +62,7 @@ and `setTransportLoop`.
 ## Audio-synced usage
 
 `SequencePlayer` follows any `PlaybackTransport` from `@vixeq/core` — see
-[Audio Sync](/guide/core/#audio-sync):
+[Audio Sync](../core/#audio-sync):
 
 ```tsx
 import { createMediaElementTransport, createProject } from "@vixeq/core";
@@ -128,7 +128,7 @@ transport state without holding their own ref.
 
 ## Next steps
 
-- Full API — [`SequencePlayer` reference](/api/vixeq/player-react/variables/sequenceplayer/)
+- Full API — [`SequencePlayer` reference](../../api/vixeq/player-react/variables/sequenceplayer/)
 - Copyable example: `pnpm --filter vixeq-example-react-player dev`
   (see [`examples/react-player`](https://github.com/kramhash/vixeq/tree/main/examples/react-player))
 - Full package stack demo — the

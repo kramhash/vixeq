@@ -68,12 +68,12 @@ await engine.play();
 
 For seamless loops, decode the file and use an `AudioBufferSourceNode`
 transport instead — see `createAudioBufferTransport` in the
-[API reference](/api/vixeq/core/index/functions/createaudiobuffertransport/).
+[API reference](../../api/vixeq/core/index/functions/createaudiobuffertransport/).
 
 ## Arrangement
 
 Play multiple patterns on a shared, tempo-mapped beat timeline — see
-[Concepts](/guide/concepts/#arrangement-multiple-patterns-one-song):
+[Concepts](../concepts/#arrangement-multiple-patterns-one-song):
 
 ```ts
 import { ArrangementEngine, createArrangement, createTimingMap } from "@vixeq/core";
@@ -118,8 +118,8 @@ bindChannelsToElement(rootEl, values, {
 
 ## Next steps
 
-- Full API — [`SequencerEngine` reference](/api/vixeq/core/index/classes/sequencerengine/) and
-  [`@vixeq/core/dom` reference](/api/vixeq/core/dom/functions/bindchannelstoelement/)
-- React integration — [`@vixeq/react` guide](/guide/react/)
+- Full API — [`SequencerEngine` reference](../../api/vixeq/core/index/classes/sequencerengine/) and
+  [`@vixeq/core/dom` reference](../../api/vixeq/core/dom/functions/bindchannelstoelement/)
+- React integration — [`@vixeq/react` guide](../react/)
 - Copyable example: `pnpm --filter vixeq-example-vanilla-core dev`
   (see [`examples/vanilla-core`](https://github.com/kramhash/vixeq/tree/main/examples/vanilla-core))

@@ -81,7 +81,14 @@ export default defineConfig({
         // Fails the build on broken internal links/anchors so link-hierarchy
         // mistakes (e.g. the api/README.md 404 above) are caught before deploy
         // instead of surfacing as a 404 on the live Pages site.
-        starlightLinksValidator(),
+        //
+        // errorOnRelativeLinks is disabled because hand-authored guide/index
+        // pages intentionally use relative links (e.g. `../core/`) rather
+        // than root-absolute ones: Starlight does not rewrite root-absolute
+        // markdown/frontmatter links to include the deployed `base`
+        // (`/<repo>/docs` in CI), so root-absolute links 404 on Pages while
+        // relative links resolve correctly regardless of base.
+        starlightLinksValidator({ errorOnRelativeLinks: false }),
       ],
     }),
   ],

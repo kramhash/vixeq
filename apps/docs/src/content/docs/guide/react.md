@@ -3,7 +3,7 @@ title: "@vixeq/react"
 description: React hooks for the Vixeq step sequencer engine.
 ---
 
-React hooks for [`@vixeq/core`](/guide/core/) — no GUI, no styles, just
+React hooks for [`@vixeq/core`](../core/) — no GUI, no styles, just
 lifecycle-managed engines.
 
 ## Install
@@ -46,7 +46,7 @@ per-frame React state; `isBusy` is true while a command is queued or running.
 
 `useArrangement` and `useTimeline` mirror the same lifecycle for
 `ArrangementEngine` and `TimelineEngine` — see
-[Concepts](/guide/concepts/) for how the three engines differ:
+[Concepts](../concepts/) for how the three engines differ:
 
 ```tsx
 import { createArrangement, createTimingMap } from "@vixeq/core";
@@ -91,7 +91,7 @@ function MorphScene() {
 
 ## Next steps
 
-- Full API — [`useSequencerEngine` reference](/api/vixeq/react/functions/usesequencerengine/)
-- Editable player GUI — [`@vixeq/player-react` guide](/guide/player-react/)
+- Full API — [`useSequencerEngine` reference](../../api/vixeq/react/functions/usesequencerengine/)
+- Editable player GUI — [`@vixeq/player-react` guide](../player-react/)
 - Copyable example: `pnpm --filter vixeq-example-arrangement-demo dev`
   (see [`examples/arrangement-demo`](https://github.com/kramhash/vixeq/tree/main/examples/arrangement-demo))

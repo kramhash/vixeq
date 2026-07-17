@@ -27,7 +27,7 @@ engine.on("step", (event) => console.log(event.stepIndex, event.tracks));
 await engine.play();
 ```
 
-See the [`@vixeq/core` guide](/guide/core/) for the full lifecycle.
+See the [`@vixeq/core` guide](../core/) for the full lifecycle.
 
 ## Arrangement: multiple patterns, one song
 
@@ -55,7 +55,7 @@ engine creates its own browser-clock transport, but you can pass one
 explicitly to synchronize playback to an `HTMLMediaElement`
 (`createMediaElementTransport`) or a Web Audio `AudioBufferSourceNode`
 (`createAudioBufferTransport`) — see the
-[Audio Sync section of the core guide](/guide/core/#audio-sync). Sharing one
+[Audio Sync section of the core guide](../core/#audio-sync). Sharing one
 transport across engines keeps them in lockstep; passing none per engine
 keeps them independent.
 

@@ -7,7 +7,7 @@ This tutorial builds a minimal React app from scratch: create a project, play
 it with a hook, then drive a visual so a square pulses on every beat. It
 assumes React 18+ and covers `@vixeq/core` and `@vixeq/react` only — for a
 ready-made editor GUI instead of a hand-rolled one, see
-[`@vixeq/player-react`](/guide/player-react/).
+[`@vixeq/player-react`](../player-react/).
 
 ## Install
 
@@ -176,14 +176,14 @@ export function App() {
 
 ## Next steps
 
-- Full hook reference — [`@vixeq/react` guide](/guide/react/) and
-  [`useSequencerEngine` API](/api/vixeq/react/functions/usesequencerengine/)
+- Full hook reference — [`@vixeq/react` guide](../react/) and
+  [`useSequencerEngine` API](../../api/vixeq/react/functions/usesequencerengine/)
 - Prefer a ready-made, editable grid UI instead of a hand-rolled one? See the
-  [`@vixeq/player-react` guide](/guide/player-react/)
+  [`@vixeq/player-react` guide](../player-react/)
 - Turn the pulse into a playable timing challenge —
-  [`Build a rhythm game in React`](/guide/rhythm-game/)
+  [`Build a rhythm game in React`](../rhythm-game/)
 - Multi-pattern songs and cue timelines — [`useArrangement` and
-  `useTimeline`](/guide/react/#arrangement-and-timeline-hooks)
+  `useTimeline`](../react/#arrangement-and-timeline-hooks)
 - Copyable example with a richer visual —
   `pnpm --filter vixeq-example-website-pulse dev`
   (see [`examples/website-pulse`](https://github.com/kramhash/vixeq/tree/main/examples/website-pulse))
