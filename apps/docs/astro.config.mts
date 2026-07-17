@@ -1,6 +1,7 @@
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import starlightTypeDoc, { typeDocSidebarGroup } from "starlight-typedoc";
+import starlightLinksValidator from "starlight-links-validator";
 
 // Mirrors scripts/build-pages.mjs's inferPagesBase so the docs base tracks
 // the same repository-name derivation as the rest of the Pages index instead
@@ -61,14 +62,26 @@ export default defineConfig({
           ],
           // Per-package packages/{core,react,player-react}/typedoc.json define each
           // package's own entryPoints (core has two: index.ts + dom.ts).
+          //
+          // readme must be explicitly set to "" (not omitted) to enable
+          // per-package README pages: starlight-typedoc's own internal
+          // defaults force `readme: "none"` regardless of TypeDoc's own
+          // default, so simply omitting this key leaves READMEs disabled.
+          // The generated packages index (api/README.md) links to each
+          // package's `.../readme/` route; without this, that route 404s on
+          // the deployed Pages site because the page is never generated.
           typeDoc: {
             entryPointStrategy: "packages",
-            readme: "none",
+            readme: "",
             excludePrivate: true,
             excludeInternal: true,
             excludeExternals: true,
           },
         }),
+        // Fails the build on broken internal links/anchors so link-hierarchy
+        // mistakes (e.g. the api/README.md 404 above) are caught before deploy
+        // instead of surfacing as a 404 on the live Pages site.
+        starlightLinksValidator(),
       ],
     }),
   ],

@@ -101,3 +101,32 @@ jobs:
 
       - name: Run browser E2E
         run: pnpm test:e2e
+
+  docs:
+    # Builds the Starlight docs site so broken internal links/anchors (e.g. a
+    # mistyped guide path or a generated API route mismatch) fail CI instead
+    # of surfacing as a 404 only after deploying to Pages. starlight-links-
+    # validator runs as part of `astro build` and fails the build on any
+    # broken internal link. TypeDoc reads package sources directly, so this
+    # doesn't need a `pnpm build` step first.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build docs site
+        run: pnpm --filter vixeq-docs build:site

@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
+    "starlight-links-validator": "^0.25.2",
     "typedoc": "^0.28.20",
     "typedoc-plugin-markdown": "^4.12.0"
   },
