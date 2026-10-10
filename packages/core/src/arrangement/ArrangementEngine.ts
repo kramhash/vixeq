@@ -141,6 +141,13 @@ export class ArrangementEngine {
   private endedReplaySeekMode: "seek-as-play" | "suppress-seek" | null = null;
   private pendingEndedReplayPlay = false;
   private readonly pendingCommandEvents: PlaybackTransportEvent["type"][] = [];
+  // Bumped by every command or transport event that re-anchors or ends step
+  // dispatch (seek, stop, ended, play from stopped/ended, setArrangement,
+  // setLoop, transport or Engine disposal). Pause does not bump: it leaves the
+  // cursor in place. A tick compares it
+  // after each listener and abandons the rest of its dispatch when it changed:
+  // the re-entrant call has already re-anchored the cursor and rescheduled.
+  private dispatchGeneration = 0;
 
   constructor(arrangement: ArrangementProject, options: ArrangementEngineOptions = {}) {
     if (!isRecord(options)) {
@@ -267,6 +274,7 @@ export class ArrangementEngine {
     }
 
     const previousState = this.playbackState;
+    this.dispatchGeneration += 1;
     this.localLoop = loop;
     if (!(previousState === "ended" && loop)) {
       this.applyTransportSnapshot(this.readTransportSnapshot());
@@ -289,6 +297,7 @@ export class ArrangementEngine {
     }
 
     this.disposed = true;
+    this.dispatchGeneration += 1;
     this.clearTimer();
     this.unsubscribeTransport();
     this.listeners.step.clear();
@@ -321,6 +330,7 @@ export class ArrangementEngine {
     const previousState = this.playbackState;
     const transportPositionMs = this.getTransportPositionMs();
 
+    this.dispatchGeneration += 1;
     this.arrangement = arrangement;
     this.trackIds = unionTrackIds(this.arrangement);
 
@@ -450,6 +460,7 @@ export class ArrangementEngine {
         this.pendingEndedReplayPlay = false;
       }
       if (this.playbackState === "ended") {
+        this.dispatchGeneration += 1;
         this.clearTimer();
         this.emitPlayback("ended", "local-end", previousState);
         return;
@@ -458,6 +469,7 @@ export class ArrangementEngine {
       const playbackPreviousState = isEndedReplayPlay ? "ended" : previousState;
       this.emitPlayback(event.type, cause, playbackPreviousState);
       if (previousState === "stopped" || previousState === "ended" || isEndedReplayPlay) {
+        this.dispatchGeneration += 1;
         this.emitSectionForPosition(this.getLogicalPositionMs(), "play", true);
         this.emitStepForPosition(this.getLogicalPositionMs(), "play");
       }
@@ -468,10 +480,18 @@ export class ArrangementEngine {
     if (event.type === "pause") {
       this.clearTimer();
       this.emitPlayback(event.type, cause, previousState);
+      // A pause that lands at or past local end still announces local end. The
+      // local-end tick sets "ended" before it emits, so a pause from a section
+      // listener there arrives with previousState "ended" and is announced by
+      // tick() instead.
+      if (previousState === "playing" && this.playbackState === "ended") {
+        this.emitPlayback("ended", "local-end", previousState);
+      }
       return;
     }
 
     if (event.type === "stop") {
+      this.dispatchGeneration += 1;
       this.clearTimer();
       this.cachedPositionMs = 0;
       this.lastSectionId = undefined;
@@ -482,6 +502,7 @@ export class ArrangementEngine {
     }
 
     if (event.type === "seek") {
+      this.dispatchGeneration += 1;
       this.clearTimer();
       if (previousState === "ended" && this.endedReplaySeekMode === "suppress-seek") {
         this.endedReplaySeekMode = null;
@@ -519,6 +540,7 @@ export class ArrangementEngine {
     }
 
     if (event.type === "ended") {
+      this.dispatchGeneration += 1;
       this.clearTimer();
       this.emitPlayback(event.type, cause, previousState);
       return;
@@ -538,6 +560,7 @@ export class ArrangementEngine {
     this.cachedPositionMs = this.normalizePosition(this.positionFromTransportPosition(snapshot.positionMs));
     this.disposedTransportPositionMs = snapshot.positionMs;
     this.transportDisposed = true;
+    this.dispatchGeneration += 1;
     this.clearTimer();
     if (this.playbackState === "playing") {
       this.playbackState = "paused";
@@ -619,12 +642,23 @@ export class ArrangementEngine {
       this.cachedPositionMs = this.getDurationMs();
       this.playbackState = "ended";
       this.emitSectionForPosition(this.cachedPositionMs, "tick", true);
+      // A section listener may re-entrantly seek, stop, or hot-swap to a longer
+      // arrangement; announce local end only while the Engine is still there.
+      if (this.playbackState !== "ended") {
+        return;
+      }
       this.emitPlayback("ended", "local-end", previousState);
       return;
     }
 
+    const generation = this.dispatchGeneration;
     this.cachedPositionMs = positionMs;
     this.emitSectionForPosition(positionMs, "tick", false);
+    // A section listener may re-entrantly reset dispatch; the steps due at this
+    // tick's position are stale then.
+    if (this.dispatchGeneration !== generation) {
+      return;
+    }
     this.emitDueSteps(positionMs);
     this.scheduleNextTick();
   }
@@ -658,11 +692,11 @@ export class ArrangementEngine {
       return;
     }
 
-    const arrangement = this.arrangement;
+    const generation = this.dispatchGeneration;
     for (const dueStep of dueSteps) {
-      // A step listener may hot-swap the arrangement or dispose the Engine;
-      // the remaining catch-up steps belong to the replaced arrangement.
-      if (this.disposed || this.arrangement !== arrangement) {
+      // A step listener may re-entrantly seek, stop, hot-swap, toggle loop, or
+      // dispose; the remaining catch-up steps are stale then.
+      if (this.dispatchGeneration !== generation) {
         return;
       }
       this.emitStepResolution(dueStep, "tick", positionMs);

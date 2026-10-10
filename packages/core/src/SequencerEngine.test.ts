@@ -129,7 +129,14 @@ class ManualTransport implements PlaybackTransport {
   }
   async pause(): Promise<void> {}
   async stop(): Promise<void> {}
-  async seekMs(): Promise<void> {}
+  async seekMs(positionMs: number): Promise<void> {
+    const state = this.snapshot.state === "playing" ? "playing" : "paused";
+    this.emitEvent({
+      type: "seek",
+      previousPositionMs: this.snapshot.positionMs,
+      snapshot: { ...this.snapshot, state, positionMs },
+    });
+  }
   async setPlaybackRate(): Promise<void> {}
   async setLoop(): Promise<void> {}
   subscribe(listener: (event: PlaybackTransportEvent) => void): () => void {
@@ -932,5 +939,72 @@ describe("SequencerEngine — RC1B branch coverage", () => {
     }
 
     expect(healthy).toHaveBeenCalledOnce();
+  });
+});
+
+describe("SequencerEngine — RC1G re-entrancy", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("does not dispatch the steps a step listener seeks over synchronously", async () => {
+    const transport = new ManualTransport();
+    const engine = new SequencerEngine(createProject({ stepCount: 16 }), { transport, lookaheadMs: 10 });
+    const steps: string[] = [];
+    engine.on("step", (event) => {
+      steps.push(`${event.cause}:${event.stepIndex}`);
+      if (event.cause === "tick" && event.stepIndex === 1) void engine.seekStep(8);
+    });
+
+    await engine.play();
+    transport.snapshot = { ...transport.snapshot, positionMs: STEP_MS * 4.5 };
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(steps).toEqual(["play:0", "tick:1", "seek:8"]);
+
+    transport.snapshot = { ...transport.snapshot, positionMs: STEP_MS * 9.5 };
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(steps.slice(3)).toEqual(["tick:9"]);
+  });
+
+  it("finishes a catch-up batch that a step listener pauses, without replaying it after resume", async () => {
+    // A third-party transport may emit "pause" synchronously inside pause().
+    class PausingTransport extends ManualTransport {
+      override async pause(): Promise<void> {
+        this.emitEvent({ type: "pause", snapshot: { ...this.snapshot, state: "paused" } });
+      }
+    }
+    const transport = new PausingTransport();
+    const engine = new SequencerEngine(createProject({ stepCount: 16 }), { transport, lookaheadMs: 10 });
+    const log: string[] = [];
+    engine.on("playback", (event) => log.push(`playback:${event.type}`));
+    engine.on("step", (event) => {
+      log.push(`step:${event.cause}:${event.stepIndex}`);
+      if (event.cause === "tick" && event.stepIndex === 1) void engine.pause();
+    });
+
+    await engine.play();
+    transport.snapshot = { ...transport.snapshot, positionMs: STEP_MS * 3.5 };
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(log).toEqual([
+      "playback:play",
+      "step:play:0",
+      "step:tick:1",
+      "playback:pause",
+      "step:tick:2",
+      "step:tick:3",
+    ]);
+
+    await engine.play();
+    transport.snapshot = { ...transport.snapshot, positionMs: STEP_MS * 4.5 };
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(log.slice(6)).toEqual(["playback:play", "step:tick:4"]);
   });
 });

@@ -404,6 +404,26 @@ State-preserving operations are no-ops except explicit seek.
   - Project loop off: move to the new end and enter `ended`;
   - Project loop on: modulo into the new duration and continue.
 - Reaching a local end never stops a borrowed/shared transport.
+- A pause that lands at or past a local finite end while playing (no Project
+  loop) enters `ended` and emits `pause`, then dispatches what is due up to
+  the local end exactly as the local-end tick does, then emits `ended` with
+  cause `local-end`. A listener that seeks, replays, stops, enables loop,
+  hot-swaps to a longer Project, or disposes the Engine during the pause or
+  that dispatch takes over, and `ended` is not emitted; a command that the
+  transport applies only later (such as a replay on the built-in clock
+  transport) follows `ended` instead. When a listener pauses during a
+  dispatch, local end is finished after that dispatch returns, from the
+  cursor as an earlier command in the same listener left it, and nothing is
+  dispatched twice. A listener that takes over and then returns the Engine to
+  `ended` gets only what that later command emits on its own: a replay that
+  reaches local end again or a shorter hot-swap announces `ended` once, and
+  disabling loop again from `paused` stays silent.
+- Known limitation: these re-entrancy guarantees are verified for the
+  built-in transports, which apply commands asynchronously. With a
+  third-party `PlaybackTransport` that applies `pause`, `seek`, `stop`, and
+  `play` synchronously, a listener that issues several such commands in a row
+  around local end may still see a duplicated or missing `ended`; cues are
+  not dispatched twice.
 
 ### 3.4 Disposal
 

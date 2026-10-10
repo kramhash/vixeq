@@ -127,6 +127,13 @@ export class SequencerEngine {
   private lastEmittedAbsoluteStep: number | null = null;
   private projectAnchor: ProjectPositionAnchor | null = null;
   private readonly pendingCommandEvents: PlaybackTransportEvent["type"][] = [];
+  // Bumped by every command or transport event that re-anchors or ends step
+  // dispatch (seek, loop, stop, ended, play from stopped/ended, setProject,
+  // transport or Engine disposal). Pause does not bump: it leaves the cursor
+  // in place. Catch-up dispatch compares it
+  // after each step listener and abandons the rest of the batch when it
+  // changed: the re-entrant call has already re-anchored the step cursor.
+  private dispatchGeneration = 0;
 
   /**
    * @param project - Initial {@link SequenceProject} to load. Validated
@@ -279,6 +286,7 @@ export class SequencerEngine {
     }
 
     this.disposed = true;
+    this.dispatchGeneration += 1;
     this.clearTimer();
     this.unsubscribeTransport();
     this.listeners.step.clear();
@@ -317,6 +325,7 @@ export class SequencerEngine {
     const channels = this.sampleProjectChannels(project, nextPositionMs);
     const changedChannelIds = this.getChangedChannelIds(previousChannels, channels);
 
+    this.dispatchGeneration += 1;
     this.project = project;
     this.projectAnchor = {
       transportPositionMs: this.getTransportPositionMs(),
@@ -446,6 +455,7 @@ export class SequencerEngine {
     if (event.type === "play") {
       this.emitPlayback(event.type, cause, previousState);
       if (previousState === "stopped" || previousState === "ended") {
+        this.dispatchGeneration += 1;
         this.emitStepForPosition(this.getLogicalPositionMs(), "play");
       }
       this.rescheduleIfPlaying();
@@ -459,6 +469,7 @@ export class SequencerEngine {
     }
 
     if (event.type === "stop") {
+      this.dispatchGeneration += 1;
       this.clearTimer();
       this.currentStepIndex = 0;
       this.lastEmittedAbsoluteStep = null;
@@ -468,6 +479,7 @@ export class SequencerEngine {
     }
 
     if (event.type === "seek") {
+      this.dispatchGeneration += 1;
       this.clearTimer();
       this.emitPlayback(event.type, cause, previousState);
       this.emitStepForPosition(this.getLogicalPositionMs(), "seek");
@@ -480,6 +492,7 @@ export class SequencerEngine {
       // absolute step counter must be re-anchored here — otherwise emitDueSteps'
       // monotonicity guard (see below) would permanently suppress further steps
       // once the wrapped position drops back below the pre-loop maximum.
+      this.dispatchGeneration += 1;
       this.clearTimer();
       this.emitPlayback(event.type, cause, previousState);
       this.emitStepForPosition(this.getLogicalPositionMs(), "loop");
@@ -503,6 +516,7 @@ export class SequencerEngine {
     }
 
     if (event.type === "ended") {
+      this.dispatchGeneration += 1;
       this.clearTimer();
       this.emitPlayback(event.type, cause, previousState);
       return;
@@ -521,6 +535,7 @@ export class SequencerEngine {
     const previousState = this.playbackState;
     this.cachedPositionMs = this.positionFromTransportPosition(snapshot.positionMs);
     this.transportDisposed = true;
+    this.dispatchGeneration += 1;
     this.clearTimer();
     if (this.playbackState === "playing") {
       this.playbackState = "paused";
@@ -600,8 +615,13 @@ export class SequencerEngine {
       return;
     }
 
+    const generation = this.dispatchGeneration;
     for (let next = last + 1; next <= absoluteStep; next += 1) {
       this.emitStepAtAbsolute(next, "tick", positionMs);
+      // A step listener may re-entrantly seek, stop, hot-swap, or dispose; the remaining catch-up steps are stale then.
+      if (this.dispatchGeneration !== generation) {
+        return;
+      }
     }
   }
 

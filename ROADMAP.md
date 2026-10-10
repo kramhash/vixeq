@@ -265,6 +265,8 @@ All public packages use lockstep versions, including prereleases, through these 
 
 - [x] Close the remaining 100%-tier Engine branch gaps and wire `pnpm test:coverage` into CI (RC1B-RC1E).
 - [x] Refresh the toolchain to the 1.0 support targets: Node 22/24/26, TypeScript `>=5.5` verified on 5.5, the 6.0 workspace, and a 7.0 consumer fixture, and Playwright re-locked at `1.64.0` with an updated browser table in `SUPPORT.md` (RC1F).
+- [x] Close the Engine re-entrancy gaps found by the adversarial review of RC1B–RC1D: catch-up dispatch in Timeline/Arrangement and the Timeline local-end branch must stop when a listener re-entrantly seeks, hot-swaps, changes loop, or disposes (RC1G).
+- [ ] Make Arrangement delayed-tick dispatch honor `missedStepPolicy` across a local loop wrap, section gaps, and local end, with section and step events in time order (RC1H).
 - [ ] Harden the tag-triggered publish workflow before the RC: run every repository gate, publish prereleases under the `next` dist-tag, attach npm provenance, and create a GitHub Release. The RC itself is published through this workflow (RC2).
 - [ ] Freeze all three public package APIs against their committed reports.
 - [ ] Publish all public packages at the same RC version.

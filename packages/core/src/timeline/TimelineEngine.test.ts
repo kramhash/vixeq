@@ -980,6 +980,8 @@ describe("TimelineEngine — RC1D branch coverage", () => {
     await engine.play();
 
     expect(listener).not.toHaveBeenCalled();
+    // Real timers: a playing Engine left behind would re-arm its tick inside later fake-timer tests.
+    engine.dispose();
   });
 
   it("rejects a replay from local end when the transport is disposed before it runs", async () => {
@@ -1014,5 +1016,791 @@ describe("TimelineEngine — RC1D branch coverage", () => {
 
     expect(engine.getPlaybackState()).toBe("paused");
     expect(engine.getPosition()).toEqual({ positionMs: BEAT_MS * 2, beat: 1 });
+  });
+});
+
+describe("TimelineEngine — RC1G re-entrancy", () => {
+  const BEAT_MS = 1_000;
+  const buildTransport = (): { clock: FakeClock; transport: PlaybackTransport } => {
+    const clock = new FakeClock();
+    return { clock, transport: createClockTransport(clock) };
+  };
+
+  it("keeps playing a longer project loaded by a cue listener during the local-end tick", async () => {
+    vi.useFakeTimers();
+    const { clock, transport } = buildTransport();
+    const shorter = projectWithEvents(2, [{ id: "last", beat: 1.5, type: "cue" }]);
+    const longer = projectWithEvents(8, [{ id: "next", beat: 3, type: "cue" }]);
+    const engine = new TimelineEngine(shorter, { transport, lookaheadMs: 10 });
+    const playback: TimelinePlaybackEvent[] = [];
+    const cues: TimelineCueEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+    engine.on("cue", (event) => {
+      cues.push(event);
+      if (event.event.id === "last") engine.setProject(longer);
+    });
+
+    await engine.play();
+    await tickEngine(clock, BEAT_MS * 2.2);
+
+    // The hot-swap preserves the logical beat, which the shorter project had
+    // clamped to its end.
+    expect(engine.getPlaybackState()).toBe("playing");
+    expect(engine.getPosition()).toEqual({ positionMs: BEAT_MS * 2, beat: 2 });
+    expect(playback.map((event) => event.type)).toEqual(["play"]);
+
+    await tickEngine(clock, BEAT_MS);
+
+    expect(cues.map((cue) => cue.event.id)).toEqual(["last", "next"]);
+    expect(engine.getPlaybackState()).toBe("playing");
+  });
+
+  it("keeps looping when a cue listener enables loop during the local-end tick", async () => {
+    vi.useFakeTimers();
+    const { clock, transport } = buildTransport();
+    const project = projectWithEvents(2, [
+      { id: "first", beat: 0.5, type: "cue" },
+      { id: "last", beat: 1.5, type: "cue" },
+    ]);
+    const engine = new TimelineEngine(project, { transport, lookaheadMs: 10 });
+    const playback: TimelinePlaybackEvent[] = [];
+    const cues: TimelineCueEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+    engine.on("cue", (event) => {
+      cues.push(event);
+      if (event.event.id === "last" && event.iteration === 0) engine.setLoop(true);
+    });
+
+    await engine.play();
+    clock.advance(BEAT_MS * 0.6);
+    await vi.advanceTimersByTimeAsync(10);
+    await tickEngine(clock, BEAT_MS * 1.6);
+
+    expect(engine.getPlaybackState()).toBe("playing");
+    expect(engine.getPosition()).toEqual({ positionMs: BEAT_MS * 0.2, beat: 0.2 });
+    expect(playback.map((event) => event.type)).toEqual(["play", "loopchange"]);
+
+    await tickEngine(clock, BEAT_MS * 0.4);
+
+    expect(cues.map((cue) => `${cue.event.id}:${cue.iteration}`)).toEqual(["first:0", "last:0", "first:1"]);
+  });
+
+  it("does not dispatch the cues a cue listener seeks over synchronously", async () => {
+    vi.useFakeTimers();
+    const transport = new ManualTransport();
+    const project = projectWithEvents(6, [
+      { id: "one", beat: 1, type: "cue" },
+      { id: "two", beat: 2, type: "cue" },
+      { id: "three", beat: 3, type: "cue" },
+      { id: "four", beat: 4, type: "cue" },
+    ]);
+    const engine = new TimelineEngine(project, { transport, lookaheadMs: 10 });
+    const cues: TimelineCueEvent[] = [];
+    engine.on("cue", (event) => {
+      cues.push(event);
+      if (event.event.id === "one") void engine.seekPositionMs(BEAT_MS * 3.5);
+    });
+
+    await engine.play();
+    transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 2.5 };
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(cues.map((cue) => cue.event.id)).toEqual(["one"]);
+
+    transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 4.1 };
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(cues.map((cue) => `${cue.event.id}@${cue.transportPositionMs}`)).toEqual(["one@2500", "four@4100"]);
+  });
+
+  it("stops dispatching same-beat cues at play once a cue listener replaces the project", async () => {
+    vi.useFakeTimers();
+    const { clock, transport } = buildTransport();
+    const original = projectWithEvents(4, [
+      { id: "a1", beat: 0, type: "cue" },
+      { id: "a2", beat: 0, type: "cue" },
+    ]);
+    const replacement = projectWithEvents(4, [{ id: "b1", beat: 0, type: "cue" }]);
+    const engine = new TimelineEngine(original, { transport, lookaheadMs: 10 });
+    const cues: TimelineCueEvent[] = [];
+    engine.on("cue", (event) => {
+      cues.push(event);
+      if (event.event.id === "a1") engine.setProject(replacement);
+    });
+
+    await engine.play();
+    await tickEngine(clock, BEAT_MS);
+
+    expect(engine.getProject()).toBe(replacement);
+    expect(cues.map((cue) => cue.event.id)).toEqual(["a1"]);
+  });
+
+  // A third-party transport may emit "pause" synchronously inside pause().
+  class PausingTransport extends ManualTransport {
+    override async pause(): Promise<void> {
+      this.emitEvent({ type: "pause", snapshot: { ...this.snapshot, state: "paused" } });
+    }
+  }
+
+  it("finishes a catch-up batch that a cue listener pauses, without replaying it after resume", async () => {
+    vi.useFakeTimers();
+    const transport = new PausingTransport();
+    const project = projectWithEvents(6, [
+      { id: "one", beat: 1, type: "cue" },
+      { id: "two", beat: 2, type: "cue" },
+      { id: "three", beat: 3, type: "cue" },
+    ]);
+    const engine = new TimelineEngine(project, { transport, lookaheadMs: 10 });
+    const playback: string[] = [];
+    const cues: string[] = [];
+    engine.on("playback", (event) => playback.push(event.type));
+    engine.on("cue", (event) => {
+      cues.push(`${event.event.id}@${event.transportPositionMs}`);
+      if (event.event.id === "one") void engine.pause();
+    });
+
+    await engine.play();
+    transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 2.5 };
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(playback).toEqual(["play", "pause"]);
+    expect(cues).toEqual(["one@2500", "two@2500"]);
+
+    await engine.play();
+    transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 2.6 };
+    await vi.advanceTimersByTimeAsync(10);
+    transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 3.1 };
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(cues).toEqual(["one@2500", "two@2500", "three@3100"]);
+  });
+
+  it("dispatches a cue passed between the last tick and a pause on the first tick after resume", async () => {
+    vi.useFakeTimers();
+    const { clock, transport } = buildTransport();
+    const project = projectWithEvents(6, [{ id: "late", beat: 2.493, type: "cue" }]);
+    const engine = new TimelineEngine(project, { transport, lookaheadMs: 10 });
+    const cues: TimelineCueEvent[] = [];
+    engine.on("cue", (event) => cues.push(event));
+
+    await engine.play();
+    await tickEngine(clock, 2_490);
+    clock.advance(5);
+    await engine.pause();
+    await vi.advanceTimersByTimeAsync(0);
+    await engine.play();
+    await vi.advanceTimersByTimeAsync(0);
+    await tickEngine(clock, 100);
+
+    expect(cues.map((cue) => cue.event.id)).toEqual(["late"]);
+  });
+
+  it("PB-EN-030 announces local end once when a cue listener pauses during the local-end tick", async () => {
+    vi.useFakeTimers();
+    const transport = new PausingTransport();
+    const engine = new TimelineEngine(projectWithEvents(2, [{ id: "last", beat: 1.5, type: "cue" }]), {
+      transport,
+      lookaheadMs: 10,
+    });
+    const playback: TimelinePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+    engine.on("cue", (event) => {
+      if (event.event.id === "last") void engine.pause();
+    });
+
+    await engine.play();
+    transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 2.2 };
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(playback.map((event) => `${event.type}:${event.cause}`)).toEqual([
+      "play:command",
+      "pause:command",
+      "ended:local-end",
+    ]);
+    expect(engine.getPlaybackState()).toBe("ended");
+    expect(engine.getPosition()).toEqual({ positionMs: BEAT_MS * 2, beat: 2 });
+  });
+
+  it("PB-EN-030 announces local end when a pause lands past local end before the tick", async () => {
+    vi.useFakeTimers();
+    const { clock, transport } = buildTransport();
+    const engine = new TimelineEngine(projectWithEvents(2, []), { transport, lookaheadMs: 10 });
+    const playback: TimelinePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+
+    await engine.play();
+    clock.currentTime = BEAT_MS * 2.2;
+    await engine.pause();
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(playback.map((event) => `${event.type}:${event.cause}:${event.previousState}`)).toEqual([
+      "play:command:stopped",
+      "pause:command:playing",
+      "ended:local-end:playing",
+    ]);
+    expect(engine.getPlaybackState()).toBe("ended");
+  });
+
+  it("PB-EN-030 dispatches the cues due up to local end before ended when a pause lands past local end", async () => {
+    vi.useFakeTimers();
+    const { clock, transport } = buildTransport();
+    const engine = new TimelineEngine(projectWithEvents(2, [{ id: "final", beat: 1.95, type: "cue" }]), {
+      transport,
+      lookaheadMs: 10,
+    });
+    const log: string[] = [];
+    engine.on("playback", (event) => log.push(`${event.type}:${event.cause}`));
+    engine.on("cue", (event) => log.push(`cue:${event.event.id}@${event.transportPositionMs}`));
+
+    await engine.play();
+    await tickEngine(clock, BEAT_MS * 1.9);
+    clock.advance(BEAT_MS * 0.3);
+    await engine.pause();
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(log).toEqual(["play:command", "pause:command", "cue:final@2000", "ended:local-end"]);
+    expect(engine.getPlaybackState()).toBe("ended");
+  });
+
+  it("stops the past-end pause dispatch when a cue listener seeks, and announces end once after a shorter hot-swap", async () => {
+    vi.useFakeTimers();
+    const project = projectWithEvents(4, [
+      { id: "a", beat: 3.2, type: "cue" },
+      { id: "b", beat: 3.6, type: "cue" },
+    ]);
+    const run = async (onA: (engine: TimelineEngine) => void): Promise<{ engine: TimelineEngine; log: string[] }> => {
+      const transport = new PausingTransport();
+      const engine = new TimelineEngine(project, { transport, lookaheadMs: 10 });
+      const log: string[] = [];
+      engine.on("playback", (event) => log.push(event.type));
+      engine.on("cue", (event) => {
+        log.push(`cue:${event.event.id}`);
+        if (event.event.id === "a") onA(engine);
+      });
+      await engine.play();
+      transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 3 };
+      await vi.advanceTimersByTimeAsync(10);
+      transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 4.5 };
+      await engine.pause();
+      return { engine, log };
+    };
+
+    const seeking = await run((engine) => void engine.seekPositionMs(BEAT_MS));
+    expect(seeking.log).toEqual(["play", "pause", "cue:a", "seek"]);
+    expect(seeking.engine.getPlaybackState()).toBe("paused");
+    expect(seeking.engine.getPosition()).toEqual({ positionMs: BEAT_MS, beat: 1 });
+
+    const shorter = projectWithEvents(2, []);
+    const swapping = await run((engine) => engine.setProject(shorter));
+    expect(swapping.log).toEqual(["play", "pause", "cue:a", "ended"]);
+    expect(swapping.engine.getPlaybackState()).toBe("ended");
+  });
+
+  it("leaves a past-end pause to a pause listener that replays from the start", async () => {
+    vi.useFakeTimers();
+    const transport = new PausingTransport();
+    const engine = new TimelineEngine(
+      projectWithEvents(2, [
+        { id: "zero", beat: 0, type: "cue" },
+        { id: "final", beat: 1.95, type: "cue" },
+      ]),
+      { transport, lookaheadMs: 10 },
+    );
+    const log: string[] = [];
+    engine.on("playback", (event) => {
+      log.push(`${event.type}:${event.previousState}`);
+      if (event.type === "pause") void engine.play();
+    });
+    engine.on("cue", (event) => log.push(`cue:${event.event.id}`));
+
+    await engine.play();
+    transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 2.2 };
+    await engine.pause();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(log).toEqual(["play:stopped", "cue:zero", "pause:playing", "play:ended", "cue:zero"]);
+    expect(engine.getPlaybackState()).toBe("playing");
+  });
+
+  it("does not announce local end when a later cue listener seeks after a pausing one in the local-end tick", async () => {
+    vi.useFakeTimers();
+    const transport = new PausingTransport();
+    const engine = new TimelineEngine(
+      projectWithEvents(2, [
+        { id: "a", beat: 1.5, type: "cue" },
+        { id: "b", beat: 1.8, type: "cue" },
+      ]),
+      { transport, lookaheadMs: 10 },
+    );
+    const log: string[] = [];
+    engine.on("playback", (event) => log.push(event.type));
+    engine.on("cue", (event) => {
+      log.push(`cue:${event.event.id}`);
+      if (event.event.id === "a") void engine.pause();
+      if (event.event.id === "b") void engine.seekPositionMs(BEAT_MS * 0.5);
+    });
+
+    await engine.play();
+    transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 2.2 };
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(log).toEqual(["play", "cue:a", "pause", "cue:b", "seek"]);
+    expect(engine.getPlaybackState()).toBe("paused");
+    expect(engine.getPosition()).toEqual({ positionMs: BEAT_MS * 0.5, beat: 0.5 });
+  });
+
+  it("announces local end once when a pause listener hot-swaps to a shorter project on a past-end pause", async () => {
+    vi.useFakeTimers();
+    const shorter = projectWithEvents(2, []);
+    const lateProject = projectWithEvents(4, [{ id: "late", beat: 3.5, type: "cue" }]);
+    const record = (engine: TimelineEngine): string[] => {
+      const log: string[] = [];
+      engine.on("playback", (event) => {
+        log.push(`${event.type}:${event.previousState}`);
+        if (event.type === "pause") engine.setProject(shorter);
+      });
+      engine.on("cue", (event) => log.push(`cue:${event.event.id}`));
+      return log;
+    };
+
+    const { clock, transport } = buildTransport();
+    const engine = new TimelineEngine(lateProject, { transport, lookaheadMs: 10 });
+    const log = record(engine);
+    await engine.play();
+    await tickEngine(clock, BEAT_MS * 3);
+    clock.advance(BEAT_MS * 1.5);
+    await engine.pause();
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(log).toEqual(["play:stopped", "pause:playing", "ended:playing"]);
+    expect(engine.getPlaybackState()).toBe("ended");
+
+    // The same pause, taken by a cue listener inside the local-end tick.
+    const pausing = new PausingTransport();
+    const inTick = new TimelineEngine(lateProject, { transport: pausing, lookaheadMs: 10 });
+    const inTickLog = record(inTick);
+    inTick.on("cue", () => void inTick.pause());
+    await inTick.play();
+    pausing.snapshot = { ...pausing.snapshot, positionMs: BEAT_MS * 4.5 };
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(inTickLog).toEqual(["play:stopped", "cue:late", "pause:playing", "ended:playing"]);
+    expect(inTick.getPlaybackState()).toBe("ended");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("does not announce local end after a cue listener disposes the Engine during a past-end pause", async () => {
+    vi.useFakeTimers();
+    class DisposableTransport extends PausingTransport {
+      private transportDisposed = false;
+      override getSnapshot(): PlaybackSnapshot {
+        if (this.transportDisposed) throw new Error("transport disposed");
+        return super.getSnapshot();
+      }
+      override dispose(): void {
+        this.transportDisposed = true;
+      }
+    }
+    const transport = new DisposableTransport();
+    const engine = new TimelineEngine(projectWithEvents(4, [{ id: "x", beat: 3.2, type: "cue" }]), {
+      transport,
+      lookaheadMs: 10,
+    });
+    const log: string[] = [];
+    engine.on("playback", (event) => log.push(event.type));
+    engine.on("cue", (event) => {
+      log.push(`cue:${event.event.id}`);
+      engine.dispose();
+      transport.dispose();
+    });
+
+    await engine.play();
+    transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 3 };
+    await vi.advanceTimersByTimeAsync(10);
+    transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 4.5 };
+    await expect(engine.pause()).resolves.toBeUndefined();
+
+    expect(log).toEqual(["play", "pause", "cue:x"]);
+  });
+
+  it("finishes a normal tick batch before local end when a cue listener's pause lands past local end", async () => {
+    vi.useFakeTimers();
+    // A transport that reads a live clock: the position advances between the
+    // tick's read and the pause snapshot.
+    class LatePausingTransport extends ManualTransport {
+      override async pause(): Promise<void> {
+        this.emitEvent({
+          type: "pause",
+          snapshot: { ...this.snapshot, state: "paused", positionMs: this.snapshot.positionMs + BEAT_MS * 1.5 },
+        });
+      }
+    }
+    const transport = new LatePausingTransport();
+    const engine = new TimelineEngine(
+      projectWithEvents(4, [
+        { id: "p", beat: 1.5, type: "cue" },
+        { id: "q", beat: 2.5, type: "cue" },
+        { id: "r", beat: 3.8, type: "cue" },
+      ]),
+      { transport, lookaheadMs: 10 },
+    );
+    const log: string[] = [];
+    engine.on("playback", (event) => log.push(event.type));
+    engine.on("cue", (event) => {
+      log.push(`cue:${event.event.id}@${event.transportPositionMs}`);
+      if (event.event.id === "p") void engine.pause();
+    });
+
+    await engine.play();
+    transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 3 };
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(log).toEqual(["play", "cue:p@3000", "pause", "cue:q@3000", "cue:r@4000", "ended"]);
+    expect(engine.getPlaybackState()).toBe("ended");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  // A synchronous transport that reads a live clock: the pause snapshot lands
+  // pauseOffsetMs past the position the tick read.
+  class LiveClockTransport extends ManualTransport {
+    pauseOffsetMs = 0;
+    override async pause(): Promise<void> {
+      this.emitEvent({
+        type: "pause",
+        snapshot: { ...this.snapshot, state: "paused", positionMs: this.snapshot.positionMs + this.pauseOffsetMs },
+      });
+    }
+    override async stop(): Promise<void> {
+      this.emitEvent({ type: "stop", snapshot: { ...this.snapshot, state: "stopped", positionMs: 0 } });
+    }
+  }
+
+  it("dispatches up to local end from where a cue listener re-anchored before its pause lands past local end", async () => {
+    vi.useFakeTimers();
+    const transport = new LiveClockTransport();
+    transport.pauseOffsetMs = BEAT_MS * 1.5;
+    const engine = new TimelineEngine(
+      projectWithEvents(4, [
+        { id: "p", beat: 1.5, type: "cue" },
+        { id: "q", beat: 2.5, type: "cue" },
+        { id: "r", beat: 3.8, type: "cue" },
+      ]),
+      { transport, lookaheadMs: 10 },
+    );
+    const log: string[] = [];
+    engine.on("playback", (event) => log.push(event.type));
+    engine.on("cue", (event) => {
+      log.push(`cue:${event.event.id}@${event.transportPositionMs}`);
+      if (event.event.id === "p") {
+        void engine.seekPositionMs(BEAT_MS * 3);
+        void engine.pause();
+      }
+    });
+
+    await engine.play();
+    transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 2 };
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(log).toEqual(["play", "cue:p@2000", "seek", "pause", "cue:r@4000", "ended"]);
+    expect(engine.getPlaybackState()).toBe("ended");
+
+    // The same, re-anchored by stop() + play() (a nested batch) instead.
+    const replaying = new LiveClockTransport();
+    const replayEngine = new TimelineEngine(
+      projectWithEvents(2, [
+        { id: "z", beat: 0, type: "cue" },
+        { id: "a", beat: 1.5, type: "cue" },
+        { id: "b", beat: 1.8, type: "cue" },
+      ]),
+      { transport: replaying, lookaheadMs: 10 },
+    );
+    const replayLog: string[] = [];
+    let replayed = false;
+    replayEngine.on("playback", (event) => replayLog.push(event.type));
+    replayEngine.on("cue", (event) => {
+      replayLog.push(`cue:${event.event.id}@${event.transportPositionMs}`);
+      if (event.event.id === "a" && !replayed) {
+        replayed = true;
+        void replayEngine.stop();
+        void replayEngine.play();
+        replaying.pauseOffsetMs = BEAT_MS * 2.5;
+        void replayEngine.pause();
+      }
+    });
+
+    await replayEngine.play();
+    replaying.snapshot = { ...replaying.snapshot, positionMs: BEAT_MS * 1.6 };
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(replayLog).toEqual([
+      "play",
+      "cue:z@0",
+      "cue:a@1600",
+      "stop",
+      "play",
+      "cue:z@0",
+      "pause",
+      "cue:a@2000",
+      "cue:b@2000",
+      "ended",
+    ]);
+    expect(replayEngine.getPlaybackState()).toBe("ended");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("announces local end once when a replay inside a paused batch is itself paused past local end", async () => {
+    vi.useFakeTimers();
+    const transport = new LiveClockTransport();
+    const engine = new TimelineEngine(
+      projectWithEvents(2, [
+        { id: "z", beat: 0, type: "cue" },
+        { id: "a", beat: 1.5, type: "cue" },
+        { id: "b", beat: 1.8, type: "cue" },
+      ]),
+      { transport, lookaheadMs: 10 },
+    );
+    const log: string[] = [];
+    const seen = new Map<string, number>();
+    engine.on("playback", (event) => log.push(event.type));
+    engine.on("cue", (event) => {
+      const id = event.event.id;
+      log.push(`cue:${id}@${event.transportPositionMs}`);
+      const count = (seen.get(id) ?? 0) + 1;
+      seen.set(id, count);
+      if (id === "a" && count === 1) void engine.pause();
+      if (id === "b" && count === 1) {
+        void engine.stop();
+        void engine.play();
+      }
+      if (id === "z" && count === 2) {
+        transport.pauseOffsetMs = BEAT_MS * 2.5;
+        void engine.pause();
+      }
+    });
+
+    await engine.play();
+    transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 2.5 };
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(log).toEqual([
+      "play",
+      "cue:z@0",
+      "cue:a@2000",
+      "pause",
+      "cue:b@2000",
+      "stop",
+      "play",
+      "cue:z@0",
+      "pause",
+      "cue:a@2000",
+      "cue:b@2000",
+      "ended",
+    ]);
+    expect(engine.getPlaybackState()).toBe("ended");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("finishes an ended replay's batch before local end when a cue listener's pause lands past local end", async () => {
+    vi.useFakeTimers();
+    const transport = new LiveClockTransport();
+    transport.pauseOffsetMs = BEAT_MS * 1.5;
+    const engine = new TimelineEngine(
+      projectWithEvents(1, [
+        { id: "a0", beat: 0, type: "cue" },
+        { id: "b0", beat: 0, type: "cue" },
+        { id: "m", beat: 0.5, type: "cue" },
+      ]),
+      { transport, lookaheadMs: 10 },
+    );
+    const log: string[] = [];
+    let pauseOnReplay = false;
+    engine.on("playback", (event) => log.push(event.type));
+    engine.on("cue", (event) => {
+      log.push(`cue:${event.event.id}@${event.transportPositionMs}`);
+      if (event.event.id === "a0" && pauseOnReplay) void engine.pause();
+    });
+
+    await engine.play();
+    transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 1.2 };
+    await vi.advanceTimersByTimeAsync(10);
+    expect(engine.getPlaybackState()).toBe("ended");
+    expect(transport.getPlaybackState()).toBe("playing");
+
+    // Replay while the shared transport keeps playing: the seek acts as play.
+    log.length = 0;
+    pauseOnReplay = true;
+    await engine.play();
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(log).toEqual(["play", "cue:a0@0", "pause", "cue:b0@0", "cue:m@1000", "ended"]);
+    expect(engine.getPlaybackState()).toBe("ended");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("announces local end once when a replay during a local-end pause's dispatch is itself paused past local end", async () => {
+    vi.useFakeTimers();
+    // From a pause outside any batch, and from a cue listener's pause inside a tick batch.
+    for (const pauseInBatch of [false, true]) {
+      const transport = new LiveClockTransport();
+      const engine = new TimelineEngine(
+        projectWithEvents(2, [
+          { id: "z", beat: 0, type: "cue" },
+          { id: "m", beat: 0.5, type: "cue" },
+          { id: "a", beat: 1.5, type: "cue" },
+          { id: "b", beat: 1.8, type: "cue" },
+        ]),
+        { transport, lookaheadMs: 10 },
+      );
+      const log: string[] = [];
+      const seen = new Map<string, number>();
+      engine.on("playback", (event) => log.push(event.type));
+      engine.on("cue", (event) => {
+        const id = event.event.id;
+        log.push(`cue:${id}@${event.transportPositionMs}`);
+        const count = (seen.get(id) ?? 0) + 1;
+        seen.set(id, count);
+        if (id === "m" && pauseInBatch) {
+          transport.pauseOffsetMs = BEAT_MS * 2.5;
+          void engine.pause();
+        }
+        if (id === "a" && count === 1) {
+          void engine.stop();
+          void engine.play();
+        }
+        if (id === "z" && count === 2) {
+          transport.pauseOffsetMs = BEAT_MS * 2.5;
+          void engine.pause();
+        }
+      });
+
+      await engine.play();
+      transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS };
+      await vi.advanceTimersByTimeAsync(10);
+      if (!pauseInBatch) {
+        transport.pauseOffsetMs = BEAT_MS * 1.5;
+        await engine.pause();
+      }
+
+      const replay = ["stop", "play", "cue:z@0", "pause", "cue:m@2000", "cue:a@2000", "cue:b@2000", "ended"];
+      if (pauseInBatch) replay.splice(5, 0, "pause");
+      expect(log).toEqual(["play", "cue:z@0", "cue:m@1000", "pause", "cue:a@2000", ...replay]);
+      expect(engine.getPlaybackState()).toBe("ended");
+    }
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("announces local end once when a pause listener's replay is itself paused past local end", async () => {
+    vi.useFakeTimers();
+    const transport = new LiveClockTransport();
+    const engine = new TimelineEngine(
+      projectWithEvents(2, [
+        { id: "z", beat: 0, type: "cue" },
+        { id: "a", beat: 1.5, type: "cue" },
+        { id: "b", beat: 1.8, type: "cue" },
+      ]),
+      { transport, lookaheadMs: 10 },
+    );
+    const log: string[] = [];
+    const seen = new Map<string, number>();
+    let pauses = 0;
+    engine.on("playback", (event) => {
+      log.push(event.type);
+      if (event.type === "pause" && ++pauses === 1) {
+        void engine.stop();
+        void engine.play();
+      }
+    });
+    engine.on("cue", (event) => {
+      const id = event.event.id;
+      log.push(`cue:${id}@${event.transportPositionMs}`);
+      const count = (seen.get(id) ?? 0) + 1;
+      seen.set(id, count);
+      if (id === "a" && count === 1) {
+        transport.pauseOffsetMs = BEAT_MS * 1.5;
+        void engine.pause();
+      }
+      if (id === "z" && count === 2) {
+        transport.pauseOffsetMs = BEAT_MS * 2.5;
+        void engine.pause();
+      }
+    });
+
+    await engine.play();
+    transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 1.6 };
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(log).toEqual([
+      "play",
+      "cue:z@0",
+      "cue:a@1600",
+      "pause",
+      "stop",
+      "play",
+      "cue:z@0",
+      "pause",
+      "cue:a@2000",
+      "cue:b@2000",
+      "ended",
+    ]);
+    expect(engine.getPlaybackState()).toBe("ended");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("does not announce a pause's local end after a pause listener moved the Engine out of ended and back", async () => {
+    vi.useFakeTimers();
+    const shorter = projectWithEvents(2, []);
+    const run = async (
+      takeOver: (engine: TimelineEngine) => void,
+      pauseInTick: boolean,
+    ): Promise<{ log: string[]; state: string }> => {
+      const transport = new LiveClockTransport();
+      const engine = new TimelineEngine(projectWithEvents(4, [{ id: "a", beat: 3.2, type: "cue" }]), {
+        transport,
+        lookaheadMs: 10,
+      });
+      const log: string[] = [];
+      let pauses = 0;
+      engine.on("playback", (event) => {
+        log.push(event.type);
+        if (event.type === "pause" && ++pauses === 1) takeOver(engine);
+      });
+      engine.on("cue", (event) => {
+        log.push(`cue:${event.event.id}`);
+        if (pauseInTick) void engine.pause();
+      });
+      await engine.play();
+      if (pauseInTick) {
+        transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 4.5 };
+        await vi.advanceTimersByTimeAsync(10);
+      } else {
+        transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 3 };
+        await vi.advanceTimersByTimeAsync(10);
+        transport.pauseOffsetMs = BEAT_MS * 1.5;
+        await engine.pause();
+      }
+      return { log, state: engine.getPlaybackState() };
+    };
+    const seekThenShorten = (engine: TimelineEngine): void => {
+      void engine.seekPositionMs(BEAT_MS * 3);
+      engine.setProject(shorter);
+    };
+
+    // The shorter hot-swap announces its own ended; the pause's was superseded by the seek.
+    expect(await run(seekThenShorten, false)).toEqual({
+      log: ["play", "pause", "seek", "ended"],
+      state: "ended",
+    });
+    expect(await run(seekThenShorten, true)).toEqual({
+      log: ["play", "cue:a", "pause", "seek", "ended"],
+      state: "ended",
+    });
+    // Enabling loop takes over, and disabling it again from paused is silent.
+    expect(
+      await run((engine) => {
+        engine.setLoop(true);
+        engine.setLoop(false);
+      }, false),
+    ).toEqual({ log: ["play", "pause", "loopchange", "loopchange"], state: "ended" });
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

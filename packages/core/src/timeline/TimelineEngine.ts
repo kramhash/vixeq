@@ -34,6 +34,13 @@ type ProjectPositionAnchor = {
   projectPositionMs: number;
 };
 
+// A pause that took a playing Engine to local end, as dispatch stood before
+// its listeners ran (see finishLocalEndPause).
+type LocalEndPause = {
+  generation: number;
+  endedExits: number;
+};
+
 const POSITION_EPSILON_MS = 1e-9;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -115,6 +122,23 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
   private endedReplaySeekMode: "seek-as-play" | "suppress-seek" | null = null;
   private pendingEndedReplayPlay = false;
   private readonly pendingCommandEvents: PlaybackTransportEvent["type"][] = [];
+  // Bumped by every command or transport event that re-anchors or ends cue
+  // dispatch (seek, stop, ended, play from stopped/ended, setProject, setLoop,
+  // transport or Engine disposal). Pause does not bump: it leaves the cursor
+  // in place. A dispatch batch compares it after
+  // each cue listener and abandons the rest of the batch when it changed: the
+  // re-entrant call has already re-anchored the cursor and rescheduled.
+  private dispatchGeneration = 0;
+  // Set while a dispatch batch runs (see runDispatch). A cue listener whose
+  // pause takes the Engine to local end records that pause and leaves the
+  // local-end dispatch and announcement to the batch, because a nested batch
+  // would re-dispatch the cues already sent (the cursor moves at batch end).
+  private activeDispatch: { pause: LocalEndPause | null } | null = null;
+  // Incremented whenever the Engine leaves `ended`. A listener that moves the
+  // Engine out of `ended` after a pause took it to local end has taken over
+  // (even if a later command re-enters `ended` and announces it), so that pause
+  // no longer owes the `ended` announcement.
+  private endedExits = 0;
 
   constructor(project: TimelineProject<TEvent>, options: TimelineEngineOptions<TEvent> = {}) {
     if (!isRecord(options)) {
@@ -241,6 +265,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     }
 
     const previousState = this.playbackState;
+    this.dispatchGeneration += 1;
     this.localLoop = loop;
     this.applyTransportSnapshot(this.readTransportSnapshot());
     this.lastDispatchedRawPositionMs = this.rawPositionFromTransportPosition(this.getTransportPositionMs());
@@ -275,6 +300,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     const nextBeat = this.normalizeBeatForProject(previousBeat, project);
     const nextPositionMs = beatToMs(project.timing, nextBeat);
 
+    this.dispatchGeneration += 1;
     this.project = project;
     this.eventIndex = createTimelineEventIndex(project);
     this.projectAnchor = {
@@ -322,6 +348,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     }
 
     this.disposed = true;
+    this.dispatchGeneration += 1;
     this.clearTimer();
     this.unsubscribeTransport();
     this.listeners.cue.clear();
@@ -389,6 +416,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
         this.pendingEndedReplayPlay = false;
       }
       if (this.playbackState === "ended") {
+        this.dispatchGeneration += 1;
         this.clearTimer();
         this.emitPlayback("ended", "local-end", previousState);
         return;
@@ -397,21 +425,37 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
       const playbackPreviousState = isEndedReplayPlay ? "ended" : previousState;
       this.emitPlayback(event.type, cause, playbackPreviousState);
       if (previousState === "stopped" || previousState === "ended" || isEndedReplayPlay) {
+        this.dispatchGeneration += 1;
         this.lastDispatchedRawPositionMs = null;
-        this.emitCurrentCues();
+        this.runDispatch(() => this.emitCurrentCues());
       }
       this.rescheduleIfPlaying();
       return;
     }
 
     if (event.type === "pause") {
+      // Pause neither moves the dispatch cursor nor bumps dispatchGeneration:
+      // cues passed before a late pause go out on the first tick after resume,
+      // and a batch that a cue listener pauses runs to completion.
       this.clearTimer();
-      this.lastDispatchedRawPositionMs = this.rawPositionFromTransportPosition(event.snapshot.positionMs);
+      const reachedLocalEnd = previousState === "playing" && this.playbackState === "ended";
+      // Captured before the pause listeners run: one that re-entrantly replays,
+      // seeks, or hot-swaps has already re-anchored dispatch.
+      const pause: LocalEndPause = { generation: this.dispatchGeneration, endedExits: this.endedExits };
       this.emitPlayback(event.type, cause, previousState);
+      if (!reachedLocalEnd) {
+        return;
+      }
+      if (this.activeDispatch) {
+        this.activeDispatch.pause = pause;
+        return;
+      }
+      this.finishLocalEndPause(pause);
       return;
     }
 
     if (event.type === "stop") {
+      this.dispatchGeneration += 1;
       this.clearTimer();
       this.cachedPositionMs = 0;
       this.lastDispatchedRawPositionMs = null;
@@ -420,6 +464,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     }
 
     if (event.type === "seek") {
+      this.dispatchGeneration += 1;
       this.clearTimer();
       this.lastDispatchedRawPositionMs = null;
       if (previousState === "ended" && this.endedReplaySeekMode === "suppress-seek") {
@@ -430,7 +475,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
       if (previousState === "ended" && this.endedReplaySeekMode === "seek-as-play") {
         this.endedReplaySeekMode = null;
         this.emitPlayback("play", cause, previousState);
-        this.emitCurrentCues();
+        this.runDispatch(() => this.emitCurrentCues());
         this.rescheduleIfPlaying();
         return;
       }
@@ -457,6 +502,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     }
 
     if (event.type === "ended") {
+      this.dispatchGeneration += 1;
       this.clearTimer();
       this.emitPlayback(event.type, cause, previousState);
       return;
@@ -476,6 +522,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     this.cachedPositionMs = this.normalizePosition(this.rawPositionFromTransportPosition(snapshot.positionMs));
     this.disposedTransportPositionMs = snapshot.positionMs;
     this.transportDisposed = true;
+    this.dispatchGeneration += 1;
     this.clearTimer();
     if (this.playbackState === "playing") {
       this.playbackState = "paused";
@@ -499,6 +546,14 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
   }
 
   private applyTransportSnapshot(snapshot: PlaybackSnapshot): void {
+    const wasEnded = this.playbackState === "ended";
+    this.applySnapshotState(snapshot);
+    if (wasEnded && this.playbackState !== "ended") {
+      this.endedExits += 1;
+    }
+  }
+
+  private applySnapshotState(snapshot: PlaybackSnapshot): void {
     this.buffering = snapshot.buffering;
 
     if (snapshot.state === "stopped") {
@@ -550,7 +605,12 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     const rawPositionMs = this.rawPositionFromTransportPosition(this.getTransportPositionMs());
 
     if (this.isAtOrPastLocalEnd(rawPositionMs)) {
-      this.emitDueCues(this.getDurationMs());
+      // A cue listener that re-entrantly seeks, stops, hot-swaps, toggles loop,
+      // or disposes has already re-anchored playback (and announced any local
+      // end itself); one that pauses has had local end finished by runDispatch.
+      if (!this.runDispatch(() => this.emitDueCues(this.getDurationMs()))) {
+        return;
+      }
       this.cachedPositionMs = this.getDurationMs();
       this.lastDispatchedRawPositionMs = this.getDurationMs();
       this.playbackState = "ended";
@@ -559,11 +619,52 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     }
 
     this.cachedPositionMs = this.normalizePosition(rawPositionMs);
-    this.emitDueCues(rawPositionMs);
+    this.runDispatch(() => this.emitDueCues(rawPositionMs));
     this.scheduleNextTick();
   }
 
-  private emitCurrentCues(): void {
+  /**
+   * Runs one dispatch batch. When a cue listener's pause takes the Engine to
+   * local end during it, the batch runs to completion first, then local end is
+   * finished. Returns `false` when the batch was abandoned or ended that way.
+   */
+  private runDispatch(dispatch: () => boolean): boolean {
+    const outerDispatch = this.activeDispatch;
+    const batch: { pause: LocalEndPause | null } = { pause: null };
+    this.activeDispatch = batch;
+    const completed = dispatch();
+    this.activeDispatch = outerDispatch;
+    if (batch.pause === null) {
+      return completed;
+    }
+    this.finishLocalEndPause(batch.pause);
+    return false;
+  }
+
+  /**
+   * Finishes a pause that took a playing Engine to local end, like the
+   * local-end tick: the cues due up to local end, then `ended`. The dispatch is
+   * skipped when a listener re-anchored it after the pause; unchanged since the
+   * pause, the cursor is either where the batch left it or where a command
+   * before the pause re-anchored it. The Engine is already `ended`, so a
+   * re-entrant hot-swap does not announce it; announce unless a listener
+   * disposed the Engine or moved it out of `ended` since the pause (a command
+   * that later re-enters `ended`, such as a replay or a shorter hot-swap,
+   * announces its own).
+   */
+  private finishLocalEndPause(pause: LocalEndPause): void {
+    if (this.dispatchGeneration === pause.generation) {
+      this.emitDueCues(this.getDurationMs());
+    }
+    if (this.disposed || this.playbackState !== "ended" || this.endedExits !== pause.endedExits) {
+      return;
+    }
+    this.emitPlayback("ended", "local-end", "playing");
+  }
+
+  /** Returns `false` when a cue listener re-entrantly reset dispatch (see dispatchGeneration). */
+  private emitCurrentCues(): boolean {
+    const generation = this.dispatchGeneration;
     const rawPositionMs = this.rawPositionFromTransportPosition(this.getTransportPositionMs());
     const durationMs = this.getDurationMs();
     const iteration = this.localLoop && durationMs > 0 ? Math.floor(rawPositionMs / durationMs) : 0;
@@ -576,30 +677,34 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
 
     for (const event of events) {
       this.emitCue(event, iteration, iteration * durationMs + beatToMs(this.project.timing, event.beat), rawPositionMs);
+      if (this.dispatchGeneration !== generation) {
+        return false;
+      }
     }
 
     this.lastDispatchedRawPositionMs = rawPositionMs;
+    return true;
   }
 
-  private emitDueCues(toRawPositionMs: number): void {
+  /** Returns `false` when a cue listener re-entrantly reset dispatch (see dispatchGeneration). */
+  private emitDueCues(toRawPositionMs: number): boolean {
     const fromRawPositionMs = this.lastDispatchedRawPositionMs;
     if (fromRawPositionMs === null) {
-      this.emitCurrentCues();
-      return;
+      return this.emitCurrentCues();
     }
 
     if (toRawPositionMs <= fromRawPositionMs) {
       this.lastDispatchedRawPositionMs = toRawPositionMs;
-      return;
+      return true;
     }
 
     const durationMs = this.getDurationMs();
     if (!this.localLoop) {
       if (!this.emitDueCuesForIteration(0, fromRawPositionMs, Math.min(toRawPositionMs, durationMs), toRawPositionMs)) {
-        return;
+        return false;
       }
       this.lastDispatchedRawPositionMs = toRawPositionMs;
-      return;
+      return true;
     }
 
     const startIteration = Math.floor(fromRawPositionMs / durationMs);
@@ -614,18 +719,20 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
         ? toRawPositionMs - iterationStartRaw
         : durationMs;
       if (!this.emitDueCuesForIteration(iteration, fromLocalPositionMs, toLocalPositionMs, toRawPositionMs)) {
-        return;
+        return false;
       }
     }
 
     this.lastDispatchedRawPositionMs = toRawPositionMs;
+    return true;
   }
 
   /**
    * Dispatches the due cues of one loop iteration. Returns `false` when a cue
-   * listener replaced the project, toggled local loop, or disposed the Engine,
-   * in which case the rest of this catch-up belongs to stale data and must not
-   * be dispatched (newly loaded events are never emitted retroactively).
+   * listener re-entrantly reset dispatch (seek, stop, hot-swap, loop toggle,
+   * disposal): the rest of this catch-up is stale and must not be
+   * dispatched (explicit seeks skip passed cues, and newly loaded events are
+   * never emitted retroactively).
    */
   private emitDueCuesForIteration(
     iteration: number,
@@ -633,8 +740,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     toLocalPositionMs: number,
     transportPositionMs: number,
   ): boolean {
-    const project = this.project;
-    const localLoop = this.localLoop;
+    const generation = this.dispatchGeneration;
     const durationMs = this.getDurationMs();
     // Callers keep fromLocalPositionMs <= toLocalPositionMs within the
     // iteration, so this range is never inverted.
@@ -673,7 +779,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     for (const { event, scheduledLocalPositionMs } of toDispatch) {
       const scheduledRawPositionMs = iteration * durationMs + scheduledLocalPositionMs;
       this.emitCue(event, iteration, scheduledRawPositionMs, transportPositionMs);
-      if (this.disposed || this.project !== project || this.localLoop !== localLoop) {
+      if (this.dispatchGeneration !== generation) {
         return false;
       }
     }

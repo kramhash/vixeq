@@ -21,10 +21,39 @@
   `TimelineEngine.setProject()` / `setLoop()` after the shared transport was
   disposed now keep the hot-swapped position instead of offsetting it by the
   pre-swap position.
-- `@vixeq/core`: `TimelineEngine` stops replaying missed cues once a `"cue"`
-  listener replaces the project, toggles local loop, or disposes the Engine,
-  so cues from the replaced data are not dispatched and newly loaded events
-  are not emitted retroactively.
+- `@vixeq/core`: Engine dispatch stops as soon as a listener re-entrantly
+  seeks, stops, hot-swaps, toggles local loop, or disposes the Engine or its
+  transport. A listener that pauses does not cut the batch short: the steps
+  or cues already due at that tick are still dispatched, once.
+  - `SequencerEngine`, `ArrangementEngine`, and `TimelineEngine` no longer
+    dispatch the rest of a missed-step/missed-cue catch-up after a listener
+    seeks (including a third-party `PlaybackTransport` that emits `seek`
+    synchronously), so an explicit seek dispatches no passed steps or cues.
+  - `TimelineEngine` no longer dispatches cues of a replaced project,
+    including the remaining same-beat cues at `play()`, and newly loaded
+    events are not emitted retroactively.
+  - `TimelineEngine` keeps playing when a `"cue"` listener in the local-end
+    tick loads a longer project or enables loop, instead of forcing `ended`
+    and jumping to the new project's end.
+  - `ArrangementEngine` no longer emits a step after `ended` when a `"step"`
+    listener disables loop during catch-up, no longer emits a stale `"tick"`
+    step after a `"section"` listener seeks, and no longer emits a
+    `"playback"` `ended` event after a `"section"` listener at local end loads
+    a longer arrangement.
+- `@vixeq/core`: `TimelineEngine` no longer drops cues passed between the last
+  tick and a `pause()`. Before local end they are dispatched on the first tick
+  after resume; when the pause lands at or past local end they are dispatched
+  right after `pause`, before `ended`, each once, including when a `"cue"`
+  listener pauses and a third-party `PlaybackTransport` reports a pause
+  position past local end.
+- `@vixeq/core`: `TimelineEngine` and `ArrangementEngine` now emit a
+  `"playback"` `ended` event (cause `local-end`) after `pause` when a pause
+  lands at or past local end, instead of entering `ended` silently. In
+  `TimelineEngine`, a listener that takes over during that pause (seeks,
+  replays, stops, enables loop, hot-swaps to a longer project, or disposes)
+  suppresses it; if a later command returns the Engine to `ended`, only that
+  command's own event is emitted (for example, a longer then shorter hot-swap
+  emits one `ended`, and enabling then disabling loop emits none).
 
 ## 0.9.0 - 2026-07-13
 

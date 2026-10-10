@@ -812,7 +812,9 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | RC1D | 1.0-rc | Close 100% branch gaps in `TimelineEngine` | RC1A | done | Claude (author + reviewer) | `packages/core/src/timeline/TimelineEngine.test.ts` |
 | RC1E | 1.0-rc | Wire `pnpm test:coverage` into CI and finalize RC coverage gate docs | RC1B–RC1D, RC1F | done | Claude (author + reviewer) | `.github/workflows/ci.yml`, `docs/plans/`, `docs/release/` |
 | RC1F | 1.0-rc | Refresh toolchain to the 1.0 targets: TypeScript 7 workspace (API Extractor/tsup/Vitest compatibility), `SMOKE_TS_VERSION=6` fixture, Node 26 CI leg, re-locked Playwright, and `SUPPORT.md` ranges/browser table | RC1A | done | Claude (author + reviewer) | root `package.json`, `.github/workflows/ci.yml`, `scripts/pack-smoke.mjs`, `SUPPORT.md` |
-| RC2 | 1.0-rc | Harden the tag-triggered publish workflow: run every repository gate, publish prereleases under `next`, create a GitHub Release, and rewrite the 1.0 checklist publish steps around it | RC1E | pending | — | `.github/workflows/publish.yml`, `docs/release/1.0-release-checklist.md` |
+| RC1G | 1.0-rc | Close Engine re-entrancy gaps found by the RC1B–RC1D adversarial review: stop Timeline/Arrangement catch-up dispatch and the Timeline local-end branch when a listener re-entrantly seeks, hot-swaps, changes loop, or disposes (brief: `docs/reviews/rc1g-reentrancy-guards-claude.md`) | RC1E | done | Claude (author), Claude critic (reviewer) | `packages/core/src/timeline/TimelineEngine.ts`, `packages/core/src/arrangement/ArrangementEngine.ts`, `packages/core/src/SequencerEngine.ts`, Engine tests, `CHANGELOG.md` |
+| RC1H | 1.0-rc | Make `ArrangementEngine` delayed-tick dispatch honor `missedStepPolicy` across a local loop wrap, section gaps, and local end, with section and step events in time order and previous-iteration timing relative to the landing iteration (brief: `docs/reviews/rc1h-arrangement-catch-up-claude.md`) | RC1G | pending | — | `packages/core/src/arrangement/ArrangementEngine.ts`, Arrangement tests, `docs/behavior/`, `CHANGELOG.md` |
+| RC2 | 1.0-rc | Harden the tag-triggered publish workflow: run every repository gate, publish prereleases under `next`, create a GitHub Release, and rewrite the 1.0 checklist publish steps around it | RC1E, RC1G, RC1H | pending | — | `.github/workflows/publish.yml`, `docs/release/1.0-release-checklist.md` |
 | RC3 | 1.0-rc | Publish `1.0.0-rc.1` through the RC2 workflow, verify official examples against the packed RC packages, and run the registry smoke test | RC2 | pending | — | package metadata, `CHANGELOG.md`, examples, release docs |
 | S1 | 1.0 | After the 14-day RC observation window, publish `1.0.0`, run the post-publish clean-install smoke test, and remove pre-1.0 disclaimers | RC3 | pending | — | package metadata, READMEs, `CHANGELOG.md`, `SUPPORT.md` |
 | DOC1 | 1.0-rc | Add React rhythm game tutorial | — | done | Codex (author) | `apps/docs/src/content/docs/guide/`, `apps/docs/astro.config.mts` |
@@ -827,7 +829,10 @@ redesigns have stable beta fixtures.
 
 After RC1A, RC1B, RC1C, RC1D, and RC1F touch disjoint files and may proceed
 in parallel. RC1E wires coverage into the CI workflow that RC1F updates, so it
-waits for both groups; RC2, RC3, and S1 are strictly sequential.
+waits for both groups. RC1G (re-entrancy gaps found by the post-RC1E
+adversarial review) and then RC1H (Arrangement catch-up across wrap, gaps,
+and end, which edits the same Engine) must land before RC2; RC2, RC3, and S1
+are strictly sequential.
 
 ## 14. Definition of done
 
