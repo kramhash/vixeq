@@ -48,7 +48,8 @@ const assertStepIndex = (value: number, stepCount: number): void => {
 const assertValidProject = (project: SequenceProject): void => {
   const result = validateProject(project);
   if (!result.ok) {
-    throw new TypeError(`Invalid SequenceProject: ${result.errors[0]?.path ?? "$"} ${result.errors[0]?.message ?? ""}`.trim());
+    // validateProject reports at least one issue whenever ok is false.
+    throw new TypeError(`Invalid SequenceProject: ${result.errors[0].path} ${result.errors[0].message}`);
   }
 };
 
@@ -174,9 +175,7 @@ export class SequencerEngine {
       : this.absoluteStepAt(snapshot.positionMs);
 
     this.unsubscribeTransport = this.transport.subscribe((event) => this.handleTransportEvent(event));
-    if (snapshot.state === "playing" && !snapshot.buffering) {
-      this.scheduleNextTick();
-    }
+    this.rescheduleIfPlaying();
   }
 
   on<TEventName extends SequencerEventName>(
@@ -551,11 +550,9 @@ export class SequencerEngine {
     this.currentStepIndex = this.stepIndexAt(this.cachedPositionMs);
   }
 
+  // Callers guarantee the Engine is playing, not buffering, and attached to a
+  // live transport (see rescheduleIfPlaying and tick).
   private scheduleNextTick(): void {
-    if (this.playbackState !== "playing" || this.buffering || this.transportDisposed) {
-      return;
-    }
-
     this.clearTimer();
     const positionMs = this.getLogicalPositionMs();
     const stepDurationMs = this.getStepDurationMs();
@@ -565,7 +562,7 @@ export class SequencerEngine {
     const untilNextStepMs = phaseMs <= 0.000_001 && alreadyEmitted
       ? stepDurationMs
       : Math.max(0, stepDurationMs - phaseMs);
-    const rate = this.transportDisposed ? 1 : this.transport.getPlaybackRate();
+    const rate = this.transport.getPlaybackRate();
     const delayMs = Math.max(0, Math.min(this.lookaheadMs, untilNextStepMs / rate));
 
     this.transportTimerId = setTimeout(() => this.tick(), delayMs);
@@ -631,8 +628,8 @@ export class SequencerEngine {
         id: track.id,
         name: track.name,
         enabled: track.enabled,
-        value: track.enabled ? track.steps[this.currentStepIndex] ?? 0 : 0,
-        nextValue: track.enabled ? track.steps[nextIndex] ?? 0 : 0,
+        value: track.enabled ? track.steps[this.currentStepIndex] : 0,
+        nextValue: track.enabled ? track.steps[nextIndex] : 0,
       })),
     };
     this.emit("step", event);
@@ -714,7 +711,7 @@ export class SequencerEngine {
       }
       const idx = ((absoluteStep % stepCount) + stepCount) % stepCount;
       const nextIdx = (idx + 1) % stepCount;
-      result[track.id] = lerp(track.steps[idx] ?? 0, track.steps[nextIdx] ?? 0, easing(phase));
+      result[track.id] = lerp(track.steps[idx], track.steps[nextIdx], easing(phase));
     }
     return result;
   }

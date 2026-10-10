@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SequencerEngine } from "./SequencerEngine";
 import { createMediaElementTransport } from "./audioClock";
-import { createClockTransport, type PlaybackTransport } from "./playbackTransport";
-import { createProject, renameTrack, setProjectBpm, setStepValue } from "./project";
+import {
+  createClockTransport,
+  type PlaybackSnapshot,
+  type PlaybackTransport,
+  type PlaybackTransportEvent,
+} from "./playbackTransport";
+import { createProject, renameTrack, setProjectBpm, setStepValue, setTrackEnabled } from "./project";
 import { easeOutQuad } from "./easing";
 import type { EnginePlaybackEvent, PlaybackClock, ProjectEvent, StepEvent } from "./types";
 
@@ -80,6 +85,60 @@ class FakeMedia {
       listener(new Event(event));
     }
   }
+}
+
+// A hand-driven PlaybackTransport for exercising Engine reactions to events a
+// third-party transport implementation may emit (the PlaybackTransport type is
+// public, so the Engine cannot assume only the built-in transports).
+class ManualTransport implements PlaybackTransport {
+  snapshot: PlaybackSnapshot = {
+    state: "stopped",
+    positionMs: 0,
+    durationMs: null,
+    playbackRate: 1,
+    loop: false,
+    buffering: false,
+  };
+  private listeners = new Set<(event: PlaybackTransportEvent) => void>();
+
+  emitEvent(event: PlaybackTransportEvent): void {
+    this.snapshot = { ...event.snapshot };
+    for (const listener of [...this.listeners]) listener(event);
+  }
+
+  getSnapshot(): PlaybackSnapshot {
+    return { ...this.snapshot };
+  }
+  getPlaybackState(): PlaybackSnapshot["state"] {
+    return this.snapshot.state;
+  }
+  getPositionMs(): number {
+    return this.snapshot.positionMs;
+  }
+  getDurationMs(): number | null {
+    return this.snapshot.durationMs;
+  }
+  getPlaybackRate(): number {
+    return this.snapshot.playbackRate;
+  }
+  getLoop(): boolean {
+    return this.snapshot.loop;
+  }
+  async play(): Promise<void> {
+    this.emitEvent({ type: "play", snapshot: { ...this.snapshot, state: "playing" } });
+  }
+  async pause(): Promise<void> {}
+  async stop(): Promise<void> {}
+  async seekMs(): Promise<void> {}
+  async setPlaybackRate(): Promise<void> {}
+  async setLoop(): Promise<void> {}
+  subscribe(listener: (event: PlaybackTransportEvent) => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+  dispose(): void {}
 }
 
 const STEP_MS = 125;
@@ -620,5 +679,240 @@ describe("SequencerEngine — Playback v2", () => {
       { type: "seek", cause: "transport" },
       { type: "ratechange", cause: "transport" },
     ]);
+  });
+});
+
+describe("SequencerEngine — RC1B branch coverage", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("rejects pause, stop, and seek once the transport is disposed", async () => {
+    const { transport } = buildTransport();
+    const engine = new SequencerEngine(createProject(), { transport });
+    transport.dispose();
+
+    await expect(engine.pause()).rejects.toMatchObject({ code: "TRANSPORT_DISPOSED" });
+    await expect(engine.stop()).rejects.toMatchObject({ code: "TRANSPORT_DISPOSED" });
+    await expect(engine.seekPositionMs(0)).rejects.toMatchObject({ code: "TRANSPORT_DISPOSED" });
+  });
+
+  it("disposes an Engine-owned browser-clock transport with the Engine", async () => {
+    const engine = new SequencerEngine(createProject());
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
+    await engine.play();
+    steps.length = 0;
+
+    engine.dispose();
+    vi.advanceTimersByTime(STEP_MS * 4);
+
+    expect(steps).toEqual([]);
+    expect(() => engine.getPlaybackState()).toThrow(/disposed/);
+  });
+
+  it("ignores setProject with the already-loaded project", () => {
+    const project = createProject();
+    const engine = new SequencerEngine(project, { transport: buildTransport().transport });
+    const projects: ProjectEvent[] = [];
+    engine.on("project", (event) => projects.push(event));
+
+    engine.setProject(project);
+
+    expect(projects).toEqual([]);
+  });
+
+  it("hot-swaps a project at the cached position after the transport is disposed", async () => {
+    const { clock, transport } = buildTransport();
+    const project = createProject({ bpm: 120 });
+    const engine = new SequencerEngine(project, { transport });
+    await engine.play();
+    clock.advance(STEP_MS * 2);
+    transport.dispose();
+
+    engine.setProject(setProjectBpm(project, 60));
+
+    expect(engine.getPosition()).toEqual({ positionMs: STEP_MS * 4, beat: 0.5 });
+    expect(engine.getCurrentStepIndex()).toBe(2);
+  });
+
+  it("does not let a no-op command leave a stale command marker", async () => {
+    const { clock, transport } = buildTransport();
+    const engine = new SequencerEngine(createProject(), { transport });
+    const playback: EnginePlaybackEvent[] = [];
+    await engine.play();
+    clock.advance(20);
+    await engine.pause();
+    engine.on("playback", (event) => playback.push(event));
+
+    // stop() emits and is consumed first; the queued pause() is then a no-op
+    // because the transport is already stopped.
+    await Promise.all([engine.stop(), engine.pause()]);
+    await transport.play();
+    await transport.pause();
+
+    expect(playback).toMatchObject([
+      { type: "stop", cause: "command" },
+      { type: "play", cause: "transport" },
+      { type: "pause", cause: "transport" },
+    ]);
+  });
+
+  it("ignores transport events that arrive after disposal within the same dispatch", async () => {
+    const { transport } = buildTransport();
+    let engine: SequencerEngine | undefined;
+    transport.subscribe((event) => {
+      if (event.type === "play") engine?.dispose();
+    });
+    engine = new SequencerEngine(createProject(), { transport });
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
+
+    await transport.play();
+
+    expect(steps).toEqual([]);
+    expect(() => engine?.getPlaybackState()).toThrow(/disposed/);
+  });
+
+  it("freezes position and step scheduling while the media transport buffers", async () => {
+    const media = new FakeMedia();
+    const engine = new SequencerEngine(createProject({ bpm: 120 }), {
+      transport: createMediaElementTransport(media as unknown as HTMLMediaElement),
+    });
+    const playback: EnginePlaybackEvent[] = [];
+    const steps: StepEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+    engine.on("step", (event) => steps.push(event));
+    await engine.play();
+    steps.length = 0;
+
+    media.dispatch("waiting");
+    media.currentTime = (STEP_MS * 3) / 1000;
+    vi.advanceTimersByTime(STEP_MS * 3);
+
+    expect(playback.at(-1)).toMatchObject({ type: "bufferingchange", cause: "transport" });
+    expect(playback.at(-1)?.snapshot.buffering).toBe(true);
+    expect(engine.getPosition().positionMs).toBe(0);
+    expect(steps).toEqual([]);
+
+    media.dispatch("playing");
+    // The next tick runs within the default 25 ms lookahead and catches up on
+    // every step crossed while buffering was reported.
+    vi.advanceTimersByTime(25);
+
+    expect(playback.at(-1)?.snapshot.buffering).toBe(false);
+    expect(steps.map((event) => event.stepIndex)).toEqual([1, 2, 3]);
+  });
+
+  it("forwards transport errors and other transport events with cause transport", async () => {
+    const media = new FakeMedia();
+    const engine = new SequencerEngine(createProject(), {
+      transport: createMediaElementTransport(media as unknown as HTMLMediaElement),
+    });
+    const playback: EnginePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+    const mediaError = { code: 3 } as MediaError;
+
+    media.error = mediaError;
+    media.dispatch("error");
+    media.duration = 4;
+    media.dispatch("durationchange");
+
+    expect(playback).toMatchObject([
+      { type: "error", cause: "transport", error: mediaError },
+      { type: "durationchange", cause: "transport" },
+    ]);
+  });
+
+  it("stops ticking when a transport event leaves the transport not playing", async () => {
+    const transport = new ManualTransport();
+    const engine = new SequencerEngine(createProject(), { transport });
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
+    await engine.play();
+    steps.length = 0;
+
+    transport.emitEvent({
+      type: "error",
+      error: new Error("decoder failed"),
+      snapshot: { ...transport.snapshot, state: "paused" },
+    });
+    transport.snapshot = { ...transport.snapshot, positionMs: STEP_MS * 2 };
+    vi.advanceTimersByTime(STEP_MS * 2);
+
+    expect(engine.getPlaybackState()).toBe("paused");
+    expect(steps).toEqual([]);
+  });
+
+  it("reports disabled tracks as zero in step events and channel samples", async () => {
+    let project = createProject({ stepCount: 4, trackCount: 2 });
+    const [enabledTrack, disabledTrack] = project.tracks;
+    project = setStepValue(project, enabledTrack.id, 0, 1);
+    project = setStepValue(project, disabledTrack.id, 0, 1);
+    project = setTrackEnabled(project, disabledTrack.id, false);
+    const engine = new SequencerEngine(project, { transport: buildTransport().transport });
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
+
+    await engine.play();
+
+    expect(steps[0].tracks).toMatchObject([
+      { id: enabledTrack.id, enabled: true, value: 1 },
+      { id: disabledTrack.id, enabled: false, value: 0, nextValue: 0 },
+    ]);
+    expect(engine.sampleChannels()).toEqual({ [enabledTrack.id]: 1, [disabledTrack.id]: 0 });
+  });
+
+  it("reports listener failures through console.error when reportError is unavailable", async () => {
+    const engine = new SequencerEngine(createProject(), { transport: buildTransport().transport });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    engine.on("step", () => {
+      throw new Error("listener failed");
+    });
+    vi.stubGlobal("reportError", undefined);
+
+    try {
+      await engine.play();
+
+      expect(consoleError).toHaveBeenCalledWith(expect.any(Error));
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it("stops delivering events to an unsubscribed listener", async () => {
+    const engine = new SequencerEngine(createProject(), { transport: buildTransport().transport });
+    const listener = vi.fn();
+    const unsubscribe = engine.on("playback", listener);
+
+    unsubscribe();
+    await engine.play();
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("drops listener failures when neither reportError nor console exists", async () => {
+    const originalConsole = console;
+    const engine = new SequencerEngine(createProject(), { transport: buildTransport().transport });
+    const healthy = vi.fn();
+    engine.on("step", () => {
+      throw new Error("listener failed");
+    });
+    engine.on("step", healthy);
+    vi.stubGlobal("reportError", undefined);
+    vi.stubGlobal("console", undefined);
+
+    try {
+      await expect(engine.play()).resolves.toBeUndefined();
+    } finally {
+      vi.stubGlobal("console", originalConsole);
+    }
+
+    expect(healthy).toHaveBeenCalledOnce();
   });
 });
