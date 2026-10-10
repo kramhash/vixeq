@@ -54,7 +54,8 @@ const assertValidTimelineProject = <TEvent extends TimelineEvent>(
     options.eventValidator ? (event) => options.eventValidator?.(event as TEvent) : undefined,
   );
   if (!result.ok) {
-    throw new TypeError(`Invalid TimelineProject: ${result.errors[0]?.path ?? "$"} ${result.errors[0]?.message ?? ""}`.trim());
+    // validateTimelineProject reports at least one issue whenever ok is false.
+    throw new TypeError(`Invalid TimelineProject: ${result.errors[0].path} ${result.errors[0].message}`);
   }
 };
 
@@ -100,6 +101,10 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
   private readonly unsubscribeTransport: Unsubscribe;
   private disposed = false;
   private transportDisposed = false;
+  // Last transport-relative position reported before the transport was
+  // disposed. Kept separate from cachedPositionMs, which is project-relative
+  // once setProject() has anchored a hot-swap.
+  private disposedTransportPositionMs = 0;
   private transportTimerId: ReturnType<typeof setTimeout> | undefined;
   private playbackState: PlaybackState = "stopped";
   private buffering = false;
@@ -154,9 +159,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     this.lastDispatchedRawPositionMs = snapshot.state === "stopped" ? null : this.rawPositionFromTransportPosition(snapshot.positionMs);
 
     this.unsubscribeTransport = this.transport.subscribe((event) => this.handleTransportEvent(event));
-    if (this.playbackState === "playing" && !this.buffering) {
-      this.scheduleNextTick();
-    }
+    this.rescheduleIfPlaying();
   }
 
   on<TEventName extends TimelineEventName>(
@@ -471,6 +474,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
   private handleTransportDispose(snapshot: PlaybackSnapshot): void {
     const previousState = this.playbackState;
     this.cachedPositionMs = this.normalizePosition(this.rawPositionFromTransportPosition(snapshot.positionMs));
+    this.disposedTransportPositionMs = snapshot.positionMs;
     this.transportDisposed = true;
     this.clearTimer();
     if (this.playbackState === "playing") {
@@ -591,7 +595,9 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
 
     const durationMs = this.getDurationMs();
     if (!this.localLoop) {
-      this.emitDueCuesForIteration(0, fromRawPositionMs, Math.min(toRawPositionMs, durationMs), toRawPositionMs);
+      if (!this.emitDueCuesForIteration(0, fromRawPositionMs, Math.min(toRawPositionMs, durationMs), toRawPositionMs)) {
+        return;
+      }
       this.lastDispatchedRawPositionMs = toRawPositionMs;
       return;
     }
@@ -607,24 +613,33 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
       const toLocalPositionMs = iteration === endIteration
         ? toRawPositionMs - iterationStartRaw
         : durationMs;
-      this.emitDueCuesForIteration(iteration, fromLocalPositionMs, toLocalPositionMs, toRawPositionMs);
+      if (!this.emitDueCuesForIteration(iteration, fromLocalPositionMs, toLocalPositionMs, toRawPositionMs)) {
+        return;
+      }
     }
 
     this.lastDispatchedRawPositionMs = toRawPositionMs;
   }
 
+  /**
+   * Dispatches the due cues of one loop iteration. Returns `false` when a cue
+   * listener replaced the project, toggled local loop, or disposed the Engine,
+   * in which case the rest of this catch-up belongs to stale data and must not
+   * be dispatched (newly loaded events are never emitted retroactively).
+   */
   private emitDueCuesForIteration(
     iteration: number,
     fromLocalPositionMs: number,
     toLocalPositionMs: number,
     transportPositionMs: number,
-  ): void {
+  ): boolean {
+    const project = this.project;
+    const localLoop = this.localLoop;
     const durationMs = this.getDurationMs();
+    // Callers keep fromLocalPositionMs <= toLocalPositionMs within the
+    // iteration, so this range is never inverted.
     const fromPositionMs = Math.max(0, fromLocalPositionMs);
     const toPositionMs = Math.min(durationMs, Math.max(0, toLocalPositionMs));
-    if (toPositionMs + POSITION_EPSILON_MS < fromPositionMs) {
-      return;
-    }
 
     const fromBeat = msToBeat(this.project.timing, fromPositionMs);
     const toBeat = msToBeat(this.project.timing, toPositionMs);
@@ -645,7 +660,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     }
 
     if (dueEvents.length === 0) {
-      return;
+      return true;
     }
 
     // "skip" discards every earlier missed cue unconditionally and keeps only
@@ -658,7 +673,12 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     for (const { event, scheduledLocalPositionMs } of toDispatch) {
       const scheduledRawPositionMs = iteration * durationMs + scheduledLocalPositionMs;
       this.emitCue(event, iteration, scheduledRawPositionMs, transportPositionMs);
+      if (this.disposed || this.project !== project || this.localLoop !== localLoop) {
+        return false;
+      }
     }
+
+    return true;
   }
 
   private emitCue(
@@ -716,7 +736,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
 
   private getTransportPositionMs(): number {
     if (this.transportDisposed) {
-      return this.cachedPositionMs;
+      return this.disposedTransportPositionMs;
     }
     return this.transport.getPositionMs();
   }
@@ -725,7 +745,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     if (this.transportDisposed) {
       return {
         state: this.playbackState,
-        positionMs: this.cachedPositionMs,
+        positionMs: this.disposedTransportPositionMs,
         durationMs: null,
         playbackRate: 1,
         loop: false,

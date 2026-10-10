@@ -1,9 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createClockTransport } from "../playbackTransport";
+import {
+  createClockTransport,
+  type PlaybackSnapshot,
+  type PlaybackTransport,
+  type PlaybackTransportEvent,
+} from "../playbackTransport";
 import type { PlaybackClock } from "../types";
 import { TimelineEngine } from "./TimelineEngine";
 import { addTimelineEvent, createTimelineProject } from "./index";
-import type { TimelineCueEvent, TimelineEvent, TimelineProject } from "./types";
+import type { TimelineCueEvent, TimelineEvent, TimelinePlaybackEvent, TimelineProject } from "./types";
 
 class FakeClock implements PlaybackClock {
   currentTime = 0;
@@ -37,6 +42,69 @@ class FakeClock implements PlaybackClock {
     }
     this.currentTime = target;
   }
+}
+
+// A hand-driven PlaybackTransport for exercising Engine reactions to events a
+// third-party transport implementation may emit (the PlaybackTransport type is
+// public, so the Engine cannot assume only the built-in transports).
+class ManualTransport implements PlaybackTransport {
+  snapshot: PlaybackSnapshot = {
+    state: "stopped",
+    positionMs: 0,
+    durationMs: null,
+    playbackRate: 1,
+    loop: false,
+    buffering: false,
+  };
+  playError: Error | null = null;
+  private listeners = new Set<(event: PlaybackTransportEvent) => void>();
+
+  emitEvent(event: PlaybackTransportEvent): void {
+    this.snapshot = { ...event.snapshot };
+    for (const listener of [...this.listeners]) listener(event);
+  }
+
+  getSnapshot(): PlaybackSnapshot {
+    return { ...this.snapshot };
+  }
+  getPlaybackState(): PlaybackSnapshot["state"] {
+    return this.snapshot.state;
+  }
+  getPositionMs(): number {
+    return this.snapshot.positionMs;
+  }
+  getDurationMs(): number | null {
+    return this.snapshot.durationMs;
+  }
+  getPlaybackRate(): number {
+    return this.snapshot.playbackRate;
+  }
+  getLoop(): boolean {
+    return this.snapshot.loop;
+  }
+  async play(): Promise<void> {
+    if (this.playError) throw this.playError;
+    this.emitEvent({ type: "play", snapshot: { ...this.snapshot, state: "playing" } });
+  }
+  async pause(): Promise<void> {}
+  async stop(): Promise<void> {}
+  async seekMs(positionMs: number): Promise<void> {
+    const state = this.snapshot.state === "playing" ? "playing" : "paused";
+    this.emitEvent({
+      type: "seek",
+      previousPositionMs: this.snapshot.positionMs,
+      snapshot: { ...this.snapshot, state, positionMs },
+    });
+  }
+  async setPlaybackRate(): Promise<void> {}
+  async setLoop(): Promise<void> {}
+  subscribe(listener: (event: PlaybackTransportEvent) => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+  dispose(): void {}
 }
 
 const projectWithEvents = (
@@ -500,5 +568,451 @@ describe("TimelineEngine", () => {
     await tickEngine(clock, 50);
 
     expect(cues).toEqual(["event-50001", "event-50002", "event-50003", "event-50004", "event-50005"]);
+  });
+});
+
+describe("TimelineEngine — RC1D branch coverage", () => {
+  const BEAT_MS = 1_000;
+  const threeCues = (): TimelineProject =>
+    projectWithEvents(4, [
+      { id: "one", beat: 1, type: "cue" },
+      { id: "two", beat: 2, type: "cue" },
+      { id: "three", beat: 3, type: "cue" },
+    ]);
+  const buildTransport = (): { clock: FakeClock; transport: PlaybackTransport } => {
+    const clock = new FakeClock();
+    return { clock, transport: createClockTransport(clock) };
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("isolates listener failures through onListenerError and its fallbacks", async () => {
+    vi.useFakeTimers();
+    const project = projectWithEvents(4, [{ id: "zero", beat: 0, type: "cue" }]);
+    const throwing = (): void => {
+      throw new Error("cue listener failed");
+    };
+
+    const onListenerError = vi.fn();
+    const reported = new TimelineEngine(project, { transport: buildTransport().transport, onListenerError });
+    reported.on("cue", throwing);
+    await reported.play();
+    expect(onListenerError).toHaveBeenCalledWith(expect.any(Error), { source: "engine", eventName: "cue" });
+
+    const reportError = vi.fn();
+    vi.stubGlobal("reportError", reportError);
+    const fallback = new TimelineEngine(project, {
+      transport: buildTransport().transport,
+      onListenerError: () => {
+        throw new Error("reporter failed");
+      },
+    });
+    fallback.on("cue", throwing);
+    await fallback.play();
+    expect(reportError).toHaveBeenCalledWith(expect.objectContaining({ message: "reporter failed" }));
+
+    vi.stubGlobal("reportError", undefined);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const logged = new TimelineEngine(project, { transport: buildTransport().transport });
+    logged.on("cue", throwing);
+    try {
+      await logged.play();
+      expect(consoleError).toHaveBeenCalledWith(expect.any(Error));
+    } finally {
+      consoleError.mockRestore();
+    }
+
+    const originalConsole = console;
+    const silent = new TimelineEngine(project, { transport: buildTransport().transport });
+    const healthy = vi.fn();
+    silent.on("cue", throwing);
+    silent.on("cue", healthy);
+    vi.stubGlobal("console", undefined);
+    try {
+      await expect(silent.play()).resolves.toBeUndefined();
+    } finally {
+      vi.stubGlobal("console", originalConsole);
+    }
+    expect(healthy).toHaveBeenCalledOnce();
+  });
+
+  it("disposes an Engine-owned browser-clock transport with the Engine", async () => {
+    vi.useFakeTimers();
+    const engine = new TimelineEngine(threeCues());
+    const cues: TimelineCueEvent[] = [];
+    engine.on("cue", (event) => cues.push(event));
+    await engine.play();
+
+    engine.dispose();
+    await vi.advanceTimersByTimeAsync(BEAT_MS * 2);
+
+    expect(cues).toEqual([]);
+    expect(() => engine.getPlaybackState()).toThrow(/disposed/);
+  });
+
+  it("rejects stop once the transport is disposed", async () => {
+    const { transport } = buildTransport();
+    const engine = new TimelineEngine(threeCues(), { transport });
+    transport.dispose();
+
+    await expect(engine.stop()).rejects.toMatchObject({ code: "TRANSPORT_DISPOSED" });
+  });
+
+  it("validates setLoop, ignores unchanged values, and keeps playing when loop is enabled", async () => {
+    vi.useFakeTimers();
+    const { clock, transport } = buildTransport();
+    const engine = new TimelineEngine(threeCues(), { transport, lookaheadMs: 10 });
+    const playback: TimelinePlaybackEvent[] = [];
+    const cues: TimelineCueEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+    engine.on("cue", (event) => cues.push(event));
+
+    expect(() => engine.setLoop(1 as unknown as boolean)).toThrow(TypeError);
+    engine.setLoop(false);
+    expect(playback).toEqual([]);
+
+    await engine.play();
+    engine.setLoop(true);
+    await tickEngine(clock, BEAT_MS);
+
+    expect(engine.getPlaybackState()).toBe("playing");
+    expect(playback.at(-1)).toMatchObject({ type: "loopchange", snapshot: { projectLoop: true } });
+    expect(cues.map((cue) => cue.event.id)).toEqual(["one"]);
+  });
+
+  it("wraps the preserved beat into a shorter looping project on hot-swap", async () => {
+    vi.useFakeTimers();
+    const { clock, transport } = buildTransport();
+    const engine = new TimelineEngine(threeCues(), { transport, loop: true, lookaheadMs: 10 });
+    await engine.play();
+    await tickEngine(clock, BEAT_MS * 3.5);
+
+    engine.setProject(projectWithEvents(2, [{ id: "late", beat: 1.75, type: "cue" }]));
+
+    expect(engine.getPosition()).toEqual({ positionMs: BEAT_MS * 1.5, beat: 1.5 });
+    expect(engine.getPlaybackState()).toBe("playing");
+  });
+
+  it("does not let no-op commands leave stale command markers", async () => {
+    vi.useFakeTimers();
+    const { clock, transport } = buildTransport();
+    const engine = new TimelineEngine(threeCues(), { transport });
+    const playback: TimelinePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+
+    await engine.pause();
+    await engine.play();
+    clock.advance(20);
+    await engine.pause();
+    // stop() emits and is consumed first; the queued pause() is then a no-op
+    // because the transport is already stopped.
+    await Promise.all([engine.stop(), engine.pause()]);
+    playback.length = 0;
+    await transport.play();
+    await transport.pause();
+
+    expect(playback).toMatchObject([
+      { type: "play", cause: "transport" },
+      { type: "pause", cause: "transport" },
+    ]);
+  });
+
+  it("clears the command marker when the transport rejects a seek synchronously", async () => {
+    const clock = new FakeClock();
+    const transport = createClockTransport(clock, { durationMs: BEAT_MS });
+    const engine = new TimelineEngine(threeCues(), { transport });
+    const playback: TimelinePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+
+    expect(() => engine.seekBeat(2)).toThrow(RangeError);
+    await transport.seekMs(BEAT_MS / 2);
+
+    expect(playback).toMatchObject([{ type: "seek", cause: "transport" }]);
+  });
+
+  it("ignores transport events that arrive after disposal within the same dispatch", async () => {
+    const { transport } = buildTransport();
+    let engine: TimelineEngine | undefined;
+    transport.subscribe((event) => {
+      if (event.type === "play") engine?.dispose();
+    });
+    engine = new TimelineEngine(projectWithEvents(4, [{ id: "zero", beat: 0, type: "cue" }]), { transport });
+    const cues: TimelineCueEvent[] = [];
+    engine.on("cue", (event) => cues.push(event));
+
+    await transport.play();
+
+    expect(cues).toEqual([]);
+    expect(() => engine?.getPlaybackState()).toThrow(/disposed/);
+  });
+
+  it("reports local end instead of play when the transport resumes past the timeline", async () => {
+    const { transport } = buildTransport();
+    const engine = new TimelineEngine(threeCues(), { transport });
+    const playback: TimelinePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+
+    await transport.seekMs(BEAT_MS * 5);
+    await transport.play();
+
+    expect(engine.getPlaybackState()).toBe("ended");
+    expect(playback.at(-1)).toMatchObject({ type: "ended", cause: "local-end", previousState: "ended" });
+  });
+
+  it("stops to zero and dispatches beat-0 cues again on the next play", async () => {
+    vi.useFakeTimers();
+    const { clock, transport } = buildTransport();
+    const engine = new TimelineEngine(projectWithEvents(4, [{ id: "zero", beat: 0, type: "cue" }]), { transport });
+    const playback: TimelinePlaybackEvent[] = [];
+    const cues: TimelineCueEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+    engine.on("cue", (event) => cues.push(event));
+    await engine.play();
+    clock.advance(BEAT_MS);
+
+    await engine.stop();
+
+    expect(playback.at(-1)).toMatchObject({ type: "stop", cause: "command", snapshot: { positionMs: 0 } });
+    await engine.play();
+    expect(cues.map((cue) => cue.event.id)).toEqual(["zero", "zero"]);
+  });
+
+  it("does not re-dispatch when a tick finds the transport has not advanced", async () => {
+    vi.useFakeTimers();
+    const { transport } = buildTransport();
+    const engine = new TimelineEngine(projectWithEvents(4, [{ id: "zero", beat: 0, type: "cue" }]), {
+      transport,
+      lookaheadMs: 10,
+    });
+    const cues: TimelineCueEvent[] = [];
+    engine.on("cue", (event) => cues.push(event));
+    await engine.play();
+
+    await vi.advanceTimersByTimeAsync(30);
+
+    expect(cues.map((cue) => cue.event.id)).toEqual(["zero"]);
+  });
+
+  it("freezes position and cues while a transport reports buffering", async () => {
+    vi.useFakeTimers();
+    const transport = new ManualTransport();
+    const engine = new TimelineEngine(threeCues(), { transport, lookaheadMs: 10 });
+    const playback: TimelinePlaybackEvent[] = [];
+    const cues: TimelineCueEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+    engine.on("cue", (event) => cues.push(event));
+    await engine.play();
+
+    transport.emitEvent({
+      type: "bufferingchange",
+      previousBuffering: false,
+      snapshot: { ...transport.snapshot, buffering: true },
+    });
+    transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 1.5 };
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(playback.at(-1)).toMatchObject({ type: "bufferingchange", snapshot: { buffering: true } });
+    expect(engine.getPosition().positionMs).toBe(0);
+    expect(cues).toEqual([]);
+
+    transport.emitEvent({
+      type: "bufferingchange",
+      previousBuffering: true,
+      snapshot: { ...transport.snapshot, buffering: false },
+    });
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(cues.map((cue) => cue.event.id)).toEqual(["one"]);
+  });
+
+  it("forwards transport errors and other transport events with cause transport", () => {
+    const transport = new ManualTransport();
+    const engine = new TimelineEngine(threeCues(), { transport });
+    const playback: TimelinePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+    const error = new Error("decoder failed");
+
+    transport.emitEvent({ type: "error", error, snapshot: transport.snapshot });
+    transport.emitEvent({
+      type: "durationchange",
+      previousDurationMs: null,
+      snapshot: { ...transport.snapshot, durationMs: BEAT_MS * 20 },
+    });
+
+    expect(playback).toMatchObject([
+      { type: "error", cause: "transport", error },
+      { type: "durationchange", cause: "transport" },
+    ]);
+  });
+
+  it("stops ticking when a transport event leaves the transport not playing", async () => {
+    vi.useFakeTimers();
+    const transport = new ManualTransport();
+    const engine = new TimelineEngine(threeCues(), { transport, lookaheadMs: 10 });
+    const cues: TimelineCueEvent[] = [];
+    engine.on("cue", (event) => cues.push(event));
+    await engine.play();
+
+    transport.emitEvent({
+      type: "error",
+      error: new Error("decoder failed"),
+      snapshot: { ...transport.snapshot, state: "paused" },
+    });
+    transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 2 };
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(engine.getPlaybackState()).toBe("paused");
+    expect(cues).toEqual([]);
+  });
+
+  it("dispatches cues at the resume position after a rejected replay is resumed externally", async () => {
+    vi.useFakeTimers();
+    const transport = new ManualTransport();
+    const engine = new TimelineEngine(projectWithEvents(4, [{ id: "zero", beat: 0, type: "cue" }]), {
+      transport,
+      lookaheadMs: 10,
+    });
+    const cues: TimelineCueEvent[] = [];
+    engine.on("cue", (event) => cues.push(event));
+    transport.emitEvent({ type: "ended", snapshot: { ...transport.snapshot, state: "ended", positionMs: BEAT_MS * 4 } });
+    transport.playError = new Error("NotAllowedError");
+
+    await expect(engine.play()).rejects.toThrow("NotAllowedError");
+    transport.playError = null;
+    await transport.play();
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(cues.map((cue) => cue.event.id)).toEqual(["zero"]);
+  });
+
+  it("pauses at the cached position when the transport is disposed during playback", async () => {
+    vi.useFakeTimers();
+    const { clock, transport } = buildTransport();
+    const engine = new TimelineEngine(threeCues(), { transport });
+    const playback: TimelinePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+    await engine.play();
+    clock.advance(100);
+
+    transport.dispose();
+
+    expect(engine.getPlaybackState()).toBe("paused");
+    expect(engine.getPosition().positionMs).toBe(100);
+    expect(playback.at(-1)).toMatchObject({ type: "error", cause: "transport", previousState: "playing" });
+  });
+
+  it("stops scheduling when a cue listener disposes the shared transport mid-tick", async () => {
+    vi.useFakeTimers();
+    const { clock, transport } = buildTransport();
+    const engine = new TimelineEngine(threeCues(), { transport, lookaheadMs: 10 });
+    engine.on("cue", () => transport.dispose());
+    await engine.play();
+
+    await tickEngine(clock, BEAT_MS);
+
+    expect(engine.getPlaybackState()).toBe("paused");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("stops replaying missed cues once a cue listener replaces the project", async () => {
+    vi.useFakeTimers();
+    const { clock, transport } = buildTransport();
+    const original = threeCues();
+    const replacement = projectWithEvents(4, [
+      { id: "new-early", beat: 1.5, type: "cue" },
+      { id: "new-late", beat: 3.75, type: "cue" },
+    ]);
+    const engine = new TimelineEngine(original, { transport, lookaheadMs: 10 });
+    const cues: TimelineCueEvent[] = [];
+    engine.on("cue", (event) => {
+      cues.push(event);
+      if (event.event.id === "one") engine.setProject(replacement);
+    });
+    await engine.play();
+
+    await tickEngine(clock, BEAT_MS * 3.5);
+    await tickEngine(clock, BEAT_MS * 0.5);
+
+    expect(cues.map((cue) => cue.event.id)).toEqual(["one", "new-late"]);
+  });
+
+  it("stops replaying missed loop iterations once a cue listener turns loop off", async () => {
+    vi.useFakeTimers();
+    const { clock, transport } = buildTransport();
+    const engine = new TimelineEngine(threeCues(), { transport, loop: true, lookaheadMs: 10 });
+    const cues: TimelineCueEvent[] = [];
+    engine.on("cue", (event) => {
+      cues.push(event);
+      if (event.event.id === "one") engine.setLoop(false);
+    });
+    await engine.play();
+
+    await tickEngine(clock, BEAT_MS * 5.5);
+
+    expect(cues.map((cue) => cue.event.id)).toEqual(["one"]);
+    expect(engine.getPlaybackState()).toBe("ended");
+  });
+
+  it("stops replaying missed cues once a cue listener disposes the Engine", async () => {
+    vi.useFakeTimers();
+    const { clock, transport } = buildTransport();
+    const engine = new TimelineEngine(threeCues(), { transport, loop: true, lookaheadMs: 10 });
+    const cues: TimelineCueEvent[] = [];
+    engine.on("cue", (event) => {
+      cues.push(event);
+      engine.dispose();
+    });
+    await engine.play();
+
+    await tickEngine(clock, BEAT_MS * 3.5);
+
+    expect(cues.map((cue) => cue.event.id)).toEqual(["one"]);
+  });
+
+  it("stops delivering events to an unsubscribed listener", async () => {
+    const engine = new TimelineEngine(threeCues(), { transport: buildTransport().transport });
+    const listener = vi.fn();
+    const unsubscribe = engine.on("playback", listener);
+
+    unsubscribe();
+    await engine.play();
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("rejects a replay from local end when the transport is disposed before it runs", async () => {
+    vi.useFakeTimers();
+    const { clock, transport } = buildTransport();
+    const engine = new TimelineEngine(threeCues(), { transport, lookaheadMs: 10 });
+    await engine.play();
+    await tickEngine(clock, BEAT_MS * 4);
+    expect(engine.getPlaybackState()).toBe("ended");
+
+    const replay = engine.play();
+    transport.dispose();
+
+    await expect(replay).rejects.toMatchObject({ code: "TRANSPORT_DISPOSED" });
+    expect(engine.getPlaybackState()).toBe("ended");
+  });
+
+  it("hot-swaps and toggles loop at the cached position after the transport is disposed", async () => {
+    vi.useFakeTimers();
+    const { clock, transport } = buildTransport();
+    const project = threeCues();
+    const engine = new TimelineEngine(project, { transport });
+    await engine.play();
+    clock.advance(BEAT_MS);
+    transport.dispose();
+
+    engine.setProject({ ...project, timing: { ...project.timing, tempos: [{ beat: 0, bpm: 30 }] } });
+
+    expect(engine.getPosition()).toEqual({ positionMs: BEAT_MS * 2, beat: 1 });
+
+    engine.setLoop(true);
+
+    expect(engine.getPlaybackState()).toBe("paused");
+    expect(engine.getPosition()).toEqual({ positionMs: BEAT_MS * 2, beat: 1 });
   });
 });

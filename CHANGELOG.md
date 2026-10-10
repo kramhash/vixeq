@@ -17,9 +17,14 @@
   are being replayed and the new arrangement lacks a pattern the remaining
   steps referenced. Catch-up replay now stops once the arrangement is
   replaced.
-- `@vixeq/core`: `ArrangementEngine.setArrangement()` and `setLoop()` after
-  the shared transport was disposed now keep the hot-swapped position instead
-  of offsetting it by the pre-swap position.
+- `@vixeq/core`: `ArrangementEngine.setArrangement()` / `setLoop()` and
+  `TimelineEngine.setProject()` / `setLoop()` after the shared transport was
+  disposed now keep the hot-swapped position instead of offsetting it by the
+  pre-swap position.
+- `@vixeq/core`: `TimelineEngine` stops replaying missed cues once a `"cue"`
+  listener replaces the project, toggles local loop, or disposes the Engine,
+  so cues from the replaced data are not dispatched and newly loaded events
+  are not emitted retroactively.
 
 ## 0.9.0 - 2026-07-13
 
