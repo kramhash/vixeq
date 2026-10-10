@@ -618,14 +618,14 @@ Coverage gates:
   (the spec names no separate number for it; treated as another React-based
   public package).
 - Configuration status (R1, done): `pnpm test:coverage` (per-package
-  `vitest run --coverage`, provider `v8`) enforces these thresholds and is
-  runnable locally/manually. It is not yet wired into `.github/workflows/ci.yml`
-  because actual measured coverage does not yet meet all thresholds — the RC0
-  follow-up has lifted Core above the global 90% branch target, but the
-  100%-tier files still have gaps in `playbackTransport.ts`, the three Engines,
-  and `arrangement/migration.ts`. React (~90%) and player-react (~90%) already
-  clear 85%. Wiring `test:coverage` into CI is deferred until the remaining
-  Core critical-file gaps are closed by additional tests.
+  `vitest run --coverage`, provider `v8`) enforces these thresholds.
+- Gate status (RC1E, done): RC1A-RC1D closed every critical-file gap, so all
+  seven 100%-tier Core files report 100% branches (Core global ~95.7%, React
+  ~89.7%, player-react ~89.9%). `pnpm test:coverage` runs as the "Coverage
+  gate" step on the Node 22 leg of `.github/workflows/ci.yml`. Branches
+  removed instead of covered during RC1 are listed with their
+  unreachability argument in `docs/reviews/rc1{a,b,c,d}-*-claude.md`; no
+  threshold was lowered and no exclusion was added.
 - RC1 keeps the 100% branch threshold for the critical Core files. Threshold
   reductions and new exclusions are not allowed unless a future approved
   decision records why the branch is generated, export-only, unreachable, or
@@ -810,7 +810,7 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | RC1B | 1.0-rc | Close 100% branch gaps in `SequencerEngine` | RC1A | done | Claude (author + reviewer) | `packages/core/src/SequencerEngine.test.ts` |
 | RC1C | 1.0-rc | Close 100% branch gaps in `ArrangementEngine` | RC1A | done | Claude (author + reviewer) | `packages/core/src/arrangement/ArrangementEngine.test.ts` |
 | RC1D | 1.0-rc | Close 100% branch gaps in `TimelineEngine` | RC1A | done | Claude (author + reviewer) | `packages/core/src/timeline/TimelineEngine.test.ts` |
-| RC1E | 1.0-rc | Wire `pnpm test:coverage` into CI and finalize RC coverage gate docs | RC1B–RC1D, RC1F | pending | — | `.github/workflows/ci.yml`, `docs/plans/`, `docs/release/` |
+| RC1E | 1.0-rc | Wire `pnpm test:coverage` into CI and finalize RC coverage gate docs | RC1B–RC1D, RC1F | done | Claude (author + reviewer) | `.github/workflows/ci.yml`, `docs/plans/`, `docs/release/` |
 | RC1F | 1.0-rc | Refresh toolchain to the 1.0 targets: TypeScript 7 workspace (API Extractor/tsup/Vitest compatibility), `SMOKE_TS_VERSION=6` fixture, Node 26 CI leg, re-locked Playwright, and `SUPPORT.md` ranges/browser table | RC1A | done | Claude (author + reviewer) | root `package.json`, `.github/workflows/ci.yml`, `scripts/pack-smoke.mjs`, `SUPPORT.md` |
 | RC2 | 1.0-rc | Harden the tag-triggered publish workflow: run every repository gate, publish prereleases under `next`, create a GitHub Release, and rewrite the 1.0 checklist publish steps around it | RC1E | pending | — | `.github/workflows/publish.yml`, `docs/release/1.0-release-checklist.md` |
 | RC3 | 1.0-rc | Publish `1.0.0-rc.1` through the RC2 workflow, verify official examples against the packed RC packages, and run the registry smoke test | RC2 | pending | — | package metadata, `CHANGELOG.md`, examples, release docs |

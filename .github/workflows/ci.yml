@@ -44,6 +44,14 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # Coverage gate (spec Section 10): Core >=90% / React and player-react
+      # >=85% branches, and 100% branches on the critical playback, timing,
+      # and migration files. One Node leg is enough; thresholds do not vary by
+      # Node version.
+      - name: Coverage gate
+        if: matrix.node-version == 22
+        run: pnpm test:coverage
+
       - name: Test Pages artifact builder
         run: node --test scripts/build-pages.test.mjs
 

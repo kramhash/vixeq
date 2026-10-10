@@ -214,16 +214,15 @@ to the same timing map without building a DAW editor.
 
 **Theme**: Make public stability measurable before the API freeze.
 
-Published 2026-07-13. The one open item below (coverage in CI) carries over to
-the 1.0.0-rc.1 gates as RC1E.
+Published 2026-07-13. The one item left open at publish time (coverage in CI)
+was completed by RC1E before the RC.
 
 - [x] Commit API Extractor reports for all three public packages and fail CI on unreviewed differences (see `pnpm api:check`/`pnpm api:update` and `.github/workflows/ci.yml`).
 - [x] Add coverage configuration enforcing Core branch coverage of at least 90%,
   React/player-react branch coverage of at least 85%, and 100% on critical
   playback/timing/migration modules (`pnpm test:coverage` per package). RC0
-  lifted Core global branch coverage above 90% and RC1A closed the
-  PlaybackTransport and Arrangement migration gaps; the three Engines still
-  have branch gaps, tracked by the RC1B-RC1D work items.
+  lifted Core global branch coverage above 90%, and RC1A-RC1D closed the
+  remaining 100%-tier gaps.
 - [x] Test Node.js 22 and 24 (CI matrix), React 18 and 19, TypeScript `>=5.5 <6`,
   SSR imports, and ESM/CJS packed consumers. React 18/TypeScript 5.5 are
   verified via `SMOKE_REACT_VERSION=18`/`SMOKE_TS_VERSION=5.5 pnpm smoke:pack`
@@ -241,8 +240,8 @@ the 1.0.0-rc.1 gates as RC1E.
 - [x] Add pull-request CI for typecheck, tests, builds, API reports,
   behavior-matrix checks, compatibility fixtures, package smoke tests, and
   browser E2E.
-- [ ] Wire coverage into pull-request CI after the RC1 critical-file branch
-  gaps are closed.
+- [x] Wire coverage into pull-request CI after the RC1 critical-file branch
+  gaps are closed (RC1E).
 - [x] Polish `website-pulse`, `cycling-workout`, and playground release
   fixtures for the 0.9 release-readiness line. Any RC-blocking fixture gaps
   are tracked by the 1.0 RC gates.
@@ -264,7 +263,7 @@ All public packages use lockstep versions, including prereleases, through these 
 
 **Theme**: Freeze the candidate API and validate the distributable packages under real usage.
 
-- [ ] Close the remaining 100%-tier Engine branch gaps and wire `pnpm test:coverage` into CI (RC1B-RC1E).
+- [x] Close the remaining 100%-tier Engine branch gaps and wire `pnpm test:coverage` into CI (RC1B-RC1E).
 - [x] Refresh the toolchain to the 1.0 support targets: Node 22/24/26, TypeScript `>=5.5` verified on 5.5, the 6.0 workspace, and a 7.0 consumer fixture, and Playwright re-locked at `1.64.0` with an updated browser table in `SUPPORT.md` (RC1F).
 - [ ] Harden the tag-triggered publish workflow before the RC: run every repository gate, publish prereleases under the `next` dist-tag, attach npm provenance, and create a GitHub Release. The RC itself is published through this workflow (RC2).
 - [ ] Freeze all three public package APIs against their committed reports.

@@ -77,8 +77,8 @@ SMOKE_TS_VERSION=5.5 pnpm smoke:pack
 SMOKE_TS_VERSION=7.0 pnpm smoke:pack
 ```
 
-`pnpm test:coverage` enforces the configured package thresholds locally. It is
-not wired into CI until the remaining Core branch-coverage gap is closed.
+`pnpm test:coverage` enforces the configured package thresholds and runs in CI
+on the Node 22 build leg.
 
 ## Semver Policy
 
