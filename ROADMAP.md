@@ -33,9 +33,14 @@ Delivered:
 
 ---
 
-### 0.4.0 — Time-Driven Playback & Audio Sync
+### 0.4.0 — Time-Driven Playback & Audio Sync ✓
 
 **Theme**: Drive the sequencer from absolute time rather than an internal counter — enabling seek-accurate audio sync, tempo-variable timelines, and frame-accurate interpolation sampling.
+
+Historical note: this section records the original 0.4 design. Playback v2
+later replaced the public clock-domain API with `PlaybackTransport`; current
+consumers should follow the 0.7+ migration notes rather than the older
+`timeDriven` / `originMs` / `createAudioClock` examples below.
 
 #### Time-driven playback mode
 
@@ -169,7 +174,7 @@ Document the public API surface — types, function signatures, options — in a
 
 ---
 
-### 0.7.0 — Playback v2
+### 0.7.0 — Playback v2 ✓
 
 **Theme**: Replace clock-domain-dependent playback with one transport-owned,
 testable state model before extending Timeline.
@@ -190,7 +195,7 @@ ownership and dependencies are in
 
 ---
 
-### 0.8.0 — Timeline and Arrangement v2
+### 0.8.0 — Timeline and Arrangement v2 ✓
 
 **Theme**: Add variable-tempo cue scheduling and connect Arrangement playback
 to the same timing map without building a DAW editor.
@@ -209,14 +214,16 @@ to the same timing map without building a DAW editor.
 
 **Theme**: Make public stability measurable before the API freeze.
 
+Published 2026-07-13. The one open item below (coverage in CI) carries over to
+the 1.0.0-rc.1 gates as RC1E.
+
 - [x] Commit API Extractor reports for all three public packages and fail CI on unreviewed differences (see `pnpm api:check`/`pnpm api:update` and `.github/workflows/ci.yml`).
 - [x] Add coverage configuration enforcing Core branch coverage of at least 90%,
   React/player-react branch coverage of at least 85%, and 100% on critical
-  playback/timing/migration modules (`pnpm test:coverage` per package). Not
-  yet wired into CI: Core currently measures ~79% branches and the six
-  100%-tier files (PlaybackTransport, the three Engines, timing conversion,
-  both migration modules) fall short; React and player-react already clear
-  85%. Closing the Core gap with additional tests is separate follow-up work.
+  playback/timing/migration modules (`pnpm test:coverage` per package). RC0
+  lifted Core global branch coverage above 90% and RC1A closed the
+  PlaybackTransport and Arrangement migration gaps; the three Engines still
+  have branch gaps, tracked by the RC1B-RC1D work items.
 - [x] Test Node.js 22 and 24 (CI matrix), React 18 and 19, TypeScript `>=5.5 <6`,
   SSR imports, and ESM/CJS packed consumers. React 18/TypeScript 5.5 are
   verified via `SMOKE_REACT_VERSION=18`/`SMOKE_TS_VERSION=5.5 pnpm smoke:pack`
@@ -231,10 +238,14 @@ to the same timing map without building a DAW editor.
   `AudioBuffer` transport is driven end to end with loose tolerances
   (`e2e/tests/product.spec.ts`), capability-gating WebKit's real audio
   position progression. Wired into CI as a separate `e2e` job.
-- [ ] Add pull-request CI for typecheck, tests, builds, API reports, coverage, compatibility, package smoke tests, and browser E2E.
-  Browser E2E is now wired (see above); coverage remains unwired pending the
-  Core branch-coverage gap (see the coverage item above).
-- [ ] Polish `website-pulse`, `cycling-workout`, and playground release fixtures.
+- [x] Add pull-request CI for typecheck, tests, builds, API reports,
+  behavior-matrix checks, compatibility fixtures, package smoke tests, and
+  browser E2E.
+- [ ] Wire coverage into pull-request CI after the RC1 critical-file branch
+  gaps are closed.
+- [x] Polish `website-pulse`, `cycling-workout`, and playground release
+  fixtures for the 0.9 release-readiness line. Any RC-blocking fixture gaps
+  are tracked by the 1.0 RC gates.
 - [x] Publish a Pages index with `/playground/`, `/website-pulse/`, and `/cycling-workout/`.
   `scripts/build-pages.mjs` assembles `_site/` and also publishes
   `/arrangement-demo/` and `/docs/`; `.github/workflows/pages.yml` builds and
@@ -253,6 +264,9 @@ All public packages use lockstep versions, including prereleases, through these 
 
 **Theme**: Freeze the candidate API and validate the distributable packages under real usage.
 
+- [ ] Close the remaining 100%-tier Engine branch gaps and wire `pnpm test:coverage` into CI (RC1B-RC1E).
+- [ ] Refresh the toolchain to the 1.0 support targets: Node 22/24/26, TypeScript `>=5.5` verified on 5.5, 6.x, and the 7.x workspace compiler, and a re-locked Playwright release with an updated browser table in `SUPPORT.md` (RC1F).
+- [ ] Harden the tag-triggered publish workflow before the RC: run every repository gate, publish prereleases under the `next` dist-tag, attach npm provenance, and create a GitHub Release. The RC itself is published through this workflow (RC2).
 - [ ] Freeze all three public package APIs against their committed reports.
 - [ ] Publish all public packages at the same RC version.
 - [ ] Make the official examples consume the packed RC packages rather than workspace source paths for release verification.
@@ -273,8 +287,42 @@ All public packages use lockstep versions, including prereleases, through these 
 - [ ] Confirm the compatibility matrix, semver policy, and support policy still
   match the final published `1.0.0` artifacts.
 - [ ] Deprecate public APIs with `@deprecated` and migration notes for at least two minor releases; remove them only in the next major release, except for security or correctness emergencies.
-- [ ] Use a tag-triggered release workflow that runs typecheck, tests, builds, E2E, API checks, and packed-package smoke tests before publishing with npm provenance and creating a GitHub Release.
+- [ ] Publish through the tag-triggered release workflow hardened in RC2 (all gates, npm provenance, GitHub Release); `1.0.0` must not be the first release to take that path.
 - [ ] Run a post-publish clean-install smoke test.
+
+---
+
+### 1.1.0 — Channel Sinks
+
+**Theme**: Make the per-frame channel output pluggable and fill the small API
+gaps found in the official examples. Every item is additive; no 1.0 API
+changes.
+
+- [ ] `ChannelSink` contract: a target that receives a sampled channel value map each frame.
+- [ ] `animateChannels(source, sinks)` in `@vixeq/core/dom`: the non-React rAF loop that `cycling-workout` currently hand-writes, writing to any number of sinks.
+- [ ] `createElementSink(element, mapping)`: the CSS custom property sink, built on the same contract as `bindChannelsToElement`.
+- [ ] Public `getDurationMs()` / `getDurationBeats()` on `SequencerEngine`, `ArrangementEngine`, and `TimelineEngine`.
+- [ ] Explicit, caller-supplied track ids in `createTrack` / `createProject`, so ids no longer depend on call order.
+
+The sink contract ships one minor release before the first external sink so
+that MIDI can build on a contract that real usage has already validated.
+
+---
+
+### 1.2.0 — MIDI CC Output
+
+**Theme**: Send channel values to hardware and DAWs as MIDI control changes.
+
+- [ ] `@vixeq/midi` with `createMidiCcSink`: maps channel `0.0`–`1.0` to 7-bit CC `0`–`127` over the Web MIDI API (no npm dependency), sending only on change and with throttling.
+- Continuous CC output only. Note/trigger output, MIDI clock master, and MIDI input stay out of scope (see below): they require sub-millisecond scheduling or inbound control, which conflicts with vixeq following external time rather than producing it.
+
+---
+
+### Future — OSC Output
+
+OSC output through the same `ChannelSink` contract is a candidate after 1.2.
+Browsers cannot send raw UDP, so it needs a WebSocket-to-UDP bridge; its design
+is deferred until `@vixeq/midi` has shipped.
 
 ---
 
@@ -284,7 +332,7 @@ These tasks run in parallel with the release cycles above:
 
 - **Update `README.md`**: list the current examples and keep the scope, package status, and exclusions aligned with shipped behavior.
 - **Preset expansion**: add more named presets to `presets.ts` (e.g., triplet, waltz, slow pulse, burst). Started with a `default` preset; the named rhythmic variants are still open.
-- **Docs site (`apps/docs`)** ✓: a VitePress + TypeDoc reference site, published to
+- **Docs site (`apps/docs`)** ✓: an Astro/Starlight + TypeDoc reference site, published to
   `/docs/` alongside the playground. TSDoc comments in `packages/*/src` are now the
   primary source for the public API reference (generated on every build via
   `pnpm --filter vixeq-docs docs:api`); the old hand-written `docs/api/*.md` files
@@ -298,7 +346,7 @@ These tasks run in parallel with the release cycles above:
 These items are not planned:
 
 - **Audio engine** — vixeq does not generate, synthesize, or schedule audio. It follows external audio through `PlaybackTransport`; it does not produce it. Tone.js integration, sample playback APIs, Web Audio graph construction, and MIDI scheduling remain out of scope.
-- **MIDI input/output**
+- **MIDI input, MIDI note/trigger output, and MIDI clock** — continuous CC output is planned for 1.2.0 (see above).
 - **DAW-style timeline editing UI**
 - **URL sharing / project serialization beyond JSON export**
 - **Production stability guarantees before 1.0**

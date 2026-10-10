@@ -2,6 +2,9 @@
 
 - Status: Approved design baseline
 - Approved: 2026-07-08
+- Revised: 2026-10-10 — widened the 1.0 toolchain targets (Node 26,
+  TypeScript `>=5.5`, refreshed Playwright) and split the remaining RC work
+  into RC1F, RC2, RC3, and S1 (§2, §10, task table)
 - Audience: Codex, Claude, and human maintainers
 - Scope: `0.7.0` through `1.0.0`
 
@@ -78,6 +81,20 @@ Deliver:
 Publish an RC only after all 0.7–0.9 gates are green. Keep the RC public for
 at least 14 days with no blocker or critical defects and no public API changes.
 Any public API change starts a new RC observation period.
+
+Before `1.0.0-rc.1` is published:
+
+- RC1F refreshes the toolchain to the 1.0 support targets in §10 (Node 26,
+  TypeScript `>=5.5` verified up to the workspace 7.x compiler, and a
+  re-locked Playwright release).
+- RC2 hardens the tag-triggered publish workflow to the 1.0 release
+  requirements: every repository gate runs before publishing, prerelease
+  versions publish under the `next` dist-tag, and a GitHub Release is
+  created. The RC is published through this same workflow so that `1.0.0`
+  does not take an untested path.
+
+Additive APIs planned after 1.0 (Channel sinks, MIDI CC output; see
+`ROADMAP.md`) are not part of the 1.0 freeze and must not enter the RC.
 
 ## 3. Playback v2 contract
 
@@ -553,11 +570,18 @@ type MigrationResult<T> =
 
 Supported matrix for 1.0:
 
-- Node.js 22 and 24. Node 20 is EOL and is removed.
+- Node.js 22, 24, and 26. Node 20 is EOL and is removed.
 - React 18 and 19; peer range `>=18 <20`.
-- TypeScript `>=5.5 <6`; test the minimum and workspace versions.
+- TypeScript `>=5.5`; test the 5.5 minimum, the latest 6.x, and the
+  workspace version (7.x).
 - Chromium, Firefox, and WebKit versions bundled by the locked Playwright
-  release. Record exact versions in the support policy.
+  release. Record exact versions in the support policy. RC1F re-locks
+  Playwright to a current release before `1.0.0-rc.1`.
+- Revision status (2026-10-10): the targets above supersede the original
+  Node 22/24 and TypeScript `>=5.5 <6` targets because TypeScript 6 and 7
+  and Node 26 shipped before the RC. Until RC1F lands, `SUPPORT.md` and CI
+  still describe the R2 matrix below; `SUPPORT.md` changes only once RC1F
+  verifies the new range.
 - ESM and CJS consumers.
 - SSR imports without browser globals at module evaluation.
 - Implementation status (R2, done): Node 22/24 covered by a
@@ -703,7 +727,7 @@ Pages publishes an index with at least `/playground/`, `/website-pulse/`, and
 ## 12. Explicit non-goals for 1.0
 
 - Audio generation or synthesis
-- MIDI
+- MIDI (continuous CC output is planned after 1.0; see `ROADMAP.md` 1.2.0)
 - DAW-style Timeline editor
 - Generic Arrangement/Timeline component in `player-react`
 - Tempo ramps
@@ -775,9 +799,13 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | RC0 | 1.0-rc | Close planned behavior rows and lift Core global branch coverage above 90% | R0–R6 | done | Codex (author), Claude (reviewer) | `docs/behavior/`, `packages/core/src/` tests |
 | RC1A | 1.0-rc | Close 100% branch gaps in `PlaybackTransport` and Arrangement migration | RC0 | done | Codex (author), Claude (reviewer) | `packages/core/src/playbackTransport.ts`, `packages/core/src/playbackTransport.test.ts`, `packages/core/src/arrangement/migration.ts`, `packages/core/src/arrangement/migration.test.ts` |
 | RC1B | 1.0-rc | Close 100% branch gaps in `SequencerEngine` | RC1A | pending | — | `packages/core/src/SequencerEngine.test.ts` |
-| RC1C | 1.0-rc | Close 100% branch gaps in `ArrangementEngine` | RC1B | pending | — | `packages/core/src/arrangement/ArrangementEngine.test.ts` |
-| RC1D | 1.0-rc | Close 100% branch gaps in `TimelineEngine` | RC1C | pending | — | `packages/core/src/timeline/TimelineEngine.test.ts` |
-| RC1E | 1.0-rc | Wire `pnpm test:coverage` into CI and finalize RC coverage gate docs | RC1D | pending | — | `.github/workflows/ci.yml`, `docs/plans/`, `docs/release/` |
+| RC1C | 1.0-rc | Close 100% branch gaps in `ArrangementEngine` | RC1A | pending | — | `packages/core/src/arrangement/ArrangementEngine.test.ts` |
+| RC1D | 1.0-rc | Close 100% branch gaps in `TimelineEngine` | RC1A | pending | — | `packages/core/src/timeline/TimelineEngine.test.ts` |
+| RC1E | 1.0-rc | Wire `pnpm test:coverage` into CI and finalize RC coverage gate docs | RC1B–RC1D, RC1F | pending | — | `.github/workflows/ci.yml`, `docs/plans/`, `docs/release/` |
+| RC1F | 1.0-rc | Refresh toolchain to the 1.0 targets: TypeScript 7 workspace (API Extractor/tsup/Vitest compatibility), `SMOKE_TS_VERSION=6` fixture, Node 26 CI leg, re-locked Playwright, and `SUPPORT.md` ranges/browser table | RC1A | pending | — | root `package.json`, `.github/workflows/ci.yml`, `scripts/pack-smoke.mjs`, `SUPPORT.md` |
+| RC2 | 1.0-rc | Harden the tag-triggered publish workflow: run every repository gate, publish prereleases under `next`, create a GitHub Release, and rewrite the 1.0 checklist publish steps around it | RC1E | pending | — | `.github/workflows/publish.yml`, `docs/release/1.0-release-checklist.md` |
+| RC3 | 1.0-rc | Publish `1.0.0-rc.1` through the RC2 workflow, verify official examples against the packed RC packages, and run the registry smoke test | RC2 | pending | — | package metadata, `CHANGELOG.md`, examples, release docs |
+| S1 | 1.0 | After the 14-day RC observation window, publish `1.0.0`, run the post-publish clean-install smoke test, and remove pre-1.0 disclaimers | RC3 | pending | — | package metadata, READMEs, `CHANGELOG.md`, `SUPPORT.md` |
 | DOC1 | 1.0-rc | Add React rhythm game tutorial | — | done | Codex (author) | `apps/docs/src/content/docs/guide/`, `apps/docs/astro.config.mts` |
 
 ### Integration order
@@ -787,6 +815,10 @@ Core transport work precedes Engine work; Core Engines precede React; React
 precedes GUI/examples. Timeline timing/schema work precedes Timeline and
 Arrangement Engines. CI/release gates integrate only after both public API
 redesigns have stable beta fixtures.
+
+After RC1A, RC1B, RC1C, RC1D, and RC1F touch disjoint files and may proceed
+in parallel. RC1E wires coverage into the CI workflow that RC1F updates, so it
+waits for both groups; RC2, RC3, and S1 are strictly sequential.
 
 ## 14. Definition of done
 
