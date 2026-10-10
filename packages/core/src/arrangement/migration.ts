@@ -2,7 +2,6 @@ import { SEQUENCER_LIMITS } from "../limits";
 import { createTimingMap } from "../timeline/timing";
 import { validateProject } from "../validation";
 import type { MigrationIssue, SequenceProject } from "../types";
-import { validateArrangement } from "./project";
 import type {
   ArrangementMigrationOptions,
   ArrangementMigrationResult,
@@ -200,18 +199,6 @@ export const migrateArrangementProject = (
     patterns: source.patterns as Record<string, SequenceProject>,
     sections: source.sections,
   };
-
-  const result = validateArrangement(project);
-  if (!result.ok) {
-    return {
-      ok: false,
-      errors: result.errors.map((issue) => ({
-        code: "ARRANGEMENT_V2_INVALID",
-        message: issue.message,
-        path: issue.path,
-      })),
-    };
-  }
 
   return { ok: true, project, warnings: [] };
 };

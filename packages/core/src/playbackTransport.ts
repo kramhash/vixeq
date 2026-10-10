@@ -194,8 +194,6 @@ export function createClockTransport(
   };
 
   const settlePlayingPosition = (): void => {
-    if (state !== "playing") return;
-
     const now = clock.now();
     const elapsedClockMs = Math.max(0, now - anchorClockMs);
     const rawPositionMs = positionMs + elapsedClockMs * playbackRate;

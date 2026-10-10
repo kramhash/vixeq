@@ -773,7 +773,7 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | R5 | 0.9 | Finalize support, semver, migration, and release docs | R0–R4 | done | Codex (author), Claude (reviewer) | root/package docs |
 | R6 | 0.9 | React hooks render-frugal: `latestEvent` state → `latestEventRef` | P6, T5 | done | Claude (author + reviewer) | `packages/react/src/`, `packages/player-react/src/SequencePlayer.tsx` |
 | RC0 | 1.0-rc | Close planned behavior rows and lift Core global branch coverage above 90% | R0–R6 | done | Codex (author), Claude (reviewer) | `docs/behavior/`, `packages/core/src/` tests |
-| RC1A | 1.0-rc | Close 100% branch gaps in `PlaybackTransport` and Arrangement migration | RC0 | pending | — | `packages/core/src/playbackTransport.test.ts`, `packages/core/src/arrangement/migration.test.ts` |
+| RC1A | 1.0-rc | Close 100% branch gaps in `PlaybackTransport` and Arrangement migration | RC0 | done | Codex (author), Claude (reviewer) | `packages/core/src/playbackTransport.ts`, `packages/core/src/playbackTransport.test.ts`, `packages/core/src/arrangement/migration.ts`, `packages/core/src/arrangement/migration.test.ts` |
 | RC1B | 1.0-rc | Close 100% branch gaps in `SequencerEngine` | RC1A | pending | — | `packages/core/src/SequencerEngine.test.ts` |
 | RC1C | 1.0-rc | Close 100% branch gaps in `ArrangementEngine` | RC1B | pending | — | `packages/core/src/arrangement/ArrangementEngine.test.ts` |
 | RC1D | 1.0-rc | Close 100% branch gaps in `TimelineEngine` | RC1C | pending | — | `packages/core/src/timeline/TimelineEngine.test.ts` |

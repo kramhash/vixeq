@@ -65,6 +65,13 @@ describe("createClockTransport", () => {
       loop: false,
       buffering: false,
     });
+    expect(transport.getDurationMs()).toBeNull();
+  });
+
+  it("exposes finite duration through the transport snapshot API", () => {
+    const transport = createClockTransport(new FakeClock(), { durationMs: 100 });
+
+    expect(transport.getDurationMs()).toBe(100);
   });
 
   it("PB-TR-002 emits play before resolving and advances position", async () => {
@@ -357,6 +364,45 @@ describe("createClockTransport", () => {
 
     expect(reportError).toHaveBeenCalledWith(expect.objectContaining({ message: "reporting failed" }));
     vi.unstubAllGlobals();
+  });
+
+  it("falls back to console.error when reportError is unavailable", async () => {
+    vi.stubGlobal("reportError", undefined);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const transport = createClockTransport(new FakeClock());
+    transport.subscribe(() => {
+      throw new Error("listener failed");
+    });
+
+    try {
+      await transport.play();
+
+      expect(consoleError).toHaveBeenCalledWith(expect.any(Error));
+    } finally {
+      consoleError.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("ignores listener failures when no error reporting surface exists", async () => {
+    const originalConsole = console;
+    vi.stubGlobal("reportError", undefined);
+    vi.stubGlobal("console", undefined);
+    const transport = createClockTransport(new FakeClock());
+    const healthyListener = vi.fn();
+    transport.subscribe(() => {
+      throw new Error("listener failed");
+    });
+    transport.subscribe(healthyListener);
+
+    try {
+      await expect(transport.play()).resolves.toBeUndefined();
+
+      expect(healthyListener).toHaveBeenCalledOnce();
+    } finally {
+      vi.stubGlobal("console", originalConsole);
+      vi.unstubAllGlobals();
+    }
   });
 
   it("PB-TR-025 supports multiple independent subscribers", async () => {
