@@ -10,6 +10,17 @@
 - Browser E2E now runs on `@playwright/test@1.64.0` (Chromium 156, Firefox
   157, WebKit 27.2).
 
+### Fixed
+
+- `@vixeq/core`: `ArrangementEngine` no longer throws from its scheduling
+  timer when a `"step"` listener calls `setArrangement()` while missed steps
+  are being replayed and the new arrangement lacks a pattern the remaining
+  steps referenced. Catch-up replay now stops once the arrangement is
+  replaced.
+- `@vixeq/core`: `ArrangementEngine.setArrangement()` and `setLoop()` after
+  the shared transport was disposed now keep the hot-swapped position instead
+  of offsetting it by the pre-swap position.
+
 ## 0.9.0 - 2026-07-13
 
 Release-readiness stable line for the pre-1.0 API freeze. This release adds

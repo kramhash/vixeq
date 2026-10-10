@@ -76,7 +76,8 @@ const assertFiniteNonNegative = (value: number, name: string): void => {
 const assertValidArrangement = (arrangement: ArrangementProject): void => {
   const result = validateArrangement(arrangement);
   if (!result.ok) {
-    throw new TypeError(`Invalid ArrangementProject: ${result.errors[0]?.path ?? "$"} ${result.errors[0]?.message ?? ""}`.trim());
+    // validateArrangement reports at least one issue whenever ok is false.
+    throw new TypeError(`Invalid ArrangementProject: ${result.errors[0].path} ${result.errors[0].message}`);
   }
 };
 
@@ -123,6 +124,10 @@ export class ArrangementEngine {
   private readonly unsubscribeTransport: Unsubscribe;
   private disposed = false;
   private transportDisposed = false;
+  // Last transport-relative position reported before the transport was
+  // disposed. Kept separate from cachedPositionMs, which is project-relative
+  // once setArrangement() has anchored a hot-swap.
+  private disposedTransportPositionMs = 0;
   private transportTimerId: ReturnType<typeof setTimeout> | undefined;
   private playbackState: PlaybackState = "stopped";
   private buffering = false;
@@ -179,9 +184,7 @@ export class ArrangementEngine {
     this.lastEmittedStepKey = resolved ? this.stepKey(resolved) : null;
 
     this.unsubscribeTransport = this.transport.subscribe((event) => this.handleTransportEvent(event));
-    if (this.playbackState === "playing" && !this.buffering) {
-      this.scheduleNextTick();
-    }
+    this.rescheduleIfPlaying();
   }
 
   on<TEventName extends ArrangementEventName>(
@@ -533,6 +536,7 @@ export class ArrangementEngine {
   private handleTransportDispose(snapshot: PlaybackSnapshot): void {
     const previousState = this.playbackState;
     this.cachedPositionMs = this.normalizePosition(this.positionFromTransportPosition(snapshot.positionMs));
+    this.disposedTransportPositionMs = snapshot.positionMs;
     this.transportDisposed = true;
     this.clearTimer();
     if (this.playbackState === "playing") {
@@ -654,7 +658,13 @@ export class ArrangementEngine {
       return;
     }
 
+    const arrangement = this.arrangement;
     for (const dueStep of dueSteps) {
+      // A step listener may hot-swap the arrangement or dispose the Engine;
+      // the remaining catch-up steps belong to the replaced arrangement.
+      if (this.disposed || this.arrangement !== arrangement) {
+        return;
+      }
       this.emitStepResolution(dueStep, "tick", positionMs);
     }
   }
@@ -700,8 +710,8 @@ export class ArrangementEngine {
           id: trackId,
           name: track?.name ?? trackId,
           enabled: track?.enabled ?? false,
-          value: track?.enabled ? track.steps[resolved.stepIndex] ?? 0 : 0,
-          nextValue: track?.enabled ? track.steps[resolved.nextStepIndex] ?? 0 : 0,
+          value: track?.enabled ? track.steps[resolved.stepIndex] : 0,
+          nextValue: track?.enabled ? track.steps[resolved.nextStepIndex] : 0,
         };
       }),
     };
@@ -778,7 +788,7 @@ export class ArrangementEngine {
 
   private getTransportPositionMs(): number {
     if (this.transportDisposed) {
-      return this.cachedPositionMs;
+      return this.disposedTransportPositionMs;
     }
     return this.transport.getPositionMs();
   }
@@ -787,7 +797,7 @@ export class ArrangementEngine {
     if (this.transportDisposed) {
       return {
         state: this.playbackState,
-        positionMs: this.cachedPositionMs,
+        positionMs: this.disposedTransportPositionMs,
         durationMs: null,
         playbackRate: 1,
         loop: false,

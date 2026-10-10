@@ -808,7 +808,7 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | RC0 | 1.0-rc | Close planned behavior rows and lift Core global branch coverage above 90% | R0–R6 | done | Codex (author), Claude (reviewer) | `docs/behavior/`, `packages/core/src/` tests |
 | RC1A | 1.0-rc | Close 100% branch gaps in `PlaybackTransport` and Arrangement migration | RC0 | done | Codex (author), Claude (reviewer) | `packages/core/src/playbackTransport.ts`, `packages/core/src/playbackTransport.test.ts`, `packages/core/src/arrangement/migration.ts`, `packages/core/src/arrangement/migration.test.ts` |
 | RC1B | 1.0-rc | Close 100% branch gaps in `SequencerEngine` | RC1A | done | Claude (author + reviewer) | `packages/core/src/SequencerEngine.test.ts` |
-| RC1C | 1.0-rc | Close 100% branch gaps in `ArrangementEngine` | RC1A | pending | — | `packages/core/src/arrangement/ArrangementEngine.test.ts` |
+| RC1C | 1.0-rc | Close 100% branch gaps in `ArrangementEngine` | RC1A | done | Claude (author + reviewer) | `packages/core/src/arrangement/ArrangementEngine.test.ts` |
 | RC1D | 1.0-rc | Close 100% branch gaps in `TimelineEngine` | RC1A | pending | — | `packages/core/src/timeline/TimelineEngine.test.ts` |
 | RC1E | 1.0-rc | Wire `pnpm test:coverage` into CI and finalize RC coverage gate docs | RC1B–RC1D, RC1F | pending | — | `.github/workflows/ci.yml`, `docs/plans/`, `docs/release/` |
 | RC1F | 1.0-rc | Refresh toolchain to the 1.0 targets: TypeScript 7 workspace (API Extractor/tsup/Vitest compatibility), `SMOKE_TS_VERSION=6` fixture, Node 26 CI leg, re-locked Playwright, and `SUPPORT.md` ranges/browser table | RC1A | done | Claude (author + reviewer) | root `package.json`, `.github/workflows/ci.yml`, `scripts/pack-smoke.mjs`, `SUPPORT.md` |

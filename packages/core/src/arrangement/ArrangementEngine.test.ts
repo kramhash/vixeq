@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createClockTransport, type PlaybackTransport } from "../playbackTransport";
+import {
+  createClockTransport,
+  type PlaybackSnapshot,
+  type PlaybackTransport,
+  type PlaybackTransportEvent,
+} from "../playbackTransport";
 import { createProject, setStepValue } from "../project";
 import type { ChannelSource, EnginePlaybackEvent, PlaybackClock, StepEvent } from "../types";
 import { ArrangementEngine } from "./ArrangementEngine";
@@ -42,6 +47,60 @@ class FakeClock implements PlaybackClock {
     }
     this.currentTime = target;
   }
+}
+
+// A hand-driven PlaybackTransport for exercising Engine reactions to events a
+// third-party transport implementation may emit (the PlaybackTransport type is
+// public, so the Engine cannot assume only the built-in transports).
+class ManualTransport implements PlaybackTransport {
+  snapshot: PlaybackSnapshot = {
+    state: "stopped",
+    positionMs: 0,
+    durationMs: null,
+    playbackRate: 1,
+    loop: false,
+    buffering: false,
+  };
+  private listeners = new Set<(event: PlaybackTransportEvent) => void>();
+
+  emitEvent(event: PlaybackTransportEvent): void {
+    this.snapshot = { ...event.snapshot };
+    for (const listener of [...this.listeners]) listener(event);
+  }
+
+  getSnapshot(): PlaybackSnapshot {
+    return { ...this.snapshot };
+  }
+  getPlaybackState(): PlaybackSnapshot["state"] {
+    return this.snapshot.state;
+  }
+  getPositionMs(): number {
+    return this.snapshot.positionMs;
+  }
+  getDurationMs(): number | null {
+    return this.snapshot.durationMs;
+  }
+  getPlaybackRate(): number {
+    return this.snapshot.playbackRate;
+  }
+  getLoop(): boolean {
+    return this.snapshot.loop;
+  }
+  async play(): Promise<void> {
+    this.emitEvent({ type: "play", snapshot: { ...this.snapshot, state: "playing" } });
+  }
+  async pause(): Promise<void> {}
+  async stop(): Promise<void> {}
+  async seekMs(): Promise<void> {}
+  async setPlaybackRate(): Promise<void> {}
+  async setLoop(): Promise<void> {}
+  subscribe(listener: (event: PlaybackTransportEvent) => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+  dispose(): void {}
 }
 
 const BEAT_MS = 500;
@@ -483,5 +542,429 @@ describe("ArrangementEngine — Playback v2", () => {
 
     source.on("playback", (event) => event.snapshot.positionMs);
     source.on("project", (event) => event.changedChannelIds);
+  });
+});
+
+describe("ArrangementEngine — RC1C branch coverage", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("falls back to reportError when onListenerError itself throws", async () => {
+    const reportError = vi.fn();
+    vi.stubGlobal("reportError", reportError);
+    const engine = new ArrangementEngine(buildArrangement(), {
+      transport: buildTransport().transport,
+      onListenerError: () => {
+        throw new Error("reporter failed");
+      },
+    });
+    engine.on("section", () => {
+      throw new Error("section listener failed");
+    });
+
+    await engine.play();
+
+    expect(reportError).toHaveBeenCalledWith(expect.objectContaining({ message: "reporter failed" }));
+  });
+
+  it("reports listener failures through console.error when reportError is unavailable", async () => {
+    const engine = new ArrangementEngine(buildArrangement(), { transport: buildTransport().transport });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    engine.on("section", () => {
+      throw new Error("section listener failed");
+    });
+    vi.stubGlobal("reportError", undefined);
+
+    try {
+      await engine.play();
+
+      expect(consoleError).toHaveBeenCalledWith(expect.any(Error));
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it("drops listener failures when neither reportError nor console exists", async () => {
+    const originalConsole = console;
+    const engine = new ArrangementEngine(buildArrangement(), { transport: buildTransport().transport });
+    const healthy = vi.fn();
+    engine.on("section", () => {
+      throw new Error("section listener failed");
+    });
+    engine.on("section", healthy);
+    vi.stubGlobal("reportError", undefined);
+    vi.stubGlobal("console", undefined);
+
+    try {
+      await expect(engine.play()).resolves.toBeUndefined();
+    } finally {
+      vi.stubGlobal("console", originalConsole);
+    }
+
+    expect(healthy).toHaveBeenCalledOnce();
+  });
+
+  it("disposes an Engine-owned browser-clock transport with the Engine", async () => {
+    const engine = new ArrangementEngine(buildArrangement());
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
+    await engine.play();
+    steps.length = 0;
+
+    engine.dispose();
+    vi.advanceTimersByTime(BEAT_MS * 2);
+
+    expect(steps).toEqual([]);
+    expect(() => engine.getPlaybackState()).toThrow(/disposed/);
+  });
+
+  it("starts in a section gap with no current section and adopts an already-playing transport", async () => {
+    const { clock, transport } = buildTransport();
+    await transport.seekMs(BEAT_MS * 3);
+    await transport.play();
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+    const sections: ArrangementSectionEvent[] = [];
+    engine.on("section", (event) => sections.push(event));
+
+    expect(engine.getCurrentSection()).toBeNull();
+    expect(engine.getPlaybackState()).toBe("playing");
+
+    clock.advance(BEAT_MS);
+    vi.advanceTimersByTime(25);
+
+    expect(sections).toMatchObject([{ section: { id: "s2" }, cause: "tick" }]);
+  });
+
+  it("rejects pause, stop, and seeks once the transport is disposed", async () => {
+    const { transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+    transport.dispose();
+
+    await expect(engine.pause()).rejects.toMatchObject({ code: "TRANSPORT_DISPOSED" });
+    await expect(engine.stop()).rejects.toMatchObject({ code: "TRANSPORT_DISPOSED" });
+    await expect(engine.seekBeat(1)).rejects.toMatchObject({ code: "TRANSPORT_DISPOSED" });
+    await expect(engine.seekPositionMs(0)).rejects.toMatchObject({ code: "TRANSPORT_DISPOSED" });
+  });
+
+  it("validates setLoop and stays at local end when looping is enabled after the end", async () => {
+    const { clock, transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+    expect(() => engine.setLoop("yes" as unknown as boolean)).toThrow(TypeError);
+    await engine.play();
+    clock.advance(BEAT_MS * 6);
+    vi.advanceTimersByTime(25);
+    expect(engine.getPlaybackState()).toBe("ended");
+    const playback: EnginePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+
+    engine.setLoop(true);
+
+    expect(engine.getPlaybackState()).toBe("ended");
+    expect(playback).toMatchObject([
+      {
+        type: "loopchange",
+        cause: "command",
+        previousState: "ended",
+        snapshot: { state: "ended", projectLoop: true },
+      },
+    ]);
+  });
+
+  it("ignores setArrangement with the already-loaded arrangement", () => {
+    const arrangement = buildArrangement();
+    const engine = new ArrangementEngine(arrangement, { transport: buildTransport().transport });
+    const projects: ArrangementProjectEvent[] = [];
+    engine.on("project", (event) => projects.push(event));
+
+    engine.setArrangement(arrangement);
+
+    expect(projects).toEqual([]);
+  });
+
+  it("does not let no-op commands leave stale command markers", async () => {
+    const { clock, transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+    const playback: EnginePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+
+    await engine.pause();
+    await engine.play();
+    clock.advance(20);
+    await engine.pause();
+    // stop() emits and is consumed first; the queued pause() is then a no-op
+    // because the transport is already stopped.
+    await Promise.all([engine.stop(), engine.pause()]);
+    playback.length = 0;
+    await transport.play();
+    await transport.pause();
+
+    expect(playback).toMatchObject([
+      { type: "play", cause: "transport" },
+      { type: "pause", cause: "transport" },
+    ]);
+  });
+
+  it("clears the command marker when the transport rejects a seek synchronously", async () => {
+    const clock = new FakeClock();
+    const transport = createClockTransport(clock, { durationMs: BEAT_MS * 2 });
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+    const playback: EnginePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+
+    expect(() => engine.seekBeat(4)).toThrow(RangeError);
+    await transport.seekMs(BEAT_MS);
+
+    expect(playback).toMatchObject([{ type: "seek", cause: "transport" }]);
+  });
+
+  it("ignores transport events that arrive after disposal within the same dispatch", async () => {
+    const { transport } = buildTransport();
+    let engine: ArrangementEngine | undefined;
+    transport.subscribe((event) => {
+      if (event.type === "play") engine?.dispose();
+    });
+    engine = new ArrangementEngine(buildArrangement(), { transport });
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
+
+    await transport.play();
+
+    expect(steps).toEqual([]);
+    expect(() => engine?.getPlaybackState()).toThrow(/disposed/);
+  });
+
+  it("reports local end instead of play when the transport resumes past the arrangement", async () => {
+    const { transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+    const playback: EnginePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+
+    await transport.seekMs(BEAT_MS * 7);
+    await transport.play();
+
+    expect(engine.getPlaybackState()).toBe("ended");
+    expect(playback.at(-1)).toMatchObject({ type: "ended", cause: "local-end", previousState: "ended" });
+  });
+
+  it("freezes position and steps while a transport reports buffering", async () => {
+    const transport = new ManualTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+    const playback: EnginePlaybackEvent[] = [];
+    const steps: StepEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+    engine.on("step", (event) => steps.push(event));
+    await engine.play();
+    steps.length = 0;
+
+    transport.emitEvent({
+      type: "bufferingchange",
+      previousBuffering: false,
+      snapshot: { ...transport.snapshot, buffering: true },
+    });
+    transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS };
+    vi.advanceTimersByTime(100);
+
+    expect(playback.at(-1)).toMatchObject({ type: "bufferingchange", snapshot: { buffering: true } });
+    expect(engine.getPosition().positionMs).toBe(0);
+    expect(steps).toEqual([]);
+
+    transport.emitEvent({
+      type: "bufferingchange",
+      previousBuffering: true,
+      snapshot: { ...transport.snapshot, buffering: false },
+    });
+    vi.advanceTimersByTime(25);
+
+    expect(steps.map((event) => event.stepIndex)).toEqual([1]);
+  });
+
+  it("forwards transport errors and other transport events with cause transport", () => {
+    const transport = new ManualTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+    const playback: EnginePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+    const error = new Error("decoder failed");
+
+    transport.emitEvent({ type: "error", error, snapshot: transport.snapshot });
+    transport.emitEvent({
+      type: "durationchange",
+      previousDurationMs: null,
+      snapshot: { ...transport.snapshot, durationMs: BEAT_MS * 20 },
+    });
+
+    expect(playback).toMatchObject([
+      { type: "error", cause: "transport", error },
+      { type: "durationchange", cause: "transport" },
+    ]);
+  });
+
+  it("stops ticking when a transport event leaves the transport not playing", async () => {
+    const transport = new ManualTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
+    await engine.play();
+    steps.length = 0;
+
+    transport.emitEvent({
+      type: "error",
+      error: new Error("decoder failed"),
+      snapshot: { ...transport.snapshot, state: "paused" },
+    });
+    transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS };
+    vi.advanceTimersByTime(BEAT_MS);
+
+    expect(engine.getPlaybackState()).toBe("paused");
+    expect(steps).toEqual([]);
+  });
+
+  it("pauses at the cached position when the transport is disposed during playback", async () => {
+    const { clock, transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+    const playback: EnginePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+    await engine.play();
+    clock.advance(100);
+
+    transport.dispose();
+
+    expect(engine.getPlaybackState()).toBe("paused");
+    expect(engine.getPosition().positionMs).toBe(100);
+    expect(playback.at(-1)).toMatchObject({ type: "error", cause: "transport", previousState: "playing" });
+  });
+
+  it("stops scheduling when a step listener disposes the shared transport mid-tick", async () => {
+    const { clock, transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+    engine.on("step", (event) => {
+      if (event.cause === "tick") transport.dispose();
+    });
+    await engine.play();
+
+    clock.advance(BEAT_MS);
+    vi.advanceTimersByTime(25);
+
+    expect(engine.getPlaybackState()).toBe("paused");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("stops replaying missed steps once a step listener replaces the arrangement", async () => {
+    const { clock, transport } = buildTransport();
+    const intro = createProject({ stepCount: 2, stepsPerBeat: 1, trackCount: 1 });
+    const chorus = createProject({ stepCount: 2, stepsPerBeat: 1, trackCount: 1 });
+    const arrangement = createArrangement({
+      timing: { bpm: 120 },
+      durationBeats: 4,
+      patterns: { intro, chorus },
+      sections: [
+        { id: "a", patternId: "intro", startBeat: 0, endBeat: 2 },
+        { id: "b", patternId: "chorus", startBeat: 2, endBeat: 4 },
+      ],
+    });
+    const replacement = createArrangement({
+      timing: { bpm: 120 },
+      durationBeats: 4,
+      patterns: { other: intro },
+      sections: [{ id: "x", patternId: "other", startBeat: 0, endBeat: 4 }],
+    });
+    const engine = new ArrangementEngine(arrangement, { transport });
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => {
+      steps.push(event);
+      if (event.cause === "tick" && engine.getArrangement() === arrangement) {
+        engine.setArrangement(replacement);
+      }
+    });
+    await engine.play();
+    steps.length = 0;
+
+    clock.advance(BEAT_MS * 2.2);
+    expect(() => vi.advanceTimersByTime(25)).not.toThrow();
+
+    expect(steps.map((event) => event.cause)).toEqual(["tick", "project-change"]);
+    expect(engine.getCurrentSection()?.id).toBe("x");
+  });
+
+  it("emits only the latest step under the skip policy and nothing new within the same step", async () => {
+    const { clock, transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport, missedStepPolicy: "skip" });
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
+    await engine.play();
+
+    clock.advance(100);
+    vi.advanceTimersByTime(25);
+    expect(steps).toHaveLength(1);
+
+    clock.advance(BEAT_MS * 5);
+    vi.advanceTimersByTime(25);
+
+    expect(steps.slice(1)).toMatchObject([{ stepIndex: 1, scheduledPositionMs: BEAT_MS * 5, cause: "tick" }]);
+  });
+
+  it("emits the first step again after a local loop wraps past the last emitted step", async () => {
+    const { clock, transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport, loop: true });
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
+    await engine.play();
+
+    clock.advance(BEAT_MS * 5.2);
+    vi.advanceTimersByTime(25);
+    steps.length = 0;
+    clock.advance(BEAT_MS);
+    vi.advanceTimersByTime(25);
+
+    expect(steps).toMatchObject([{ stepIndex: 0, scheduledPositionMs: 0, cause: "tick" }]);
+  });
+
+  it("stops delivering events to an unsubscribed listener", async () => {
+    const engine = new ArrangementEngine(buildArrangement(), { transport: buildTransport().transport });
+    const listener = vi.fn();
+    const unsubscribe = engine.on("playback", listener);
+
+    unsubscribe();
+    await engine.play();
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("rejects a replay from local end when the transport is disposed before it runs", async () => {
+    const { clock, transport } = buildTransport();
+    const engine = new ArrangementEngine(buildArrangement(), { transport });
+    await engine.play();
+    clock.advance(BEAT_MS * 6);
+    vi.advanceTimersByTime(25);
+    expect(engine.getPlaybackState()).toBe("ended");
+
+    const replay = engine.play();
+    transport.dispose();
+
+    await expect(replay).rejects.toMatchObject({ code: "TRANSPORT_DISPOSED" });
+    expect(engine.getPlaybackState()).toBe("ended");
+  });
+
+  it("hot-swaps and toggles loop at the cached position after the transport is disposed", async () => {
+    const { clock, transport } = buildTransport();
+    const arrangement = buildArrangement();
+    const engine = new ArrangementEngine(arrangement, { transport });
+    await engine.play();
+    clock.advance(BEAT_MS);
+    transport.dispose();
+
+    engine.setArrangement({ ...arrangement, timing: { ...arrangement.timing, tempos: [{ beat: 0, bpm: 60 }] } });
+
+    expect(engine.getPosition()).toEqual({ positionMs: BEAT_MS * 2, beat: 1 });
+
+    engine.setLoop(true);
+
+    expect(engine.getPlaybackState()).toBe("paused");
+    expect(engine.getPosition()).toEqual({ positionMs: BEAT_MS * 2, beat: 1 });
   });
 });
