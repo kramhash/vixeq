@@ -1,6 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    // tsup 8.5 injects a deprecated `baseUrl` into its declaration build;
+    // this file sets no `baseUrl` itself. Remove once the build moves off tsup.
+    "ignoreDeprecations": "6.0",
     "rootDir": "src",
     "outDir": "dist"
   },

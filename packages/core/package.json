@@ -59,6 +59,7 @@
     "api:update": "api-extractor run --local --verbose -c api-extractor.json && api-extractor run --local --verbose -c api-extractor.dom.json"
   },
   "devDependencies": {
-    "tsup": "^8.5.0"
+    "tsup": "^8.5.0",
+    "typescript": "^6.0.3"
   }
 }

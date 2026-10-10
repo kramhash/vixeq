@@ -85,8 +85,8 @@ Any public API change starts a new RC observation period.
 Before `1.0.0-rc.1` is published:
 
 - RC1F refreshes the toolchain to the 1.0 support targets in §10 (Node 26,
-  TypeScript `>=5.5` verified up to the workspace 7.x compiler, and a
-  re-locked Playwright release).
+  TypeScript `>=5.5` verified on 5.5, the 6.0 workspace, and a 7.x
+  consumer, and a re-locked Playwright release).
 - RC2 hardens the tag-triggered publish workflow to the 1.0 release
   requirements: every repository gate runs before publishing, prerelease
   versions publish under the `next` dist-tag, and a GitHub Release is
@@ -572,16 +572,25 @@ Supported matrix for 1.0:
 
 - Node.js 22, 24, and 26. Node 20 is EOL and is removed.
 - React 18 and 19; peer range `>=18 <20`.
-- TypeScript `>=5.5`; test the 5.5 minimum, the latest 6.x, and the
-  workspace version (7.x).
+- TypeScript `>=5.5`; test the 5.5 minimum, the workspace version (6.0.x),
+  and 7.x as a consumer of the packed packages. TypeScript 7 ships only the
+  native compiler without the JavaScript API that tsup, TypeDoc, and API
+  Extractor load, so the workspace build stays on 6.0 and every tool resolves
+  the same 6.0 compiler (each tsup-built package declares `typescript`
+  directly so peer resolution cannot drift to 7).
 - Chromium, Firefox, and WebKit versions bundled by the locked Playwright
   release. Record exact versions in the support policy. RC1F re-locks
   Playwright to a current release before `1.0.0-rc.1`.
 - Revision status (2026-10-10): the targets above supersede the original
   Node 22/24 and TypeScript `>=5.5 <6` targets because TypeScript 6 and 7
-  and Node 26 shipped before the RC. Until RC1F lands, `SUPPORT.md` and CI
-  still describe the R2 matrix below; `SUPPORT.md` changes only once RC1F
-  verifies the new range.
+  and Node 26 shipped before the RC. RC1F implements them: the CI build
+  matrix runs Node 22/24/26, `SMOKE_TS_VERSION=7.0 pnpm smoke:pack` joins the
+  5.5 and React 18 fixtures, and `@playwright/test` is locked at `1.64.0`.
+  TypeScript 6 removed the old `rootDir` default and deprecated `baseUrl`, so
+  workspace tsconfigs drop `baseUrl` and the React packages set `rootDir`
+  explicitly; the three tsup-built packages set `ignoreDeprecations: "6.0"`
+  only because tsup 8.5 injects `baseUrl` into its declaration build. The
+  R2/R3 notes below record the original 0.9 matrix.
 - ESM and CJS consumers.
 - SSR imports without browser globals at module evaluation.
 - Implementation status (R2, done): Node 22/24 covered by a
@@ -802,7 +811,7 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | RC1C | 1.0-rc | Close 100% branch gaps in `ArrangementEngine` | RC1A | pending | — | `packages/core/src/arrangement/ArrangementEngine.test.ts` |
 | RC1D | 1.0-rc | Close 100% branch gaps in `TimelineEngine` | RC1A | pending | — | `packages/core/src/timeline/TimelineEngine.test.ts` |
 | RC1E | 1.0-rc | Wire `pnpm test:coverage` into CI and finalize RC coverage gate docs | RC1B–RC1D, RC1F | pending | — | `.github/workflows/ci.yml`, `docs/plans/`, `docs/release/` |
-| RC1F | 1.0-rc | Refresh toolchain to the 1.0 targets: TypeScript 7 workspace (API Extractor/tsup/Vitest compatibility), `SMOKE_TS_VERSION=6` fixture, Node 26 CI leg, re-locked Playwright, and `SUPPORT.md` ranges/browser table | RC1A | pending | — | root `package.json`, `.github/workflows/ci.yml`, `scripts/pack-smoke.mjs`, `SUPPORT.md` |
+| RC1F | 1.0-rc | Refresh toolchain to the 1.0 targets: TypeScript 7 workspace (API Extractor/tsup/Vitest compatibility), `SMOKE_TS_VERSION=6` fixture, Node 26 CI leg, re-locked Playwright, and `SUPPORT.md` ranges/browser table | RC1A | done | Claude (author + reviewer) | root `package.json`, `.github/workflows/ci.yml`, `scripts/pack-smoke.mjs`, `SUPPORT.md` |
 | RC2 | 1.0-rc | Harden the tag-triggered publish workflow: run every repository gate, publish prereleases under `next`, create a GitHub Release, and rewrite the 1.0 checklist publish steps around it | RC1E | pending | — | `.github/workflows/publish.yml`, `docs/release/1.0-release-checklist.md` |
 | RC3 | 1.0-rc | Publish `1.0.0-rc.1` through the RC2 workflow, verify official examples against the packed RC packages, and run the registry smoke test | RC2 | pending | — | package metadata, `CHANGELOG.md`, examples, release docs |
 | S1 | 1.0 | After the 14-day RC observation window, publish `1.0.0`, run the post-publish clean-install smoke test, and remove pre-1.0 disclaimers | RC3 | pending | — | package metadata, READMEs, `CHANGELOG.md`, `SUPPORT.md` |

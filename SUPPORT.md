@@ -21,9 +21,9 @@ The 1.0 support target is:
 
 | Area | Supported range |
 | --- | --- |
-| Node.js | `22` and `24` |
+| Node.js | `22`, `24`, and `26` |
 | React | `>=18 <20` for `@vixeq/react` and `@vixeq/player-react` peers |
-| TypeScript | `>=5.5 <6` |
+| TypeScript | `>=5.5` (verified on `5.5`, `6.0`, and `7.0`) |
 | Module formats | ESM and CJS consumers |
 | SSR | Package imports must not require browser globals at module evaluation |
 | Package CSS | `@vixeq/player-react/styles.css` must resolve from the packed package |
@@ -33,14 +33,14 @@ Node 20 is not part of the 1.0 support target.
 ## Browser Support
 
 Browser support is defined by the browsers bundled with the locked Playwright
-release used by this repository. For `@playwright/test@1.61.1`, the recorded
+release used by this repository. For `@playwright/test@1.64.0`, the recorded
 browser set is:
 
 | Browser project | Bundled browser |
 | --- | --- |
-| `chromium` | Chrome for Testing `149.0.7827.55` (`chromium` revision `1228`) |
-| `firefox` | Firefox `151.0` (`firefox` revision `1532`) |
-| `webkit` | WebKit `26.5` (`webkit` revision `2311`) |
+| `chromium` | Chrome for Testing `156.0.8078.4` (`chromium` revision `1248`) |
+| `firefox` | Firefox `157.0` (`firefox` revision `1555`) |
+| `webkit` | WebKit `27.2` (`webkit` revision `2370`) |
 
 The browser gate runs desktop Chromium, Firefox, and WebKit. Mobile viewport
 behavior is covered by product/example verification when a browser-facing
@@ -74,6 +74,7 @@ Additional compatibility fixtures:
 ```sh
 SMOKE_REACT_VERSION=18 pnpm smoke:pack
 SMOKE_TS_VERSION=5.5 pnpm smoke:pack
+SMOKE_TS_VERSION=7.0 pnpm smoke:pack
 ```
 
 `pnpm test:coverage` enforces the configured package thresholds locally. It is

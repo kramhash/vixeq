@@ -15,7 +15,7 @@ const migrationFixturePath = path.join(rootDir, "fixtures", "migration", "v1-to-
 // @types or typescript version instead of deriving it from the live
 // workspace, so the same consumer harness (ESM/CJS/SSR/types/vite-build) can
 // verify the spec's supported minimum/alternate versions without touching
-// the main workspace's own React 19 / TypeScript 5.9 setup. When either is
+// the main workspace's own React 19 / TypeScript 6.0 setup. When either is
 // set, the example-app build loop is skipped -- those apps are pinned to the
 // workspace's own versions and aren't part of this peer-range claim.
 const reactVersionOverride = process.env.SMOKE_REACT_VERSION ?? null;

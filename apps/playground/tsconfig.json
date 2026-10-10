@@ -2,7 +2,6 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
-    "baseUrl": ".",
     "paths": {
       "@vixeq/core": ["../../packages/core/src/index.ts"],
       "@vixeq/react": ["../../packages/react/src/index.ts"],

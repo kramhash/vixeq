@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Changed
+
+- The 1.0 support target now covers Node.js 22, 24, and 26 and TypeScript
+  `>=5.5` (verified on 5.5, 6.0, and 7.0 consumers); the previous upper bound
+  of TypeScript `<6` is removed. The repository builds with TypeScript 6.0.
+- Browser E2E now runs on `@playwright/test@1.64.0` (Chromium 156, Firefox
+  157, WebKit 27.2).
+
 ## 0.9.0 - 2026-07-13
 
 Release-readiness stable line for the pre-1.0 API freeze. This release adds

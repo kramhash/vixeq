@@ -15,8 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # Supported matrix for 1.0 (spec Section 10): Node.js 22 and 24.
-        node-version: [22, 24]
+        # Supported matrix for 1.0 (spec Section 10): Node.js 22, 24, and 26.
+        node-version: [22, 24, 26]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -58,7 +58,7 @@ jobs:
 
       # Compatibility fixtures (spec Section 10): verify the spec's supported
       # minimum/alternate React and TypeScript versions independently of the
-      # workspace's own React 19 / TypeScript 5.9 setup. Run on a single
+      # workspace's own React 19 / TypeScript 6.0 setup. Run on a single
       # Node-matrix leg only -- these exercise React/TS boundaries, not Node
       # itself, so running them on every Node version would be redundant.
       - name: React 18 compatibility fixture
@@ -68,6 +68,14 @@ jobs:
       - name: TypeScript minimum-version compatibility fixture
         if: matrix.node-version == 22
         run: SMOKE_TS_VERSION=5.5 pnpm smoke:pack
+
+      # TypeScript 7 ships only the native compiler without the JavaScript
+      # API that tsup, TypeDoc, and API Extractor need, so the workspace stays
+      # on 6.0 and TypeScript 7 is verified as a consumer of the packed
+      # packages instead.
+      - name: TypeScript 7 compatibility fixture
+        if: matrix.node-version == 22
+        run: SMOKE_TS_VERSION=7.0 pnpm smoke:pack
 
   e2e:
     # R3 (spec Section "Browser gates"): actual media-transport E2E in
