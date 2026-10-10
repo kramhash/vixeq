@@ -849,6 +849,24 @@ describe("SequencerEngine — RC1B branch coverage", () => {
     expect(steps).toEqual([]);
   });
 
+  it("stops scheduling when a step listener disposes the shared transport mid-tick", async () => {
+    const { clock, transport } = buildTransport();
+    const engine = new SequencerEngine(createProject({ bpm: 120 }), { transport });
+    const playback: EnginePlaybackEvent[] = [];
+    engine.on("playback", (event) => playback.push(event));
+    engine.on("step", (event) => {
+      if (event.cause === "tick") transport.dispose();
+    });
+    await engine.play();
+
+    clock.advance(STEP_MS);
+    expect(() => vi.advanceTimersByTime(STEP_MS)).not.toThrow();
+    vi.advanceTimersByTime(STEP_MS * 4);
+
+    expect(engine.getPlaybackState()).toBe("paused");
+    expect(playback.at(-1)).toMatchObject({ type: "error", cause: "transport" });
+  });
+
   it("reports disabled tracks as zero in step events and channel samples", async () => {
     let project = createProject({ stepCount: 4, trackCount: 2 });
     const [enabledTrack, disabledTrack] = project.tracks;

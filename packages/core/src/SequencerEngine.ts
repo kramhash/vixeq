@@ -550,9 +550,13 @@ export class SequencerEngine {
     this.currentStepIndex = this.stepIndexAt(this.cachedPositionMs);
   }
 
-  // Callers guarantee the Engine is playing, not buffering, and attached to a
-  // live transport (see rescheduleIfPlaying and tick).
   private scheduleNextTick(): void {
+    // tick() reaches this after emitting steps, and a step listener may have
+    // synchronously disposed a shared transport in the meantime.
+    if (this.playbackState !== "playing" || this.buffering || this.transportDisposed) {
+      return;
+    }
+
     this.clearTimer();
     const positionMs = this.getLogicalPositionMs();
     const stepDurationMs = this.getStepDurationMs();

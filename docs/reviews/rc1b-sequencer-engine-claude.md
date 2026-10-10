@@ -21,12 +21,10 @@ argument next to it.
 - `assertValidProject` error formatting: `validateProject` returns
   `ok: false` only when `errors.length > 0`, so the `?.`/`?? "$"`/`?? ""`
   fallbacks and the trailing `.trim()` could never apply.
-- `scheduleNextTick()` state guard: every caller already requires
-  `playing && !buffering && !transportDisposed` — `rescheduleIfPlaying()`
-  checks it explicitly and `tick()` returns early otherwise. The constructor
-  now calls `rescheduleIfPlaying()` instead of duplicating the condition.
-- `scheduleNextTick()` `transportDisposed ? 1 : rate`: unreachable for the
-  same reason.
+- `scheduleNextTick()` `transportDisposed ? 1 : rate`: the state guard at the
+  top of `scheduleNextTick()` already returns when the transport is disposed.
+  The constructor now calls `rescheduleIfPlaying()` instead of duplicating
+  that condition.
 - `track.steps[index] ?? 0` in step events and channel sampling: the
   constructor and `setProject()` both reject projects whose
   `track.steps.length !== stepCount`, and both indexes are normalized into
@@ -50,6 +48,22 @@ argument next to it.
 - Disabled tracks in step events and channel samples.
 - Listener-error reporting through `console.error` and with no reporting
   surface at all; listener unsubscription.
+- A step listener that synchronously disposes the shared transport during a
+  tick (see the correction below).
+
+## Correction (2026-10-10)
+
+The first RC1B commit also deleted the `scheduleNextTick()` state guard as
+unreachable, reasoning only from its direct callers. That missed listener
+re-entrancy: `tick()` emits `"step"` events before calling
+`scheduleNextTick()`, and a listener can synchronously call
+`transport.dispose()` on a shared clock transport. Without the guard the
+Engine then called `transport.getPlaybackRate()` on the disposed transport
+and threw `PlaybackError` out of the timer callback. The guard is restored
+with a comment, and the new mid-tick disposal test fails without it.
+
+Lesson for RC1C/RC1D: an "unreachable" argument must also cover state that
+listeners can change synchronously between a guard and its use.
 
 ## Commands run
 
@@ -60,7 +74,7 @@ argument next to it.
 - `pnpm --filter @vixeq/core typecheck`, `pnpm --filter @vixeq/core build`
 - `pnpm api:check` (no report changes), `pnpm behavior:check`
   (191 covered, 0 planned, 0 blocked)
-- `pnpm test` (core 351, react 36, player-react 8, playground 11,
+- `pnpm test` (core 352, react 36, player-react 8, playground 11,
   cycling-workout 5)
 
 ## Verdict
