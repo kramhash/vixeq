@@ -5,7 +5,9 @@ import {
   type PlaybackTransport,
   type PlaybackTransportEvent,
 } from "../playbackTransport";
+import { createEnvelope } from "../envelope";
 import { createProject, setStepValue } from "../project";
+import { beatToMs } from "../timeline/timing";
 import type { ChannelSource, EnginePlaybackEvent, PlaybackClock, StepEvent } from "../types";
 import { ArrangementEngine } from "./ArrangementEngine";
 import { createArrangement } from "./project";
@@ -108,6 +110,13 @@ class ManualTransport implements PlaybackTransport {
     };
   }
   dispose(): void {}
+}
+
+// A third-party transport may emit "pause" synchronously inside pause().
+class PausingTransport extends ManualTransport {
+  override async pause(): Promise<void> {
+    this.emitEvent({ type: "pause", snapshot: { ...this.snapshot, state: "paused" } });
+  }
 }
 
 const BEAT_MS = 500;
@@ -1037,7 +1046,9 @@ describe("ArrangementEngine — RC1G re-entrancy", () => {
     transport.snapshot = { ...transport.snapshot, positionMs: BEAT_MS * 2.5 };
     await vi.advanceTimersByTimeAsync(10);
 
-    expect(steps).toEqual(["play:0@0", `seek:3@${BEAT_MS * 5.5}`]);
+    // RC1H: step 1 of section a (500 ms) precedes the section b boundary
+    // (1000 ms) in time order.
+    expect(steps).toEqual(["play:0@0", `tick:1@${BEAT_MS}`, `seek:3@${BEAT_MS * 5.5}`]);
   });
 
   it("emits no step after local end when a step listener disables loop mid catch-up", async () => {
@@ -1060,7 +1071,9 @@ describe("ArrangementEngine — RC1G re-entrancy", () => {
     clock.advance(BEAT_MS * 2.3);
     await vi.advanceTimersByTimeAsync(10);
 
-    expect(log.slice(-3)).toEqual([`step:tick:1@${BEAT_MS}`, "playback:loopchange", "playback:ended"]);
+    // RC1H: the wrapping tick dispatches the previous iteration's step 1,
+    // relative to the landing iteration.
+    expect(log.slice(-3)).toEqual([`step:tick:1@${-BEAT_MS * 3}`, "playback:loopchange", "playback:ended"]);
     expect(engine.getPlaybackState()).toBe("ended");
   });
 
@@ -1083,13 +1096,6 @@ describe("ArrangementEngine — RC1G re-entrancy", () => {
     expect(engine.getPlaybackState()).toBe("playing");
     expect(engine.getPosition()).toEqual({ positionMs: BEAT_MS * 2, beat: 2 });
   });
-
-  // A third-party transport may emit "pause" synchronously inside pause().
-  class PausingTransport extends ManualTransport {
-    override async pause(): Promise<void> {
-      this.emitEvent({ type: "pause", snapshot: { ...this.snapshot, state: "paused" } });
-    }
-  }
 
   it("finishes a catch-up batch that a step listener pauses, without replaying it after resume", async () => {
     const transport = new PausingTransport();
@@ -1160,5 +1166,526 @@ describe("ArrangementEngine — RC1G re-entrancy", () => {
 
     expect(playback).toEqual(["play:command", "pause:command", "ended:local-end"]);
     expect(engine.getPlaybackState()).toBe("ended");
+  });
+});
+
+describe("ArrangementEngine — RC1H catch-up", () => {
+  type Section = { id: string; startBeat: number; endBeat: number };
+  // One 4-step pattern at 1 step per beat; at 120 bpm a beat is BEAT_MS.
+  const arrangementOf = (durationBeats: number, sections: Section[]): ArrangementProject =>
+    createArrangement({
+      timing: { bpm: 120 },
+      durationBeats,
+      patterns: { p: createProject({ stepCount: 4, stepsPerBeat: 1, trackCount: 1 }) },
+      sections: sections.map((section) => ({ ...section, patternId: "p" })),
+    });
+  const whole = (durationBeats: number): ArrangementProject =>
+    arrangementOf(durationBeats, [{ id: "s", startBeat: 0, endBeat: durationBeats }]);
+
+  const record = (engine: ArrangementEngine): string[] => {
+    const log: string[] = [];
+    engine.on("playback", (event) => log.push(`playback:${event.type}`));
+    engine.on("section", (event) =>
+      log.push(`section:${event.cause}:${event.section?.id ?? "null"}@${event.positionMs}/${event.beat}+${event.lateByMs}`),
+    );
+    engine.on("step", (event) =>
+      log.push(`step:${event.cause}:${event.stepIndex}@${event.scheduledPositionMs}+${event.lateByMs}`),
+    );
+    return log;
+  };
+
+  // Plays from 0 on a hand-driven transport and clears the play events.
+  const start = async (
+    arrangement: ArrangementProject,
+    options: { loop?: boolean; missedStepPolicy?: "emit" | "skip"; transport?: ManualTransport } = {},
+  ): Promise<{ transport: ManualTransport; engine: ArrangementEngine; log: string[] }> => {
+    const transport = options.transport ?? new ManualTransport();
+    const engine = new ArrangementEngine(arrangement, {
+      transport,
+      lookaheadMs: 10,
+      loop: options.loop,
+      missedStepPolicy: options.missedStepPolicy,
+    });
+    const log = record(engine);
+    await engine.play();
+    log.length = 0;
+    return { transport, engine, log };
+  };
+
+  // Moves the transport without a seek and runs the next tick.
+  const tickAt = async (transport: ManualTransport, positionMs: number): Promise<void> => {
+    transport.snapshot = { ...transport.snapshot, positionMs };
+    await vi.advanceTimersByTimeAsync(10);
+  };
+
+  // A pause the transport reports on its own (or before the Engine ticks).
+  const pauseAt = (transport: ManualTransport, positionMs: number): void => {
+    transport.emitEvent({ type: "pause", snapshot: { ...transport.snapshot, state: "paused", positionMs } });
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // PB-EN-008 (delayed callback with emit) and PB-EN-009 (with skip) for
+  // Arrangement: AR-012 to AR-015.
+  it("AR-012 dispatches every step crossed by a loop wrap that lands on the last emitted step, relative to the landing iteration", async () => {
+    const { transport, log } = await start(whole(4), { loop: true });
+
+    await tickAt(transport, 600);
+    await tickAt(transport, 2600);
+
+    // A single-section loop crosses its iteration boundary without a section event.
+    expect(log).toEqual([
+      "step:tick:1@500+100",
+      "step:tick:2@-1000+1600",
+      "step:tick:3@-500+1100",
+      "step:tick:0@0+600",
+      "step:tick:1@500+100",
+    ]);
+  });
+
+  it("AR-012 dispatches every step across two loop iterations in order", async () => {
+    const { transport, engine, log } = await start(whole(4), { loop: true });
+
+    await tickAt(transport, 600);
+    log.length = 0;
+    await tickAt(transport, 5250);
+
+    expect(log).toEqual([
+      "step:tick:2@-3000+4250",
+      "step:tick:3@-2500+3750",
+      "step:tick:0@-2000+3250",
+      "step:tick:1@-1500+2750",
+      "step:tick:2@-1000+2250",
+      "step:tick:3@-500+1750",
+      "step:tick:0@0+1250",
+      "step:tick:1@500+750",
+      "step:tick:2@1000+250",
+    ]);
+    expect(engine.getPosition().positionMs).toBe(1250);
+  });
+
+  it("AR-013 interleaves section changes and steps in time order across a loop wrap", async () => {
+    const { transport, log } = await start(
+      arrangementOf(4, [
+        { id: "a", startBeat: 0, endBeat: 2 },
+        { id: "b", startBeat: 2, endBeat: 4 },
+      ]),
+      { loop: true },
+    );
+
+    await tickAt(transport, 300);
+    await tickAt(transport, 2250);
+
+    expect(log).toEqual([
+      "step:tick:1@-1500+1750",
+      "section:tick:b@-1000/2+1250",
+      "step:tick:0@-1000+1250",
+      "step:tick:1@-500+750",
+      "section:tick:a@0/0+250",
+      "step:tick:0@0+250",
+    ]);
+  });
+
+  it("AR-013 dispatches the rest of a section, the gap, and the next section in time order", async () => {
+    const { transport, log } = await start(
+      arrangementOf(6, [
+        { id: "a", startBeat: 0, endBeat: 2 },
+        { id: "b", startBeat: 4, endBeat: 6 },
+      ]),
+    );
+
+    await tickAt(transport, 250);
+    await tickAt(transport, 2500);
+
+    expect(log).toEqual([
+      "step:tick:1@500+2000",
+      "section:tick:null@1000/2+1500",
+      "section:tick:b@2000/4+500",
+      "step:tick:0@2000+500",
+      "step:tick:1@2500+0",
+    ]);
+  });
+
+  it("AR-014 dispatches the remaining steps before local end when a delayed tick crosses it", async () => {
+    const { transport, engine, log } = await start(whole(4));
+
+    await tickAt(transport, 600);
+    await tickAt(transport, 2100);
+
+    expect(log).toEqual([
+      "step:tick:1@500+100",
+      "step:tick:2@1000+1000",
+      "step:tick:3@1500+500",
+      "section:tick:null@2000/4+0",
+      "playback:ended",
+    ]);
+    expect(engine.getPlaybackState()).toBe("ended");
+  });
+
+  it("AR-014 dispatches the steps before a trailing gap, then local end", async () => {
+    const { transport, log } = await start(arrangementOf(6, [{ id: "s", startBeat: 0, endBeat: 4 }]));
+
+    await tickAt(transport, 600);
+    await tickAt(transport, 2100);
+    await tickAt(transport, 3100);
+
+    expect(log).toEqual([
+      "step:tick:1@500+100",
+      "step:tick:2@1000+1100",
+      "step:tick:3@1500+600",
+      "section:tick:null@2000/4+100",
+      "section:tick:null@3000/6+0",
+      "playback:ended",
+    ]);
+  });
+
+  it("AR-015 skip emits only the landing step across a wrap that lands on the same step", async () => {
+    const { transport, log } = await start(whole(4), { loop: true, missedStepPolicy: "skip" });
+
+    await tickAt(transport, 600);
+    await tickAt(transport, 2600);
+
+    expect(log).toEqual(["step:tick:1@500+100", "step:tick:1@500+100"]);
+  });
+
+  it("AR-015 skip emits no step for a landing position in a gap, then the section change and landing step", async () => {
+    const { transport, log } = await start(
+      arrangementOf(6, [
+        { id: "a", startBeat: 0, endBeat: 2 },
+        { id: "b", startBeat: 4, endBeat: 6 },
+      ]),
+      { missedStepPolicy: "skip" },
+    );
+
+    await tickAt(transport, 1500);
+    await tickAt(transport, 2750);
+
+    expect(log).toEqual([
+      "section:tick:null@1000/2+500",
+      "section:tick:b@2000/4+750",
+      "step:tick:1@2500+250",
+    ]);
+  });
+
+  it("AR-012 lets an Envelope triggered at a previous-iteration step see its real lateness", async () => {
+    const { transport, engine } = await start(whole(4), { loop: true });
+    const envelope = createEnvelope({ decay: 2000 });
+    let lateByMs = Number.NaN;
+    engine.on("step", (event) => {
+      if (event.cause === "tick" && event.stepIndex === 3) {
+        envelope.trigger(event.scheduledPositionMs);
+        lateByMs = event.lateByMs;
+      }
+    });
+
+    await tickAt(transport, 600);
+    await tickAt(transport, 2600);
+
+    expect(lateByMs).toBe(1100);
+    expect(envelope.sample(engine.getPosition().positionMs)).toBeCloseTo(1 - lateByMs / 2000);
+  });
+
+  it("RC1G stops a cross-iteration batch when a step listener seeks, without replaying it", async () => {
+    const { transport, engine, log } = await start(whole(4), { loop: true });
+    engine.on("step", (event) => {
+      if (event.cause === "tick" && event.scheduledPositionMs === -2000) void engine.seekPositionMs(500);
+    });
+
+    await tickAt(transport, 600);
+    log.length = 0;
+    await tickAt(transport, 5250);
+    await tickAt(transport, 700);
+    await tickAt(transport, 1100);
+
+    expect(log).toEqual([
+      "step:tick:2@-3000+4250",
+      "step:tick:3@-2500+3750",
+      "step:tick:0@-2000+3250",
+      "playback:seek",
+      "section:seek:s@500/1+0",
+      "step:seek:1@500+0",
+      "step:tick:2@1000+100",
+    ]);
+  });
+
+  it("RC1G stops a cross-iteration batch when a step listener hot-swaps, without replaying it", async () => {
+    const { transport, engine, log } = await start(whole(4), { loop: true });
+    const replacement = whole(4);
+    engine.on("step", (event) => {
+      if (event.cause === "tick" && event.scheduledPositionMs === -2500) engine.setArrangement(replacement);
+    });
+
+    await tickAt(transport, 600);
+    log.length = 0;
+    await tickAt(transport, 5250);
+    await tickAt(transport, 5350);
+    await tickAt(transport, 5800);
+
+    expect(log).toEqual([
+      "step:tick:2@-3000+4250",
+      "step:tick:3@-2500+3750",
+      "section:project-change:s@1250/2.5+0",
+      "step:tick:3@1500+300",
+    ]);
+  });
+
+  it("RC1G resumes a batch abandoned by a re-entrant setLoop without replaying its steps", async () => {
+    const { transport, engine, log } = await start(whole(4));
+    engine.on("step", (event) => {
+      if (event.cause === "tick" && event.stepIndex === 2) engine.setLoop(true);
+    });
+
+    await tickAt(transport, 600);
+    await tickAt(transport, 1800);
+    await tickAt(transport, 1900);
+    await tickAt(transport, 2100);
+
+    expect(log).toEqual([
+      "step:tick:1@500+100",
+      "step:tick:2@1000+800",
+      "playback:loopchange",
+      "step:tick:3@1500+400",
+      "step:tick:0@0+100",
+    ]);
+  });
+
+  it("delivers a step that began between the last tick and a pause as a late tick step after resume", async () => {
+    const { transport, engine, log } = await start(whole(8));
+
+    await tickAt(transport, 600);
+    pauseAt(transport, 1100);
+    await engine.play();
+    await tickAt(transport, 1150);
+
+    expect(log).toEqual(["step:tick:1@500+100", "playback:pause", "playback:play", "step:tick:2@1000+150"]);
+  });
+
+  it("re-anchors on a transport-level backward move and emits the landing step only when it changed", async () => {
+    const { transport, log } = await start(whole(8));
+
+    await tickAt(transport, 600);
+    await tickAt(transport, 1600);
+    await tickAt(transport, 100);
+    await tickAt(transport, 90);
+    await tickAt(transport, 600);
+
+    expect(log).toEqual([
+      "step:tick:1@500+100",
+      "step:tick:2@1000+600",
+      "step:tick:3@1500+100",
+      "step:tick:0@0+100",
+      "step:tick:1@500+100",
+    ]);
+  });
+
+  it("emits the landing section on a backward move out of a gap, and nothing within it", async () => {
+    const { transport, log } = await start(arrangementOf(6, [{ id: "a", startBeat: 0, endBeat: 4 }]));
+
+    await tickAt(transport, 2500);
+    log.length = 0;
+    await tickAt(transport, 2200);
+    await tickAt(transport, 100);
+
+    expect(log).toEqual(["section:tick:a@100/0.2+0", "step:tick:0@0+100"]);
+  });
+
+  it("does not emit a stale landing step after a section listener seeks on a backward move", async () => {
+    const { transport, engine, log } = await start(arrangementOf(6, [{ id: "a", startBeat: 0, endBeat: 4 }]));
+    engine.on("section", (event) => {
+      if (event.cause === "tick" && event.section?.id === "a") void engine.seekPositionMs(1000);
+    });
+
+    await tickAt(transport, 2500);
+    log.length = 0;
+    await tickAt(transport, 100);
+
+    expect(log).toEqual([
+      "section:tick:a@100/0.2+0",
+      "playback:seek",
+      "section:seek:a@1000/2+0",
+      "step:seek:2@1000+0",
+    ]);
+  });
+
+  it("PB-EN-030 dispatches the remaining steps and terminal section between a late pause and local end", async () => {
+    const { clock, transport } = buildTransport();
+    const engine = new ArrangementEngine(whole(4), { transport, lookaheadMs: 10 });
+    const log = record(engine);
+
+    await engine.play();
+    clock.advance(600);
+    await vi.advanceTimersByTimeAsync(10);
+    log.length = 0;
+    clock.advance(1500);
+    await engine.pause();
+
+    expect(log).toEqual([
+      "playback:pause",
+      "step:tick:2@1000+1000",
+      "step:tick:3@1500+500",
+      "section:tick:null@2000/4+0",
+      "playback:ended",
+    ]);
+    expect(engine.getPlaybackState()).toBe("ended");
+  });
+
+  it("PB-EN-030 finishes a local-end batch that a step listener pauses before announcing local end once", async () => {
+    const { transport, engine, log } = await start(whole(4), { transport: new PausingTransport() });
+    engine.on("step", (event) => {
+      if (event.cause === "tick" && event.stepIndex === 2) void engine.pause();
+    });
+
+    await tickAt(transport, 2100);
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(log).toEqual([
+      "step:tick:1@500+1500",
+      "step:tick:2@1000+1000",
+      "playback:pause",
+      "step:tick:3@1500+500",
+      "section:tick:null@2000/4+0",
+      "playback:ended",
+    ]);
+    expect(engine.getPlaybackState()).toBe("ended");
+  });
+
+  it("PB-EN-030 lets a pause listener that seeks take over local end", async () => {
+    const { transport, engine, log } = await start(whole(4));
+    engine.on("playback", (event) => {
+      if (event.type === "pause") void engine.seekPositionMs(500);
+    });
+
+    await tickAt(transport, 600);
+    log.length = 0;
+    pauseAt(transport, 2100);
+
+    expect(log).toEqual(["playback:pause", "playback:seek", "section:seek:s@500/1+0", "step:seek:1@500+0"]);
+    expect(engine.getPlaybackState()).toBe("paused");
+  });
+
+  it("PB-EN-030 announces local end once when a pause listener seeks and then loads a shorter arrangement", async () => {
+    const { transport, engine, log } = await start(whole(4));
+    engine.on("playback", (event) => {
+      if (event.type !== "pause") return;
+      void engine.seekPositionMs(500);
+      engine.setArrangement(whole(1));
+    });
+
+    await tickAt(transport, 600);
+    log.length = 0;
+    pauseAt(transport, 2100);
+
+    expect(log.filter((entry) => entry.startsWith("playback:"))).toEqual([
+      "playback:pause",
+      "playback:seek",
+      "playback:ended",
+    ]);
+    expect(engine.getPlaybackState()).toBe("ended");
+  });
+
+  it("PB-EN-030 stops finishing local end when a step listener disposes the Engine", async () => {
+    const onListenerError = vi.fn();
+    const transport = new ManualTransport();
+    const engine = new ArrangementEngine(whole(4), { transport, lookaheadMs: 10, onListenerError });
+    const steps: number[] = [];
+    engine.on("step", (event) => {
+      steps.push(event.stepIndex);
+      if (event.cause === "tick" && event.stepIndex === 2) engine.dispose();
+    });
+
+    await engine.play();
+    await tickAt(transport, 600);
+    pauseAt(transport, 2100);
+
+    expect(steps).toEqual([0, 1, 2]);
+    expect(onListenerError).not.toHaveBeenCalled();
+  });
+
+  it("dispatches a step whose start a tick lands on exactly when ms -> beat rounds below it", async () => {
+    const arrangement = createArrangement({
+      timing: { bpm: 90 },
+      durationBeats: 8,
+      patterns: { p: createProject({ stepCount: 4, stepsPerBeat: 1, trackCount: 1 }) },
+      sections: [{ id: "s", patternId: "p", startBeat: 0, endBeat: 8 }],
+    });
+    const stepSevenMs = beatToMs(arrangement.timing, 7);
+    const { transport, log } = await start(arrangement);
+
+    await tickAt(transport, stepSevenMs);
+    await tickAt(transport, stepSevenMs + 1);
+
+    expect(log.at(-1)).toBe(`step:tick:3@${stepSevenMs}+0`);
+    expect(log.filter((entry) => entry.startsWith("step:"))).toHaveLength(7);
+  });
+
+  it("PB-EN-030 still finishes local end when a pause listener enables loop, which keeps the Engine ended", async () => {
+    const { transport, engine, log } = await start(whole(4));
+    engine.on("playback", (event) => {
+      if (event.type === "pause") engine.setLoop(true);
+    });
+
+    await tickAt(transport, 600);
+    log.length = 0;
+    pauseAt(transport, 2100);
+
+    expect(log).toEqual([
+      "playback:pause",
+      "playback:loopchange",
+      "step:tick:2@1000+1000",
+      "step:tick:3@1500+500",
+      "section:tick:null@2000/4+0",
+      "playback:ended",
+    ]);
+    expect(engine.getPlaybackState()).toBe("ended");
+  });
+
+  it("PB-EN-030 still finishes local end when a pause listener enables and then disables loop", async () => {
+    const { transport, engine, log } = await start(whole(4));
+    engine.on("playback", (event) => {
+      if (event.type !== "pause") return;
+      engine.setLoop(true);
+      engine.setLoop(false);
+    });
+
+    await tickAt(transport, 600);
+    log.length = 0;
+    pauseAt(transport, 2100);
+
+    expect(log).toEqual([
+      "playback:pause",
+      "playback:loopchange",
+      "playback:loopchange",
+      "step:tick:2@1000+1000",
+      "step:tick:3@1500+500",
+      "section:tick:null@2000/4+0",
+      "playback:ended",
+    ]);
+    expect(engine.getPlaybackState()).toBe("ended");
+  });
+
+  it("PB-EN-030 does not announce local end after a terminal section listener seeks", async () => {
+    const { transport, engine, log } = await start(whole(4));
+    engine.on("section", (event) => {
+      if (event.cause === "tick" && event.section === null) void engine.seekPositionMs(0);
+    });
+
+    await tickAt(transport, 1600);
+    log.length = 0;
+    pauseAt(transport, 2100);
+
+    expect(log).toEqual([
+      "playback:pause",
+      "section:tick:null@2000/4+0",
+      "playback:seek",
+      "section:seek:s@0/0+0",
+      "step:seek:0@0+0",
+    ]);
+    expect(engine.getPlaybackState()).toBe("paused");
   });
 });

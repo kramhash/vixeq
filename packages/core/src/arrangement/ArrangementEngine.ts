@@ -52,6 +52,29 @@ type ArrangementStepResolution = {
   scheduledPositionMs: number;
 };
 
+// One section boundary or step start that a tick dispatches, at its raw
+// (anchor-adjusted, un-normalized) position.
+type DueItem =
+  | {
+    kind: "section";
+    rawPositionMs: number;
+    section: ArrangementSection | null;
+    beat: number;
+  }
+  | {
+    kind: "step";
+    rawPositionMs: number;
+    iteration: number;
+    resolved: ArrangementStepResolution;
+  };
+
+// A pause that took a playing Engine to local end, as dispatch stood before
+// its listeners ran (see finishLocalEndPause).
+type LocalEndPause = {
+  generation: number;
+  endedExits: number;
+};
+
 export type ArrangementEngineOptions = {
   transport?: PlaybackTransport;
   /** Max ms between polls while playing. Default 25. */
@@ -135,19 +158,35 @@ export class ArrangementEngine {
   private cachedPositionMs = 0;
   private currentSection: ArrangementSection | null = null;
   private lastSectionId: string | null | undefined = undefined;
+  // Identity (loop iteration, section, and absolute section step) of the last
+  // emitted step. Only a position that moves backwards without a seek compares
+  // it (see emitDueItems); forward dispatch is deduplicated by the cursor.
   private lastEmittedStepKey: string | null = null;
-  private lastEmittedScheduledPositionMs: number | null = null;
+  // Exclusive dispatch cursor in the raw position domain
+  // (positionFromTransportPosition()). It advances with every dispatched item,
+  // so a batch abandoned by a re-entrant setLoop() resumes without duplicates.
+  private lastDispatchedRawPositionMs = 0;
   private projectAnchor: ProjectPositionAnchor | null = null;
   private endedReplaySeekMode: "seek-as-play" | "suppress-seek" | null = null;
   private pendingEndedReplayPlay = false;
   private readonly pendingCommandEvents: PlaybackTransportEvent["type"][] = [];
   // Bumped by every command or transport event that re-anchors or ends step
   // dispatch (seek, stop, ended, play from stopped/ended, setArrangement,
-  // setLoop, transport or Engine disposal). Pause does not bump: it leaves the
+  // setLoop unless it keeps the Engine at local end, transport or Engine
+  // disposal). Pause does not bump: it leaves the
   // cursor in place. A tick compares it
   // after each listener and abandons the rest of its dispatch when it changed:
   // the re-entrant call has already re-anchored the cursor and rescheduled.
   private dispatchGeneration = 0;
+  // Set while a dispatch batch runs (see runDispatch). A step or section
+  // listener whose pause takes the Engine to local end records that pause and
+  // leaves the batch to finish local end once it is complete.
+  private activeDispatch: { pause: LocalEndPause | null } | null = null;
+  // Counts every move out of `ended` (see applyTransportSnapshot). A move out
+  // of `ended` after a pause took it to local end has taken over (even if a
+  // later command re-enters `ended` and announces it), so that pause no longer
+  // announces `ended`.
+  private endedExits = 0;
 
   constructor(arrangement: ArrangementProject, options: ArrangementEngineOptions = {}) {
     if (!isRecord(options)) {
@@ -188,7 +227,8 @@ export class ArrangementEngine {
     const resolved = this.resolveAtPosition(this.cachedPositionMs);
     this.currentSection = resolved?.section ?? null;
     this.lastSectionId = this.currentSection?.id ?? null;
-    this.lastEmittedStepKey = resolved ? this.stepKey(resolved) : null;
+    this.lastDispatchedRawPositionMs = this.getRawPositionMs();
+    this.lastEmittedStepKey = resolved ? this.stepKey(resolved, this.getIteration(this.lastDispatchedRawPositionMs)) : null;
 
     this.unsubscribeTransport = this.transport.subscribe((event) => this.handleTransportEvent(event));
     this.rescheduleIfPlaying();
@@ -274,10 +314,15 @@ export class ArrangementEngine {
     }
 
     const previousState = this.playbackState;
-    this.dispatchGeneration += 1;
     this.localLoop = loop;
     if (!(previousState === "ended" && loop)) {
       this.applyTransportSnapshot(this.readTransportSnapshot());
+    }
+    // A toggle that keeps the Engine at local end (enabling loop from `ended`,
+    // or disabling it while still past the end) does not re-anchor dispatch,
+    // so a local-end pause in progress still finishes.
+    if (previousState !== "ended" || this.playbackState !== "ended") {
+      this.dispatchGeneration += 1;
     }
     this.emitPlayback("loopchange", "command", previousState);
 
@@ -341,6 +386,9 @@ export class ArrangementEngine {
       projectPositionMs: nextPositionMs,
     };
     this.cachedPositionMs = nextPositionMs;
+    // Steps of the new arrangement at or before the anchored position are not
+    // dispatched retroactively.
+    this.lastDispatchedRawPositionMs = nextPositionMs;
     this.applyTransportSnapshot(this.readTransportSnapshot());
 
     const channels = this.sampleArrangementChannels(this.arrangement, this.cachedPositionMs);
@@ -470,6 +518,7 @@ export class ArrangementEngine {
       this.emitPlayback(event.type, cause, playbackPreviousState);
       if (previousState === "stopped" || previousState === "ended" || isEndedReplayPlay) {
         this.dispatchGeneration += 1;
+        this.lastDispatchedRawPositionMs = this.getRawPositionMs();
         this.emitSectionForPosition(this.getLogicalPositionMs(), "play", true);
         this.emitStepForPosition(this.getLogicalPositionMs(), "play");
       }
@@ -478,15 +527,26 @@ export class ArrangementEngine {
     }
 
     if (event.type === "pause") {
+      // Pause neither moves the dispatch cursor nor bumps dispatchGeneration:
+      // steps passed before a late pause go out on the first tick after resume,
+      // and a batch that a listener pauses runs to completion. The local-end
+      // tick sets "ended" before its terminal section event, so a pause from a
+      // section listener there arrives with previousState "ended" and is
+      // announced by tick() instead.
       this.clearTimer();
+      const reachedLocalEnd = previousState === "playing" && this.playbackState === "ended";
+      // Captured before the pause listeners run: one that re-entrantly replays,
+      // seeks, or hot-swaps has already re-anchored dispatch.
+      const pause: LocalEndPause = { generation: this.dispatchGeneration, endedExits: this.endedExits };
       this.emitPlayback(event.type, cause, previousState);
-      // A pause that lands at or past local end still announces local end. The
-      // local-end tick sets "ended" before it emits, so a pause from a section
-      // listener there arrives with previousState "ended" and is announced by
-      // tick() instead.
-      if (previousState === "playing" && this.playbackState === "ended") {
-        this.emitPlayback("ended", "local-end", previousState);
+      if (!reachedLocalEnd) {
+        return;
       }
+      if (this.activeDispatch) {
+        this.activeDispatch.pause = pause;
+        return;
+      }
+      this.finishLocalEndPause(pause);
       return;
     }
 
@@ -496,7 +556,7 @@ export class ArrangementEngine {
       this.cachedPositionMs = 0;
       this.lastSectionId = undefined;
       this.lastEmittedStepKey = null;
-      this.lastEmittedScheduledPositionMs = null;
+      this.lastDispatchedRawPositionMs = 0;
       this.emitPlayback(event.type, cause, previousState);
       return;
     }
@@ -504,6 +564,7 @@ export class ArrangementEngine {
     if (event.type === "seek") {
       this.dispatchGeneration += 1;
       this.clearTimer();
+      this.lastDispatchedRawPositionMs = this.getRawPositionMs();
       if (previousState === "ended" && this.endedReplaySeekMode === "suppress-seek") {
         this.endedReplaySeekMode = null;
         this.pendingEndedReplayPlay = true;
@@ -584,6 +645,14 @@ export class ArrangementEngine {
   }
 
   private applyTransportSnapshot(snapshot: PlaybackSnapshot): void {
+    const wasEnded = this.playbackState === "ended";
+    this.applySnapshotState(snapshot);
+    if (wasEnded && this.playbackState !== "ended") {
+      this.endedExits += 1;
+    }
+  }
+
+  private applySnapshotState(snapshot: PlaybackSnapshot): void {
     this.buffering = snapshot.buffering;
 
     if (snapshot.state === "stopped") {
@@ -634,11 +703,15 @@ export class ArrangementEngine {
     }
 
     const previousState = this.playbackState;
-    const rawPositionMs = this.positionFromTransportPosition(this.getTransportPositionMs());
-    const positionMs = this.normalizePosition(rawPositionMs);
+    const rawPositionMs = this.getRawPositionMs();
 
     if (this.isAtOrPastLocalEnd(rawPositionMs)) {
-      this.emitDueSteps(this.getDurationMs());
+      // A listener that re-entrantly seeks, stops, hot-swaps, toggles loop, or
+      // disposes has already re-anchored playback (and announced any local end
+      // itself); one that pauses has had local end finished by runDispatch.
+      if (!this.runDispatch(() => this.emitDueItems(this.getDurationMs()))) {
+        return;
+      }
       this.cachedPositionMs = this.getDurationMs();
       this.playbackState = "ended";
       this.emitSectionForPosition(this.cachedPositionMs, "tick", true);
@@ -651,76 +724,165 @@ export class ArrangementEngine {
       return;
     }
 
-    const generation = this.dispatchGeneration;
-    this.cachedPositionMs = positionMs;
-    this.emitSectionForPosition(positionMs, "tick", false);
-    // A section listener may re-entrantly reset dispatch; the steps due at this
-    // tick's position are stale then.
-    if (this.dispatchGeneration !== generation) {
-      return;
+    this.cachedPositionMs = this.normalizePosition(rawPositionMs);
+    // A listener that re-entrantly reset dispatch has already rescheduled.
+    if (this.runDispatch(() => this.emitDueItems(rawPositionMs))) {
+      this.scheduleNextTick();
     }
-    this.emitDueSteps(positionMs);
-    this.scheduleNextTick();
   }
 
-  private emitDueSteps(positionMs: number): void {
-    const resolved = this.resolveAtPosition(positionMs);
-    if (!resolved) {
+  /**
+   * Runs one dispatch batch. When a listener's pause takes the Engine to local
+   * end during it, the batch runs to completion first, then local end is
+   * finished. Returns `false` when the batch was abandoned or ended that way.
+   */
+  private runDispatch(dispatch: () => boolean): boolean {
+    const outerDispatch = this.activeDispatch;
+    const batch: { pause: LocalEndPause | null } = { pause: null };
+    this.activeDispatch = batch;
+    const completed = dispatch();
+    this.activeDispatch = outerDispatch;
+    if (batch.pause === null) {
+      return completed;
+    }
+    this.finishLocalEndPause(batch.pause);
+    return false;
+  }
+
+  /**
+   * Finishes a pause that took a playing Engine to local end, like the
+   * local-end tick: the steps and section changes due up to local end, the
+   * terminal section, then `ended`. The dispatch is skipped when a listener
+   * re-anchored it after the pause. Announce unless a listener disposed the
+   * Engine or moved it out of `ended` since the pause (a command that later
+   * re-enters `ended`, such as a replay or a shorter hot-swap, announces its
+   * own).
+   */
+  private finishLocalEndPause(pause: LocalEndPause): void {
+    if (this.dispatchGeneration === pause.generation) {
+      // Local end was reached without loop; a pause listener that enabled loop
+      // since then has left the Engine ended there.
+      this.emitDueItems(this.getDurationMs(), false);
+    }
+    if (!this.isLocalEndPauseCurrent(pause)) {
       return;
     }
-
-    // Unlike SequencerEngine's ever-increasing absolute-step counter (which
-    // needed an explicit "loop" transport-event branch to re-anchor after a
-    // position wrap — see StepEventCause's "loop" member and
-    // SequencerEngine.ts), this guard compares section+step identity. A
-    // transport loop wrap naturally produces a different stepKey than the
-    // one last emitted, so re-emission resumes on its own; ArrangementEngine
-    // does not need (and does not implement) a "loop"-caused step.
-    const stepKey = this.stepKey(resolved);
-    if (this.lastEmittedStepKey === stepKey) {
+    this.emitSectionForPosition(this.getDurationMs(), "tick", true);
+    if (!this.isLocalEndPauseCurrent(pause)) {
       return;
     }
+    this.emitPlayback("ended", "local-end", "playing");
+  }
 
-    if (this.missedStepPolicy === "skip" || this.lastEmittedScheduledPositionMs === null) {
-      this.emitStepResolution(resolved, "tick", positionMs);
-      return;
+  private isLocalEndPauseCurrent(pause: LocalEndPause): boolean {
+    return !this.disposed && this.playbackState === "ended" && this.endedExits === pause.endedExits;
+  }
+
+  /**
+   * Dispatches the section changes and step starts in
+   * `(lastDispatchedRawPositionMs, toRawPositionMs]` in time order. Returns
+   * `false` when a listener re-entrantly reset dispatch (seek, stop, hot-swap,
+   * loop toggle, disposal): the rest of the batch is stale then.
+   */
+  private emitDueItems(toRawPositionMs: number, looping = this.localLoop): boolean {
+    const fromRawPositionMs = this.lastDispatchedRawPositionMs;
+    const transportPositionMs = looping
+      ? this.normalizePosition(toRawPositionMs)
+      : Math.min(toRawPositionMs, this.getDurationMs());
+
+    if (toRawPositionMs < fromRawPositionMs) {
+      return this.emitAfterBackwardMove(toRawPositionMs, transportPositionMs);
     }
 
-    const dueSteps = this.getDueStepResolutions(this.lastEmittedScheduledPositionMs, positionMs);
-    if (dueSteps.length === 0) {
-      this.emitStepResolution(resolved, "tick", positionMs);
-      return;
+    const durationMs = this.getDurationMs();
+    // Positions are reported relative to the loop iteration the tick landed
+    // in, so steps of earlier iterations have negative scheduled positions.
+    const landingOffsetMs = this.getIteration(toRawPositionMs, looping) * durationMs;
+    let items = this.getDueItems(fromRawPositionMs, toRawPositionMs, looping);
+    if (this.missedStepPolicy === "skip") {
+      items = this.getSkipItems(items, transportPositionMs);
     }
 
     const generation = this.dispatchGeneration;
-    for (const dueStep of dueSteps) {
-      // A step listener may re-entrantly seek, stop, hot-swap, toggle loop, or
-      // dispose; the remaining catch-up steps are stale then.
-      if (this.dispatchGeneration !== generation) {
-        return;
+    for (const item of items) {
+      this.lastDispatchedRawPositionMs = item.rawPositionMs;
+      const positionMs = item.rawPositionMs - landingOffsetMs;
+      if (item.kind === "section") {
+        this.emitSectionChange(item.section, item.beat, positionMs, transportPositionMs);
+      } else {
+        this.emitStepResolution(item.resolved, item.iteration, "tick", transportPositionMs, positionMs);
       }
-      this.emitStepResolution(dueStep, "tick", positionMs);
+      if (this.dispatchGeneration !== generation) {
+        return false;
+      }
     }
+
+    this.lastDispatchedRawPositionMs = toRawPositionMs;
+    return true;
+  }
+
+  /**
+   * A position that moves backwards without a seek (a shared transport that
+   * wraps on its own loop, or a media clock that jitters) re-anchors the
+   * cursor and emits the landing section and step only when they changed.
+   */
+  private emitAfterBackwardMove(toRawPositionMs: number, transportPositionMs: number): boolean {
+    const generation = this.dispatchGeneration;
+    this.lastDispatchedRawPositionMs = toRawPositionMs;
+    this.emitSectionForPosition(transportPositionMs, "tick", false);
+    if (this.dispatchGeneration !== generation) {
+      return false;
+    }
+    const resolved = this.resolveAtPosition(transportPositionMs);
+    const iteration = this.getIteration(toRawPositionMs);
+    if (resolved && this.stepKey(resolved, iteration) !== this.lastEmittedStepKey) {
+      this.emitStepResolution(resolved, iteration, "tick", transportPositionMs);
+    }
+    return this.dispatchGeneration === generation;
+  }
+
+  /**
+   * `"skip"` resolves the landing position only: the section change into it
+   * (at the boundary where it began) and the step there, when that step began
+   * after the cursor. Both are the last items of their kind in the batch.
+   */
+  private getSkipItems(items: DueItem[], transportPositionMs: number): DueItem[] {
+    let sectionItem: DueItem | undefined;
+    let stepItem: DueItem | undefined;
+    for (const item of items) {
+      if (item.kind === "section") {
+        sectionItem = item;
+      } else {
+        stepItem = item;
+      }
+    }
+
+    const skipItems = sectionItem ? [sectionItem] : [];
+    // A landing position in a gap or at local end resolves no step; the last
+    // due step then belongs to an earlier section and is skipped.
+    if (stepItem && this.resolveAtPosition(transportPositionMs)) {
+      skipItems.push(stepItem);
+    }
+    return skipItems;
   }
 
   private emitStepForPosition(positionMs: number, cause: StepEventCause): void {
     const resolved = this.resolveAtPosition(positionMs);
     if (!resolved) {
       this.lastEmittedStepKey = null;
-      this.lastEmittedScheduledPositionMs = null;
       return;
     }
-    this.emitStepResolution(resolved, cause, positionMs, positionMs);
+    this.emitStepResolution(resolved, this.getIteration(this.getRawPositionMs()), cause, positionMs, positionMs);
   }
 
   private emitStepResolution(
     resolved: ArrangementStepResolution,
+    iteration: number,
     cause: StepEventCause,
     transportPositionMs: number,
     scheduledPositionMs = resolved.scheduledPositionMs,
   ): void {
-    this.lastEmittedStepKey = this.stepKey(resolved);
-    this.lastEmittedScheduledPositionMs = scheduledPositionMs;
+    this.lastEmittedStepKey = this.stepKey(resolved, iteration);
     const pattern = this.arrangement.patterns[resolved.section.patternId];
     const nextStepBeat = Math.min(
       resolved.section.endBeat,
@@ -762,14 +924,38 @@ export class ArrangementEngine {
       return;
     }
 
-    this.lastSectionId = sectionId;
+    this.emitSection(section, beat, positionMs, positionMs, cause);
+  }
+
+  /** Emits a section boundary crossed by a tick when it changes the section. */
+  private emitSectionChange(
+    section: ArrangementSection | null,
+    beat: number,
+    positionMs: number,
+    transportPositionMs: number,
+  ): void {
+    if ((section?.id ?? null) === this.lastSectionId) {
+      return;
+    }
+
+    this.emitSection(section, beat, positionMs, transportPositionMs, "tick");
+  }
+
+  private emitSection(
+    section: ArrangementSection | null,
+    beat: number,
+    positionMs: number,
+    transportPositionMs: number,
+    cause: StepEventCause,
+  ): void {
+    this.lastSectionId = section?.id ?? null;
     this.currentSection = section;
     this.emit("section", {
       section,
       beat,
       positionMs,
-      transportPositionMs: positionMs,
-      lateByMs: 0,
+      transportPositionMs,
+      lateByMs: Math.max(0, transportPositionMs - positionMs),
       cause,
     });
   }
@@ -890,38 +1076,93 @@ export class ArrangementEngine {
     };
   }
 
-  private getDueStepResolutions(afterPositionMs: number, toPositionMs: number): ArrangementStepResolution[] {
-    const due: ArrangementStepResolution[] = [];
-    const fromBeat = msToBeat(this.arrangement.timing, afterPositionMs);
-    const toBeat = msToBeat(this.arrangement.timing, toPositionMs);
+  /**
+   * Collects the section boundaries and step starts in
+   * `(fromRawPositionMs, toRawPositionMs]`, iteration by iteration when
+   * looping, in time order with a section boundary before a step at the same
+   * time. Without loop, local end is exclusive: a step cannot start there.
+   */
+  private getDueItems(fromRawPositionMs: number, toRawPositionMs: number, looping: boolean): DueItem[] {
+    const durationMs = this.getDurationMs();
+    const startIteration = this.getIteration(fromRawPositionMs, looping);
+    const endIteration = this.getIteration(toRawPositionMs, looping);
+    const items: DueItem[] = [];
 
-    for (const section of this.arrangement.sections) {
-      const pattern = this.arrangement.patterns[section.patternId];
-      const firstStep = Math.max(0, Math.floor((fromBeat - section.startBeat) * pattern.stepsPerBeat));
-      const lastStep = Math.floor(
-        (Math.min(toBeat, section.endBeat - 1e-9) - section.startBeat) * pattern.stepsPerBeat,
+    for (let iteration = startIteration; iteration <= endIteration; iteration += 1) {
+      const iterationStartMs = iteration * durationMs;
+      // Each later iteration starts with its beat-0 boundary and steps.
+      const fromLocalMs = iteration === startIteration ? fromRawPositionMs - iterationStartMs : -1;
+      const toLocalMs = Math.min(toRawPositionMs - iterationStartMs, durationMs);
+      this.collectIterationItems(items, iteration, iterationStartMs, fromLocalMs, toLocalMs);
+    }
+
+    const kindOrder = (item: DueItem): number => (item.kind === "section" ? 0 : 1);
+    return items.sort((left, right) =>
+      left.rawPositionMs - right.rawPositionMs || kindOrder(left) - kindOrder(right),
+    );
+  }
+
+  private collectIterationItems(
+    items: DueItem[],
+    iteration: number,
+    iterationStartMs: number,
+    fromLocalMs: number,
+    toLocalMs: number,
+  ): void {
+    const { timing, sections, patterns } = this.arrangement;
+    const isDue = (localMs: number): boolean => localMs > fromLocalMs && localMs <= toLocalMs;
+    const durationBeats = this.getDurationBeats();
+
+    const boundaryBeats = new Set([0, ...sections.flatMap((section) => [section.startBeat, section.endBeat])]);
+    for (const beat of boundaryBeats) {
+      const localMs = beatToMs(timing, beat);
+      if (beat >= durationBeats || !isDue(localMs)) {
+        continue;
+      }
+      items.push({
+        kind: "section",
+        rawPositionMs: iterationStartMs + localMs,
+        section: sectionAtBeat(this.arrangement, beat)?.section ?? null,
+        beat,
+      });
+    }
+
+    const fromBeat = msToBeat(timing, Math.max(0, fromLocalMs));
+    const toBeat = msToBeat(timing, toLocalMs);
+    for (const section of sections) {
+      const pattern = patterns[section.patternId];
+      // The beat range is widened by one step on each side because a ms -> beat
+      // round trip can land an ulp below a step's beat; isDue decides in ms.
+      const sectionLastStep = Math.ceil((section.endBeat - 1e-9 - section.startBeat) * pattern.stepsPerBeat) - 1;
+      const firstStep = Math.max(0, Math.floor((fromBeat - section.startBeat) * pattern.stepsPerBeat) - 1);
+      const lastStep = Math.min(
+        sectionLastStep,
+        Math.floor((toBeat - section.startBeat) * pattern.stepsPerBeat) + 1,
       );
 
       for (let absoluteSectionStep = firstStep; absoluteSectionStep <= lastStep; absoluteSectionStep += 1) {
         const scheduledBeat = section.startBeat + absoluteSectionStep / pattern.stepsPerBeat;
-        const scheduledPositionMs = beatToMs(this.arrangement.timing, scheduledBeat);
-        if (scheduledPositionMs <= afterPositionMs || scheduledPositionMs > toPositionMs) {
+        const scheduledPositionMs = beatToMs(timing, scheduledBeat);
+        if (!isDue(scheduledPositionMs)) {
           continue;
         }
         const stepIndex = ((absoluteSectionStep % pattern.stepCount) + pattern.stepCount) % pattern.stepCount;
-        due.push({
-          section,
-          stepIndex,
-          nextStepIndex: (stepIndex + 1) % pattern.stepCount,
-          phase: 0,
-          absoluteSectionStep,
-          scheduledBeat,
-          scheduledPositionMs,
+        items.push({
+          kind: "step",
+          rawPositionMs: iterationStartMs + scheduledPositionMs,
+          iteration,
+          resolved: {
+            section,
+            stepIndex,
+            nextStepIndex: (stepIndex + 1) % pattern.stepCount,
+            phase: 0,
+            absoluteSectionStep,
+            scheduledBeat,
+            scheduledPositionMs,
+          },
         });
       }
     }
-
-    return due.sort((left, right) => left.scheduledPositionMs - right.scheduledPositionMs);
   }
 
   private getStepKeyAtPosition(positionMs: number, arrangement = this.arrangement): string | null {
@@ -929,8 +1170,18 @@ export class ArrangementEngine {
     return resolved ? `${resolved.section.id}:${resolved.absoluteSectionStep}` : null;
   }
 
-  private stepKey(resolved: ArrangementStepResolution): string {
-    return `${resolved.section.id}:${resolved.absoluteSectionStep}`;
+  private stepKey(resolved: ArrangementStepResolution, iteration: number): string {
+    return `${iteration}:${resolved.section.id}:${resolved.absoluteSectionStep}`;
+  }
+
+  /** Current position in the raw domain (see lastDispatchedRawPositionMs). */
+  private getRawPositionMs(): number {
+    return this.positionFromTransportPosition(this.getTransportPositionMs());
+  }
+
+  /** Loop iteration of a raw position; always 0 without Project loop. */
+  private getIteration(rawPositionMs: number, looping = this.localLoop): number {
+    return looping ? Math.floor(rawPositionMs / this.getDurationMs()) : 0;
   }
 
   private sampleArrangementChannels(

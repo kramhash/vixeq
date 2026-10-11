@@ -104,6 +104,10 @@ Status values: `planned`, `covered`, `blocked`.
 | AR-009 | non-looping hot-swap shortens duration below current beat | moves to new end and transitions to ended | covered |
 | AR-010 | looping hot-swap shortens duration below current beat | modulo into new duration and continues | covered |
 | AR-011 | hot-swap forced reposition | exactly one destination step with cause project-change | covered |
+| AR-012 | delayed tick crosses a local loop wrap (missedStepPolicy emit) | every crossed step dispatches in order, including a wrap that lands on the last emitted step; scheduledPositionMs is relative to the landing iteration (negative for earlier iterations) and lateByMs is the real lateness | covered |
+| AR-013 | delayed tick crosses section boundaries or a gap | section changes and steps dispatch in timeline order (section before a step at the same time); section events carry the boundary positionMs/beat and lateByMs | covered |
+| AR-014 | delayed tick or late pause crosses non-looping local end | steps before local end dispatch, then terminal section null, then ended | covered |
+| AR-015 | delayed tick with missedStepPolicy skip | only the landing section change and the landing step (none in a gap or at local end), also across a wrap that lands on the same step | covered |
 
 ## Migration (`MIG-*`)
 

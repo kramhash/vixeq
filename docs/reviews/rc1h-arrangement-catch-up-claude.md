@@ -1,8 +1,8 @@
 # RC1H Arrangement catch-up across loop wrap, gaps, and local end — handoff brief and review
 
-- Status: pending (handoff brief; implementation not started)
-- Author: — (claim the RC1H task-table row before starting)
-- Reviewer: —
+- Status: done (approved in review round 3)
+- Author: Claude
+- Reviewer: Claude critic
 - Origin: out-of-scope observation O1 recorded during RC1G
   (`docs/reviews/rc1g-reentrancy-guards-claude.md`), measured on the RC1G
   working tree (`dffec0d` + RC1G), 2026-10-10. The decisions below were made
@@ -118,6 +118,31 @@ at 120 bpm can lose a whole iteration silently when the tab returns.
   step at the landing position with `cause: "tick"` and re-anchor the cursor.
   Add a test if none covers it for Arrangement (`PB-EN-029` is Sequencer only).
 
+## Decisions added before implementation (owner, 2026-10-11)
+
+- **G1 — pause at local end.** Port Timeline's RC1G machinery to Arrangement
+  (`runDispatch` / `activeDispatch` / `LocalEndPause {generation,
+  endedExits}` / `finishLocalEndPause`, `endedExits` counted in
+  `applyTransportSnapshot`). The pause path emits the remaining steps, the
+  terminal `section` (`null`), then `ended`, like the local-end tick.
+- **G2 — section boundaries.** Candidates are beat 0 and every section's
+  `startBeat` / `endBeat`; a boundary is emitted only when the section there
+  differs from the last one emitted. A single-section loop wraps without a
+  section event. The terminal `section` `null` stays forced.
+- **G3 — skip.** Resolve the landing position only: the landing step if it
+  began after the cursor (none in a gap or at local end), and the section
+  change into the landing section at the boundary where it began.
+- **G4 — backward move without seek (D10, jitter).** Emit the landing step
+  only when its key (with iteration) differs from the last emitted one, and
+  the landing section only when it changed; re-anchor the cursor either way.
+- **G5 — Timeline skip across a wrap** emits one cue per crossed iteration,
+  against the docs. Recorded as RC1I (blocks RC2), not fixed here.
+- **G6 — review stop criteria.** At most three critic rounds: full, then the
+  fixes and their surroundings, then regressions only. Low findings that only
+  a third-party synchronous transport can reach close under the §3.3 known
+  limitation; anything reachable with the built-in transports, or medium and
+  above, is fixed.
+
 ## Recommended design
 
 1. Replace `lastEmittedScheduledPositionMs` with a cursor in the
@@ -205,12 +230,127 @@ Add matrix rows for Arrangement delayed dispatch (or extend `PB-EN-008` /
 
 ## Changed files
 
-_To be filled in by the implementer._
+- `packages/core/src/arrangement/ArrangementEngine.ts`: raw-domain cursor
+  `lastDispatchedRawPositionMs` (replaces `lastEmittedScheduledPositionMs`,
+  advanced per item); `getDueItems` / `collectIterationItems` (section
+  boundaries and step starts per loop iteration, time-ordered);
+  `emitDueItems` (D2 frame, D4/D5, skip via `getSkipItems`, backward move via
+  `emitAfterBackwardMove`); `runDispatch` / `finishLocalEndPause` /
+  `isLocalEndPauseCurrent` / `endedExits` ported from Timeline; section
+  emission split into `emitSectionForPosition` / `emitSectionChange` /
+  `emitSection`; step keys carry the loop iteration. `tick()` no longer emits
+  the landing section before the steps.
+- `packages/core/src/arrangement/ArrangementEngine.test.ts`: new
+  `ArrangementEngine — RC1H catch-up` block (22 tests); `PausingTransport`
+  moved to module scope; two RC1G expectations updated (see Results).
+- `docs/behavior/playback-v2.md`: §5 `ArrangementSectionEvent` type corrected
+  (`beat` / `positionMs`), new "Arrangement delayed-callback dispatch" rules;
+  §3.3 known limitation now covers steps.
+- `docs/behavior/timeline-arrangement-v2.md`, `timeline-arrangement-v2-matrix.md`
+  (AR-012 to AR-015), `CHANGELOG.md`.
+- `docs/plans/v1-collaboration-spec.md`: RC1H row claimed; RC1I row added and
+  made an RC2 dependency; ordering paragraph. `docs/release/1.0-release-checklist.md`:
+  RC1A-RC1I. New brief `docs/reviews/rc1i-timeline-skip-across-wrap-claude.md`.
+- Checked, unchanged: `packages/react/src/useAnimatedChannels.ts` (Envelope
+  trigger at a negative position gives the right elapsed time) and
+  `examples/website-svg/src/useSmoothedChannels.ts` (`clamp01` phase).
 
 ## Commands run
 
-_To be filled in by the implementer._
+- `pnpm typecheck`, `pnpm build`, `pnpm test`, `pnpm test:coverage`,
+  `pnpm api:check`, `pnpm behavior:check` — all exit 0.
+- `pnpm test:coverage` in `packages/core` 10 times in a row — 0 failures.
+- New tests against the RC1G production code (`git show
+  HEAD:packages/core/src/arrangement/ArrangementEngine.ts`), then restored.
+- `examples/arrangement-demo` on `vite` + `playwright-cli` (Chromium): play,
+  jump to the last Chorus, sample `--arr-pulse` every 100 ms across the
+  `<audio loop>` wrap.
 
 ## Results
 
-_To be filled in by the implementer._
+- core 450 tests pass; `ArrangementEngine.ts`, `TimelineEngine.ts`, and
+  `SequencerEngine.ts` at 100% statements/branches/functions/lines; API
+  reports unchanged; behavior matrix 196 covered.
+- Against the RC1G tree, 17 of the 22 new tests fail. The 5 that pass guard
+  behavior RC1H keeps (D8 pause/resume, D10 backward move, a backward-move
+  section listener seek, the setLoop-abandoned batch resume, and a pause
+  listener that seeks). One failing case is a pre-existing double `ended`:
+  a pause listener that seeks and then loads a shorter arrangement got
+  `ended` from both `setArrangement()` and the pause branch.
+- Two existing RC1G tests changed expectation (approved by the owner
+  2026-10-11; both had pinned the lost-step behavior this item fixes, and
+  both keep their intent):
+  - "does not dispatch a stale tick step after a section listener seeks
+    synchronously": `tick:1@500` (step 1 of section `a`) now precedes the
+    section `b` boundary that seeks (D3).
+  - "emits no step after local end when a step listener disables loop mid
+    catch-up": the wrapping tick now dispatches step 1 of the previous
+    iteration as `tick:1@-1500` (D2) before `loopchange` → `ended`.
+- Real run: across the audio wrap (15.97 s → 0.02 s) the pulse envelope fires
+  at 0.02 s (Intro step 0 via the backward-move path) and on every beat after;
+  no console errors. Background-tab timer throttling was not reproduced in
+  the headless browser; the delayed-tick cases are covered by the unit tests.
+
+## Review round 1 (critic, full scope) — changes_requested
+
+Randomized checks (500 trials against a brute-force oracle: tempo map,
+`stepsPerBeat` > 1, gaps, multi-iteration wraps, loop on and off) found no
+lost, duplicated, or out-of-order items. Findings:
+
+- **F1 (low; not reachable with the built-in transports)** — a tick landing
+  exactly on `beatToMs(b)` where `msToBeat` rounds an ulp below `b` (bpm 90,
+  beat 7) never lists step `b` as a candidate, and the cursor then passes it.
+- **F2 (medium; built-in transports)** — a pause listener that calls
+  `setLoop(true)` at local end: Arrangement keeps the Engine `ended`, but the
+  generation bump made `finishLocalEndPause` skip the remaining steps and
+  still emit `ended`. §3.3's "enables loop takes over" holds only for
+  Timeline.
+- **F3 (low; built-in transports)** — `setLoop(false)` while already past
+  local end announces `ended` without the steps between the last tick and
+  local end.
+
+### Fixes (round 1)
+
+- F1: `collectIterationItems` widens the beat-derived step range by one step
+  on each side (capped at the section's last step); `isDue` decides in ms.
+  Test: "dispatches a step whose start a tick lands on exactly when ms -> beat
+  rounds below it".
+- F2: `setLoop(true)` from `ended` no longer bumps `dispatchGeneration` (it
+  does not re-anchor). `finishLocalEndPause` dispatches in the non-loop frame
+  (`emitDueItems(duration, false)`), since local end was reached without loop;
+  without that, the dispatch would count into the next iteration. §3.3 now
+  states the Arrangement exception. Test: "PB-EN-030 still finishes local end
+  when a pause listener enables loop, which keeps the Engine ended".
+- F3: not a defect. Catch-up applies to natural delays only (spec §3.4/§3.6);
+  `setLoop` is a command, like seek and a shortening hot-swap, and Timeline
+  behaves the same. Documented in playback-v2.md §5. The approved RC1G test
+  expectation (`tick:1@-1500` → `loopchange` → `ended`) already pins it.
+- Both new tests fail on the round-0 tree and pass now. All six gates pass
+  (core 452 tests, 100% branches on the three Engines).
+
+## Review round 2 (critic, fixes and surroundings) — changes_requested
+
+F1 verified by a 400-trial property run (exact-ms landings, tempo map, mixed
+`stepsPerBeat`, fractional sections); F3 doc text and the §3.3 sentence match
+the code (Timeline included). One finding:
+
+- **F2a (low; built-in transports)** — a pause listener that calls
+  `setLoop(true)` and then `setLoop(false)` at local end: the second call
+  bumped the generation although the Engine stays `ended`, so the remaining
+  steps were dropped before `ended`.
+
+### Fix (round 2)
+
+- `setLoop` bumps `dispatchGeneration` only when the call re-anchors dispatch:
+  the Engine was not `ended`, or the call moved it out of `ended`. §3.3 says
+  "toggling loop without leaving `ended` does not take over". Test: "PB-EN-030
+  still finishes local end when a pause listener enables and then disables
+  loop".
+
+## Review round 3 (critic, regressions only) — approve
+
+No regression from the round-1 (F1, F2) or round-2 (F2a) fixes: a toggle
+that keeps the Engine `ended` lets an in-flight local-end dispatch finish, a
+`setLoop` that leaves `ended` still re-anchors, the local-end tick's terminal
+section listener and ended replay are unchanged, and the Timeline parity
+statements in §3.3 / §5 hold. Review closed after three rounds (G6).

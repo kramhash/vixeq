@@ -417,13 +417,16 @@ State-preserving operations are no-ops except explicit seek.
   dispatched twice. A listener that takes over and then returns the Engine to
   `ended` gets only what that later command emits on its own: a replay that
   reaches local end again or a shorter hot-swap announces `ended` once, and
-  disabling loop again from `paused` stays silent.
+  disabling loop again from `paused` stays silent. Arrangement keeps an
+  `ended` Engine at local end when loop is enabled, so there toggling loop
+  without leaving `ended` does not take over: local end is still finished (the steps due before it,
+  the terminal `section`, then `ended`).
 - Known limitation: these re-entrancy guarantees are verified for the
   built-in transports, which apply commands asynchronously. With a
   third-party `PlaybackTransport` that applies `pause`, `seek`, `stop`, and
   `play` synchronously, a listener that issues several such commands in a row
-  around local end may still see a duplicated or missing `ended`; cues are
-  not dispatched twice.
+  around local end may still see a duplicated or missing `ended`; steps and
+  cues are not dispatched twice.
 
 ### 3.4 Disposal
 
@@ -519,7 +522,8 @@ Arrangement section transitions use:
 ```ts
 export type ArrangementSectionEvent = {
   section: ArrangementSection | null;
-  scheduledPositionMs: number;
+  beat: number;
+  positionMs: number;
   transportPositionMs: number;
   lateByMs: number;
   cause: StepEventCause;
@@ -528,6 +532,47 @@ export type ArrangementSectionEvent = {
 
 Section events follow the same seek, delayed-callback, and Project-change
 position rules as Step events. They do not expose `timestamp`.
+
+Arrangement delayed-callback dispatch:
+
+- A tick dispatches every section change and step start after the previous
+  tick's position, up to and including its own, across a local loop wrap,
+  inter-section and trailing gaps, and local end. Items are emitted in
+  timeline order; a section change precedes a step that starts at the same
+  time, so the remaining steps of one section come before the next section
+  (or `null` on entering a gap), then that section's steps.
+- A section change is a boundary (beat `0`, a section's `startBeat`, or its
+  `endBeat`) where the active section differs from the last one emitted. A
+  single-section loop crosses its iteration boundary without a section event.
+- `scheduledPositionMs` of a step and `positionMs` of a section event are
+  measured from the start of the loop iteration the tick landed in. Items of
+  that iteration keep their in-iteration values; items of earlier iterations
+  are negative (step 3 of the previous iteration of a 4000 ms loop is
+  `-1000`). `transportPositionMs` is the landing position (loop-normalized,
+  or local end), and `lateByMs = transportPositionMs - scheduledPositionMs`
+  (`- positionMs` for a section event), so an Envelope triggered at
+  `scheduledPositionMs` and sampled at the Engine position sees the real
+  lateness. A section event's `beat` is the boundary's beat within its own
+  iteration and is never negative.
+- Without Project loop, local end is exclusive: steps that start before it
+  and crossed section changes are emitted, then the terminal `section`
+  (`null`) and `ended` (§3.3).
+- `missedStepPolicy: "skip"` resolves the landing position only: the section
+  change into the landing section (if it changed, at the boundary where it
+  began) and the landing step if it began after the previous tick. A landing
+  position in a gap or at local end emits no step.
+- A position that moves backwards without a seek (a shared transport that
+  wraps on its own loop, or a media clock that jitters) emits the landing
+  section and step with `cause: "tick"` only when they differ from the last
+  ones emitted, and dispatch continues from there.
+- Pause keeps the dispatch position: a step that began between the last tick
+  and a pause is emitted as a late `"tick"` step on the first tick after
+  resume. This is not a re-emission of the current step.
+- Catch-up applies to natural delays only. A command never replays the steps
+  it passes: besides seek and a shortening hot-swap, `setLoop(false)` while
+  the position is already past local end enters `ended` and emits the
+  terminal `section` and `ended` without the steps between the last tick and
+  local end (Timeline does the same for cues).
 
 ## 6. Envelope and animation contract
 

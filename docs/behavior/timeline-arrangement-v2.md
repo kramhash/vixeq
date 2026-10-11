@@ -269,6 +269,14 @@ export type ArrangementProject = {
 - A forced reposition from hot-swap emits exactly one destination step with
   `cause: "project-change"`. Intermediate steps between the old and new position
   are never replayed.
+- Natural transport delay applies `missedStepPolicy` across a local loop wrap,
+  section gaps, and local end, with section changes and steps in timeline
+  order (`playback-v2.md` §5, "Arrangement delayed-callback dispatch"). Unlike
+  `TimelineCueEvent`, whose `scheduledPositionMs` is monotonic and carries an
+  `iteration`, an Arrangement step's `scheduledPositionMs` is relative to the
+  loop iteration the tick landed in and is negative for a step of an earlier
+  iteration, because Arrangement samples channels at the loop-normalized
+  position.
 
 ## 5. Migration rules
 

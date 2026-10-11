@@ -54,6 +54,31 @@
   suppresses it; if a later command returns the Engine to `ended`, only that
   command's own event is emitted (for example, a longer then shorter hot-swap
   emits one `ended`, and enabling then disabling loop emits none).
+- `@vixeq/core`: `ArrangementEngine` no longer drops steps when a delayed tick
+  (for example, a background tab throttling timers) crosses a local loop wrap,
+  a section gap, or local end, under `missedStepPolicy: "emit"`:
+  - a wrap that lands on the last emitted step emitted nothing (also under
+    `"skip"`), and a wrap that lands elsewhere emitted only the landing step;
+  - the remaining steps of a section were lost when the tick landed in a gap,
+    a trailing gap, or past local end, including when a `pause()` lands past
+    local end;
+  - section and step events are now emitted in timeline order (the remaining
+    steps of a section before the next `"section"` event), and section events
+    crossed by a delayed tick carry the boundary's `positionMs` / `beat` and
+    a non-zero `lateByMs`.
+  - a tick landing exactly on a step's start could skip that step at some
+    tempos (a millisecond-to-beat rounding error).
+- `@vixeq/core`: `ArrangementEngine` steps of an earlier loop iteration
+  dispatched by a delayed tick have a **negative** `scheduledPositionMs`,
+  measured from the start of the iteration the tick landed in (and section
+  events a negative `positionMs`), so `lateByMs` and Envelopes triggered at
+  `scheduledPositionMs` see the real lateness.
+- `@vixeq/core`: `ArrangementEngine` now emits the terminal `"section"`
+  (`null`) before `ended` when a pause lands at or past local end, and handles
+  a listener that takes over during that pause like `TimelineEngine` (a pause
+  listener that seeks and then loads a shorter arrangement no longer emits
+  `ended` twice). A pause listener that enables loop there no longer drops
+  the remaining steps: the Engine stays `ended` and still finishes local end.
 
 ## 0.9.0 - 2026-07-13
 
