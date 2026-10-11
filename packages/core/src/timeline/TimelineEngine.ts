@@ -41,6 +41,13 @@ type LocalEndPause = {
   endedExits: number;
 };
 
+// A cue due in a dispatch batch, at its loop-monotonic transport-relative position.
+type DueCue<TEvent extends TimelineEvent> = {
+  event: TEvent;
+  iteration: number;
+  scheduledPositionMs: number;
+};
+
 const POSITION_EPSILON_MS = 1e-9;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -699,28 +706,46 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     }
 
     const durationMs = this.getDurationMs();
+    const dueCues: DueCue<TEvent>[] = [];
     if (!this.localLoop) {
-      if (!this.emitDueCuesForIteration(0, fromRawPositionMs, Math.min(toRawPositionMs, durationMs), toRawPositionMs)) {
-        return false;
+      this.collectDueCues(dueCues, 0, fromRawPositionMs, Math.min(toRawPositionMs, durationMs));
+    } else {
+      const startIteration = Math.floor(fromRawPositionMs / durationMs);
+      const endIteration = Math.floor(toRawPositionMs / durationMs);
+      const collectIteration = (iteration: number): void => {
+        const iterationStartRaw = iteration * durationMs;
+        const fromLocalPositionMs = iteration === startIteration
+          ? fromRawPositionMs - iterationStartRaw
+          : -POSITION_EPSILON_MS;
+        const toLocalPositionMs = iteration === endIteration
+          ? toRawPositionMs - iterationStartRaw
+          : durationMs;
+        this.collectDueCues(dueCues, iteration, fromLocalPositionMs, toLocalPositionMs);
+      };
+
+      if (this.missedCuePolicy === "skip") {
+        // Only the last due cue survives "skip", so walk back from the landing
+        // iteration and stop at the first one that has a due cue.
+        for (let iteration = endIteration; iteration >= startIteration && dueCues.length === 0; iteration -= 1) {
+          collectIteration(iteration);
+        }
+      } else {
+        for (let iteration = startIteration; iteration <= endIteration; iteration += 1) {
+          collectIteration(iteration);
+        }
       }
-      this.lastDispatchedRawPositionMs = toRawPositionMs;
-      return true;
     }
 
-    const startIteration = Math.floor(fromRawPositionMs / durationMs);
-    const endIteration = Math.floor(toRawPositionMs / durationMs);
-
-    for (let iteration = startIteration; iteration <= endIteration; iteration += 1) {
-      const iterationStartRaw = iteration * durationMs;
-      const fromLocalPositionMs = iteration === startIteration
-        ? fromRawPositionMs - iterationStartRaw
-        : -POSITION_EPSILON_MS;
-      const toLocalPositionMs = iteration === endIteration
-        ? toRawPositionMs - iterationStartRaw
-        : durationMs;
-      if (!this.emitDueCuesForIteration(iteration, fromLocalPositionMs, toLocalPositionMs, toRawPositionMs)) {
-        return false;
-      }
+    // "skip" applies to the whole batch, across every loop iteration it
+    // crosses: it discards every earlier missed cue unconditionally and keeps
+    // only the most-advanced due cue (highest iteration, then highest beat),
+    // mirroring ArrangementEngine's missedStepPolicy "skip"
+    // (resolve-and-emit-only-the-current-position). There is no separate
+    // lateness threshold here; lookaheadMs governs only the poll interval (see
+    // tick()'s setTimeout), not this policy.
+    const toDispatch = this.missedCuePolicy === "skip" ? dueCues.slice(-1) : dueCues;
+    if (!this.dispatchDueCues(toDispatch, toRawPositionMs)) {
+      return false;
     }
 
     this.lastDispatchedRawPositionMs = toRawPositionMs;
@@ -728,19 +753,16 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
   }
 
   /**
-   * Dispatches the due cues of one loop iteration. Returns `false` when a cue
-   * listener re-entrantly reset dispatch (seek, stop, hot-swap, loop toggle,
-   * disposal): the rest of this catch-up is stale and must not be
-   * dispatched (explicit seeks skip passed cues, and newly loaded events are
-   * never emitted retroactively).
+   * Appends the cues of one loop iteration that are due after
+   * fromLocalPositionMs (exclusive; a negative value includes beat 0) up to
+   * toLocalPositionMs (inclusive), in beat order.
    */
-  private emitDueCuesForIteration(
+  private collectDueCues(
+    dueCues: DueCue<TEvent>[],
     iteration: number,
     fromLocalPositionMs: number,
     toLocalPositionMs: number,
-    transportPositionMs: number,
-  ): boolean {
-    const generation = this.dispatchGeneration;
+  ): void {
     const durationMs = this.getDurationMs();
     // Callers keep fromLocalPositionMs <= toLocalPositionMs within the
     // iteration, so this range is never inverted.
@@ -752,7 +774,6 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     const events = this.eventIndex.getEventsInBeatRangeInclusiveEnd(fromBeat, toBeat);
     const exclusiveFromPositionMs = fromLocalPositionMs < 0 ? fromLocalPositionMs : fromLocalPositionMs + POSITION_EPSILON_MS;
 
-    const dueEvents: Array<{ event: TEvent; scheduledLocalPositionMs: number }> = [];
     for (const event of events) {
       const scheduledLocalPositionMs = beatToMs(this.project.timing, event.beat);
       if (
@@ -762,23 +783,21 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
         continue;
       }
 
-      dueEvents.push({ event, scheduledLocalPositionMs });
+      dueCues.push({ event, iteration, scheduledPositionMs: iteration * durationMs + scheduledLocalPositionMs });
     }
+  }
 
-    if (dueEvents.length === 0) {
-      return true;
-    }
-
-    // "skip" discards every earlier missed cue unconditionally and keeps only
-    // the most-advanced (highest-beat) due event, mirroring ArrangementEngine's
-    // missedStepPolicy "skip" (resolve-and-emit-only-the-current-position).
-    // There is no separate lateness threshold here; lookaheadMs governs only
-    // the poll interval (see tick()'s setTimeout), not this policy.
-    const toDispatch = this.missedCuePolicy === "skip" ? [dueEvents[dueEvents.length - 1]] : dueEvents;
-
-    for (const { event, scheduledLocalPositionMs } of toDispatch) {
-      const scheduledRawPositionMs = iteration * durationMs + scheduledLocalPositionMs;
-      this.emitCue(event, iteration, scheduledRawPositionMs, transportPositionMs);
+  /**
+   * Dispatches a batch of due cues. Returns `false` when a cue listener
+   * re-entrantly reset dispatch (seek, stop, hot-swap, loop toggle,
+   * disposal): the rest of this catch-up is stale and must not be
+   * dispatched (explicit seeks skip passed cues, and newly loaded events are
+   * never emitted retroactively).
+   */
+  private dispatchDueCues(dueCues: DueCue<TEvent>[], transportPositionMs: number): boolean {
+    const generation = this.dispatchGeneration;
+    for (const { event, iteration, scheduledPositionMs } of dueCues) {
+      this.emitCue(event, iteration, scheduledPositionMs, transportPositionMs);
       if (this.dispatchGeneration !== generation) {
         return false;
       }

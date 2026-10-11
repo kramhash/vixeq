@@ -396,6 +396,94 @@ describe("TimelineEngine", () => {
     expect(cues).toEqual(["later"]);
   });
 
+  describe("TL-EN-014 delayed tick across local loop wraps", () => {
+    const loopingCues = (missedCuePolicy: "emit" | "skip") => {
+      const clock = new FakeClock();
+      const transport = createClockTransport(clock);
+      const engine = new TimelineEngine(
+        projectWithEvents(4, [
+          { id: "e1", beat: 1, type: "cue" },
+          { id: "e3", beat: 3, type: "cue" },
+        ]),
+        { transport, loop: true, lookaheadMs: 10, missedCuePolicy },
+      );
+      const cues: string[] = [];
+      engine.on("cue", (event) =>
+        cues.push(`${event.event.id}#${event.iteration}@${event.scheduledPositionMs}+${event.lateByMs}`),
+      );
+      return { clock, engine, cues };
+    };
+
+    it("missedCuePolicy skip dispatches only the most-advanced due cue of a tick that crosses two wraps", async () => {
+      vi.useFakeTimers();
+      const { clock, engine, cues } = loopingCues("skip");
+
+      await engine.play();
+      await tickEngine(clock, 1_500);
+      await tickEngine(clock, 8_000);
+
+      expect(cues).toEqual(["e1#0@1000+500", "e1#2@9000+500"]);
+      engine.dispose();
+    });
+
+    it("missedCuePolicy skip discards the previous iteration's missed cue when the landing iteration has a due cue", async () => {
+      vi.useFakeTimers();
+      const { clock, engine, cues } = loopingCues("skip");
+
+      await engine.play();
+      await tickEngine(clock, 1_500);
+      await tickEngine(clock, 4_000);
+
+      expect(cues).toEqual(["e1#0@1000+500", "e1#1@5000+500"]);
+      engine.dispose();
+    });
+
+    it("missedCuePolicy skip keeps the last cue of the previous iteration when the tick lands before the first cue of the new one", async () => {
+      vi.useFakeTimers();
+      const { clock, engine, cues } = loopingCues("skip");
+
+      await engine.play();
+      await tickEngine(clock, 1_500);
+      await tickEngine(clock, 3_000);
+
+      expect(cues).toEqual(["e1#0@1000+500", "e3#0@3000+1500"]);
+      engine.dispose();
+    });
+
+    it("missedCuePolicy skip dispatches nothing when a tick crosses a wrap with no due cue", async () => {
+      vi.useFakeTimers();
+      const { clock, engine, cues } = loopingCues("skip");
+
+      await engine.play();
+      await tickEngine(clock, 3_500);
+      cues.length = 0;
+      await tickEngine(clock, 1_300);
+
+      expect(cues).toEqual([]);
+      await tickEngine(clock, 400);
+      expect(cues).toEqual(["e1#1@5000+200"]);
+      engine.dispose();
+    });
+
+    it("missedCuePolicy emit dispatches every cue of every crossed iteration in order", async () => {
+      vi.useFakeTimers();
+      const { clock, engine, cues } = loopingCues("emit");
+
+      await engine.play();
+      await tickEngine(clock, 1_500);
+      await tickEngine(clock, 8_000);
+
+      expect(cues).toEqual([
+        "e1#0@1000+500",
+        "e3#0@3000+6500",
+        "e1#1@5000+4500",
+        "e3#1@7000+2500",
+        "e1#2@9000+500",
+      ]);
+      engine.dispose();
+    });
+  });
+
   it("missedCuePolicy skip still dispatches the sole due event after a stall longer than lookaheadMs", async () => {
     // Regression: an earlier implementation dropped a due event entirely
     // once its lateness exceeded lookaheadMs, even though "skip" guarantees

@@ -54,6 +54,10 @@
   suppresses it; if a later command returns the Engine to `ended`, only that
   command's own event is emitted (for example, a longer then shorter hot-swap
   emits one `ended`, and enabling then disabling loop emits none).
+- `@vixeq/core`: `TimelineEngine` with `missedCuePolicy: "skip"` now
+  dispatches a single cue when a delayed tick crosses local loop wraps (the
+  last one due across every crossed iteration), as documented, instead of one
+  cue per crossed iteration.
 - `@vixeq/core`: `ArrangementEngine` no longer drops steps when a delayed tick
   (for example, a background tab throttling timers) crosses a local loop wrap,
   a section gap, or local end, under `missedStepPolicy: "emit"`:

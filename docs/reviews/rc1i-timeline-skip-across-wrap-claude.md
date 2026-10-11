@@ -1,8 +1,8 @@
 # RC1I Timeline `missedCuePolicy: "skip"` across a loop wrap — handoff brief and review
 
-- Status: pending (handoff brief; implementation not started)
-- Author: — (claim the RC1I task-table row before starting)
-- Reviewer: —
+- Status: done (approved in review round 1)
+- Author: Claude
+- Reviewer: Claude critic
 - Origin: found while designing RC1H
   (`docs/reviews/rc1h-arrangement-catch-up-claude.md`), 2026-10-11. The
   project owner decided to fix it before RC2 as its own item.
@@ -77,14 +77,73 @@ per iteration).
    limitations).
 4. Mark RC1I `done` in the task table only after review approval.
 
+## Review stop criteria (decided before round 1)
+
+Same as RC1H G6: at most 3 `critic` rounds; the last round checks only for
+regressions introduced by the previous fix. A low-severity finding reachable
+only through a third-party `PlaybackTransport` that applies commands
+synchronously closes as a known limitation (§3.3 of `playback-v2.md`) instead
+of being fixed.
+
 ## Changed files
 
-_To be filled in by the implementer._
+- `packages/core/src/timeline/TimelineEngine.ts`: `emitDueCues()` now collects
+  the due cues of every crossed iteration into one batch (`collectDueCues()`),
+  applies `"skip"` to that batch (keeps the last one), and dispatches it
+  through `dispatchDueCues()`, which keeps the per-cue `dispatchGeneration`
+  check. Under `"skip"` the iterations are walked back from the landing one and
+  collection stops at the first iteration with a due cue, so a long stall does
+  not buffer every crossed iteration's cues. `emitDueCuesForIteration()` is
+  gone. `"emit"` order and positions are unchanged; `runDispatch()` /
+  `finishLocalEndPause()` and the batch-end cursor update are untouched.
+- `packages/core/src/timeline/TimelineEngine.test.ts`: `TL-EN-014` describe
+  block (5 tests): skip across two wraps (the measured case), skip across one
+  wrap landing after the first cue of the new iteration, skip across one wrap
+  landing before it (previous iteration's last cue), skip across a wrap with
+  no due cue, and emit across two wraps (regression).
+- `docs/behavior/timeline-arrangement-v2.md` §3: `"skip"` applies to the whole
+  tick across loop iterations.
+- `docs/behavior/timeline-arrangement-v2-matrix.md`: new row `TL-EN-014`.
+- `CHANGELOG.md`: Unreleased "Fixed" entry.
+- `docs/plans/v1-collaboration-spec.md`: RC1I row claimed.
 
 ## Commands run
 
-_To be filled in by the implementer._
+- `pnpm vitest run src/timeline/TimelineEngine.test.ts -t TL-EN-014` in
+  `packages/core`, with the RC1H `TimelineEngine.ts` stashed and then restored.
+- `pnpm typecheck`, `pnpm build`, `pnpm test`, `pnpm test:coverage`,
+  `pnpm api:check`, `pnpm behavior:check`.
 
 ## Results
 
-_To be filled in by the implementer._
+- On the RC1H Engine, 2 of the 5 new tests fail (two wraps: received
+  `e1#0, e3#1, e1#2` in the second tick instead of `e1#2`; one wrap landing
+  after `e1`: received `e3#0, e1#1` instead of `e1#1`). The other 3 pass there
+  too: they guard against an over-eager fix (landing-iteration-only lookup,
+  dropping the previous iteration's cue, emitting on an empty wrap) and the
+  unchanged `"emit"` path.
+- With the fix, all 6 gates pass: core 458 tests; `TimelineEngine.ts`,
+  `ArrangementEngine.ts`, and `SequencerEngine.ts` at 100% statements /
+  branches / functions / lines; API reports unchanged; behavior matrix 197
+  covered, 0 planned, 0 blocked.
+
+## Review
+
+### Round 1 (Claude critic, 2026-10-11): approve
+
+No findings survived verification. Method: a differential test of the RC1H
+Engine against the fixed one (300 random runs; 4-beat loop and non-loop;
+events at beats 0, 1, 2.5, and two at 3; 12 ticks from 0 to 20000 ms mixed
+with boundary values). `"emit"` output was identical to the RC1H Engine in
+every run; `"skip"` output was always a subset of it. Boundary cases checked
+by hand: a landing exactly on a wrap with a beat-0 cue, a from-position
+exactly on an iteration boundary (no duplicates), a same-beat tie across a
+wrap (last in index order), a cue listener that seeks during the single skip
+cue, and a cue listener that pauses in the non-loop local-end tick (RC1G path
+unchanged). Candidates refuted: stale collected batches under `"emit"` (every
+assignment to `eventIndex` / `project` / `localLoop` bumps
+`dispatchGeneration`), the backward walk mis-handling the start iteration's
+exclusive from-position, stopping at the wrong iteration, a long-stall
+performance regression (`"skip"` now stops after at most two iterations), new
+third-party synchronous-transport gaps, tests that a weaker fix would pass,
+and doc/CHANGELOG inaccuracy. No known limitation added.

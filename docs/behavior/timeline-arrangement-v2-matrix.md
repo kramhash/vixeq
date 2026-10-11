@@ -88,6 +88,7 @@ Status values: `planned`, `covered`, `blocked`.
 | TL-EN-011 | non-looping local end | transitions to local ended; shared transport unaffected | covered |
 | TL-EN-012 | 100,000-event fixture range query | bounded index probes independent of total event count | covered |
 | TL-EN-013 | 100,000-event fixture per-tick dispatch | no full-event-list scan per tick | covered |
+| TL-EN-014 | delayed tick crosses one or more local loop wraps | missedCuePolicy emit dispatches every cue of every crossed iteration in order; skip dispatches exactly one cue, the last due across all crossed iterations (or none if nothing is due) | covered |
 
 ## ArrangementProject v2 (`AR-*`)
 

@@ -202,7 +202,13 @@ TimelineEngine.seekBeat(beat: number): Promise<void>;
   - optional `"skip"`: only the most advanced due event dispatches; earlier
     missed cues in the same tick are discarded unconditionally (no separate
     lateness threshold — mirrors `ArrangementEngine`'s `missedStepPolicy:
-    "skip"`, which resolves and emits only the current position).
+    "skip"`, which resolves and emits only the current position). The policy
+    applies to the whole tick: when a delayed tick crosses one or more local
+    loop wraps, the single dispatched cue is the last one due across all
+    crossed iterations (highest `iteration`, then highest beat), with its own
+    `iteration`, `scheduledPositionMs`, and `lateByMs`. If the landing
+    iteration has no due cue yet, that is the last due cue of an earlier
+    iteration.
 - Explicit seek (`seekBeat`, `seekPositionMs`) never invokes `missedCuePolicy`;
   it always emits zero cue events for the traversed range.
 - Loop dispatch repeats every event on every iteration, including any event at
