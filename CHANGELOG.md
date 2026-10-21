@@ -1,6 +1,28 @@
 # Changelog
 
-## Unreleased
+## 1.0.0-rc.1 - 2026-10-21
+
+First release candidate for `1.0.0`. The public API is frozen for the 14-day
+observation period; a blocker or critical fix ships as a new RC and restarts
+the period.
+
+### Published
+
+- Published `@vixeq/core`, `@vixeq/react`, and `@vixeq/player-react` at
+  `1.0.0-rc.1` under the `next` dist-tag. `latest` stays on `0.9.0`; install
+  the RC with `@next` or the exact version.
+  - [`@vixeq/core@1.0.0-rc.1`](https://www.npmjs.com/package/@vixeq/core/v/1.0.0-rc.1)
+  - [`@vixeq/react@1.0.0-rc.1`](https://www.npmjs.com/package/@vixeq/react/v/1.0.0-rc.1)
+  - [`@vixeq/player-react@1.0.0-rc.1`](https://www.npmjs.com/package/@vixeq/player-react/v/1.0.0-rc.1)
+
+### Known caveats
+
+- Browser support follows the locked Playwright browser set recorded in
+  [`SUPPORT.md`](./SUPPORT.md).
+- WebKit and CI Firefox browser E2E do not assert real WebAudio playback
+  start/progression when Linux headless Playwright cannot start or advance
+  `AudioContext.currentTime`.
+- Node.js 20 is not supported for the 1.0 line.
 
 ### Added
 
