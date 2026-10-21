@@ -39,14 +39,6 @@ export type PlaybackSnapshot = {
 ## 2. PlaybackTransport
 
 ```ts
-export type PlaybackOperation =
-  | "play"
-  | "pause"
-  | "stop"
-  | "seek"
-  | "ratechange"
-  | "transport-loop";
-
 export type PlaybackTransportEvent =
   | { type: "play"; snapshot: PlaybackSnapshot }
   | { type: "pause"; snapshot: PlaybackSnapshot }

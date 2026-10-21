@@ -45,7 +45,6 @@ export type {
   ClockTransportOptions,
   ListenerErrorContext,
   PlaybackErrorCode,
-  PlaybackOperation,
   PlaybackSnapshot,
   PlaybackState,
   PlaybackTransport,
@@ -65,7 +64,6 @@ export {
 export { SEQUENCER_LIMITS } from "./limits";
 export {
   addTrack,
-  clamp,
   clampStepValue,
   clearTrack,
   createProject,
@@ -80,7 +78,7 @@ export {
   toggleStep,
 } from "./project";
 export { presets } from "./presets";
-export { clamp01, decaySmoothedValue, exciteSmoothedValue } from "./smoothing";
+export { decaySmoothedValue, exciteSmoothedValue } from "./smoothing";
 export * from "./timeline";
 export { normalizeProject, validateProject } from "./validation";
 export type { SmoothingConfig } from "./smoothing";
@@ -91,6 +89,7 @@ export type {
   EnginePlaybackCause,
   EnginePlaybackEvent,
   EnginePlaybackSnapshot,
+  MigrationIssue,
   MigrationResult,
   MissedStepPolicy,
   ProjectEvent,
@@ -102,13 +101,11 @@ export type {
   SequencerEventName,
   SequencerPlaybackEvent,
   SequencerPlaybackSnapshot,
-  SequencerTransport,
   StepEventCause,
   StepEvent,
   StepEventTrack,
   StepValue,
   Track,
-  TransportEvent,
   Unsubscribe,
   ValidationIssue,
   ValidationResult,

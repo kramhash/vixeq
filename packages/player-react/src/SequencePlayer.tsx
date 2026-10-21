@@ -9,14 +9,13 @@ import {
   setTrackEnabled,
   toggleStep,
   type ChannelPosition,
-  type PlaybackState,
   type PlaybackTransport,
   type SequenceProject,
   type SequencerEngine,
   type SequencerPlaybackEvent,
   type StepEvent,
 } from "@vixeq/core";
-import { useSequencePlayer, type SequencerEngineLatestEvent, type SequencerEnginePendingOperation } from "@vixeq/react";
+import { useSequencePlayer } from "@vixeq/react";
 import {
   forwardRef,
   useCallback,
@@ -25,7 +24,6 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type MutableRefObject,
   type PointerEvent,
 } from "react";
 
@@ -54,7 +52,7 @@ export type SequencePlayerChangeReason =
   | "project:replace";
 
 /**
- * Payload passed to {@link SequencePlayerBaseProps.onProjectChange} for every edit made through the
+ * Payload passed to {@link SequencePlayerProps.onProjectChange} for every edit made through the
  * player's UI (BPM field, add/remove/rename/enable a track, click or drag a step's value).
  *
  * `trackId` is present for track- and step-level reasons ("track:remove", "track:rename",
@@ -66,22 +64,6 @@ export type SequencePlayerProjectChange = {
   reason: SequencePlayerChangeReason;
   trackId?: string;
   stepIndex?: number;
-};
-
-/**
- * Shape of the live transport/engine state produced by the `useSequencePlayer` hook (from
- * `@vixeq/react`), mirrored here for consumers who want to build their own transport UI instead
- * of relying on the built-in bar that {@link SequencePlayer} renders when
- * `showTransportControls` is true.
- */
-export type SequencePlayerTransportState = {
-  playbackState: PlaybackState;
-  positionRef: MutableRefObject<ChannelPosition>;
-  pendingOperation: SequencerEnginePendingOperation | null;
-  isBusy: boolean;
-  latestEventRef: MutableRefObject<SequencerEngineLatestEvent | null>;
-  projectError: Error | null;
-  transportError: unknown | null;
 };
 
 /**
@@ -110,10 +92,10 @@ export type SequencePlayerRef = {
 };
 
 /**
- * Shared prop surface between {@link SequencePlayer} (controlled) and
- * {@link StandaloneSequencePlayer} (uncontrolled, see {@link StandaloneSequencePlayerProps}).
+ * Props for {@link SequencePlayer} (controlled). {@link StandaloneSequencePlayer} (uncontrolled)
+ * shares them; see {@link StandaloneSequencePlayerProps}.
  */
-export type SequencePlayerBaseProps = {
+export type SequencePlayerProps = {
   /**
    * The project to render and play. The player is fully controlled: it never mutates `project`
    * in place, so this should be the same value most recently reported via `onProjectChange`
@@ -165,15 +147,12 @@ export type SequencePlayerBaseProps = {
   style?: CSSProperties;
 };
 
-/** Props for {@link SequencePlayer}, documented on each field above. */
-export type SequencePlayerProps = SequencePlayerBaseProps;
-
 /**
  * Props for {@link StandaloneSequencePlayer}. Identical to {@link SequencePlayerProps} except
  * `project`/`onProjectChange` are replaced by an optional uncontrolled `defaultProject` (used
  * once to seed internal state) and an optional `onProjectChange` observer callback.
  */
-export type StandaloneSequencePlayerProps = Omit<SequencePlayerBaseProps, "project" | "onProjectChange"> & {
+export type StandaloneSequencePlayerProps = Omit<SequencePlayerProps, "project" | "onProjectChange"> & {
   /**
    * Initial project used to seed the component's internal state on mount (read once via a lazy
    * `useState` initializer — later changes to this prop are ignored). Defaults to a 4-lane empty
@@ -182,7 +161,7 @@ export type StandaloneSequencePlayerProps = Omit<SequencePlayerBaseProps, "proje
   defaultProject?: SequenceProject;
   /**
    * Optional observer invoked after every edit, in addition to the component updating its own
-   * internal project state. Unlike {@link SequencePlayerBaseProps.onProjectChange}, this does not
+   * internal project state. Unlike {@link SequencePlayerProps.onProjectChange}, this does not
    * need to write the project back anywhere — it is notification-only.
    */
   onProjectChange?: (change: SequencePlayerProjectChange) => void;

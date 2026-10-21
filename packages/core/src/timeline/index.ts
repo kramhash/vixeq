@@ -3,8 +3,6 @@ export {
   beatToMs,
   createTimingMap,
   msToBeat,
-  normalizeTempoEvent,
-  normalizeTempos,
   normalizeTimingMap,
   validateTimingMap,
 } from "./timing";

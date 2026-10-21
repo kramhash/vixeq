@@ -39,8 +39,6 @@ export type StepEvent = {
   durationMs: number;
   cause: StepEventCause;
   tracks: StepEventTrack[];
-  /** @deprecated Use scheduledPositionMs. Kept until ArrangementEngine moves to Playback v2. */
-  timestamp?: number;
 };
 
 /**
@@ -53,33 +51,6 @@ export type StepEvent = {
  */
 export type StepEventCause = "play" | "tick" | "seek" | "project-change" | "loop";
 
-export type TransportEvent =
-  | {
-      type: "start";
-      bpm: number;
-      stepIndex: number;
-      timestamp: number;
-    }
-  | {
-      type: "stop";
-      bpm: number;
-      stepIndex: number;
-      timestamp: number;
-    }
-  | {
-      type: "reset";
-      bpm: number;
-      stepIndex: number;
-      timestamp: number;
-    }
-  | {
-      type: "bpm";
-      bpm: number;
-      previousBpm: number;
-      stepIndex: number;
-      timestamp: number;
-    };
-
 export type ProjectEvent = {
   project: SequenceProject;
   previousProject: SequenceProject;
@@ -89,8 +60,6 @@ export type ProjectEvent = {
   channels: Record<string, number>;
   positionMs: number;
   beat: number;
-  /** @deprecated Kept until ArrangementEngine moves to Playback v2. */
-  timestamp?: number;
 };
 
 export type ChannelProjectEvent = {
@@ -119,15 +88,6 @@ export type PlaybackClock = {
   now(): number;
   setTimer(callback: () => void, delayMs: number): unknown;
   clearTimer(timerId: unknown): void;
-};
-
-export type SequencerTransport = {
-  clock: PlaybackClock;
-  play(): void | Promise<void>;
-  stop(): void | Promise<void>;
-  pause?(): void | Promise<void>;
-  seek?(timeMs: number): void | Promise<void>;
-  dispose?(): void;
 };
 
 export type MissedStepPolicy = "emit" | "skip";
