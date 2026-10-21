@@ -92,6 +92,12 @@ Before `1.0.0-rc.1` is published:
   versions publish under the `next` dist-tag, and a GitHub Release is
   created. The RC is published through this same workflow so that `1.0.0`
   does not take an untested path.
+  Implementation status (RC2, done): `publish.yml` runs `preflight`
+  (`scripts/release-meta.mjs`: lockstep versions, `v<version>` tag, a
+  `CHANGELOG.md` section as the Release notes, tagged commit on `main`), then
+  the whole `ci.yml` as a reusable workflow, then publishes under `next` or
+  `latest` and creates the GitHub Release. A manual dispatch is a dry run.
+  The 1.0 checklist describes the steps and the recovery paths.
 
 Additive APIs planned after 1.0 (Channel sinks, MIDI CC output; see
 `ROADMAP.md`) are not part of the 1.0 freeze and must not enter the RC.
@@ -815,7 +821,7 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | RC1G | 1.0-rc | Close Engine re-entrancy gaps found by the RC1B–RC1D adversarial review: stop Timeline/Arrangement catch-up dispatch and the Timeline local-end branch when a listener re-entrantly seeks, hot-swaps, changes loop, or disposes (brief: `docs/reviews/rc1g-reentrancy-guards-claude.md`) | RC1E | done | Claude (author), Claude critic (reviewer) | `packages/core/src/timeline/TimelineEngine.ts`, `packages/core/src/arrangement/ArrangementEngine.ts`, `packages/core/src/SequencerEngine.ts`, Engine tests, `CHANGELOG.md` |
 | RC1H | 1.0-rc | Make `ArrangementEngine` delayed-tick dispatch honor `missedStepPolicy` across a local loop wrap, section gaps, and local end, with section and step events in time order and previous-iteration timing relative to the landing iteration (brief: `docs/reviews/rc1h-arrangement-catch-up-claude.md`) | RC1G | done | Claude (author), Claude critic (reviewer) | `packages/core/src/arrangement/ArrangementEngine.ts`, Arrangement tests, `docs/behavior/`, `CHANGELOG.md` |
 | RC1I | 1.0-rc | Make `TimelineEngine` `missedCuePolicy: "skip"` dispatch only the most advanced due cue of a whole delayed tick, not one per crossed loop iteration (brief: `docs/reviews/rc1i-timeline-skip-across-wrap-claude.md`) | RC1H | done | Claude (author), Claude critic (reviewer) | `packages/core/src/timeline/TimelineEngine.ts`, Timeline tests, `docs/behavior/`, `CHANGELOG.md` |
-| RC2 | 1.0-rc | Harden the tag-triggered publish workflow: run every repository gate, publish prereleases under `next`, create a GitHub Release, and rewrite the 1.0 checklist publish steps around it | RC1E, RC1G, RC1H, RC1I | pending | — | `.github/workflows/publish.yml`, `docs/release/1.0-release-checklist.md` |
+| RC2 | 1.0-rc | Harden the tag-triggered publish workflow: run every repository gate, publish prereleases under `next`, create a GitHub Release, and rewrite the 1.0 checklist publish steps around it | RC1E, RC1G, RC1H, RC1I | done | Claude (author), Claude critic (reviewer) | `.github/workflows/publish.yml`, `.github/workflows/ci.yml` (`workflow_call` only), `scripts/release-meta.mjs` and its test, `docs/release/1.0-release-checklist.md` (brief: `docs/reviews/rc2-publish-workflow-claude.md`) |
 | RC3 | 1.0-rc | Publish `1.0.0-rc.1` through the RC2 workflow, verify official examples against the packed RC packages, and run the registry smoke test | RC2 | pending | — | package metadata, `CHANGELOG.md`, examples, release docs |
 | S1 | 1.0 | After the 14-day RC observation window, publish `1.0.0`, run the post-publish clean-install smoke test, and remove pre-1.0 disclaimers | RC3 | pending | — | package metadata, READMEs, `CHANGELOG.md`, `SUPPORT.md` |
 | DOC1 | 1.0-rc | Add React rhythm game tutorial | — | done | Codex (author) | `apps/docs/src/content/docs/guide/`, `apps/docs/astro.config.mts` |

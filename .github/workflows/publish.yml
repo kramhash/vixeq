@@ -1,5 +1,9 @@
 name: Publish
 
+# A `v<version>` tag push publishes the three public packages and creates the
+# GitHub Release, after every repository gate passes. A manual dispatch is a
+# dry run: the same preflight and gates, then `pnpm publish --dry-run`, with no
+# OIDC token exchange, no publish, and no Release.
 on:
   push:
     tags:
@@ -8,15 +12,75 @@ on:
 
 permissions:
   contents: read
-  id-token: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  publish:
+  preflight:
+    # Fails before any gate runs when the tag, the lockstep package versions,
+    # and the CHANGELOG section disagree (scripts/release-meta.mjs).
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      dist-tag: ${{ steps.meta.outputs.dist-tag }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      dry-run: ${{ steps.meta.outputs.dry-run }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Publishing steps run only on an explicit `dry-run=false`, so missing
+      # outputs can never fall through to a publish.
+      - name: Resolve release metadata
+        id: meta
+        run: |
+          node scripts/release-meta.mjs
+          grep -Eq '^dry-run=(true|false)$' "$GITHUB_OUTPUT"
+
+      - name: Require the tagged commit to be on main
+        if: steps.meta.outputs.dry-run == 'false'
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag $GITHUB_REF_NAME points at a commit that is not on main" >&2
+            exit 1
+          fi
+
+  gates:
+    # Every repository gate, from the CI workflow itself so the two cannot
+    # drift: the Node 22/24/26 build matrix (typecheck, build, test, coverage,
+    # API reports, behavior matrix, packed-package and compatibility
+    # fixtures), browser E2E, and the docs site build.
+    needs: preflight
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  publish:
+    needs: [preflight, gates]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      VERSION: ${{ needs.preflight.outputs.version }}
+      DIST_TAG: ${{ needs.preflight.outputs.dist-tag }}
+      PRERELEASE: ${{ needs.preflight.outputs.prerelease }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Keep the pnpm setup, the Node setup without `registry-url`, and the
+      # build-before-publish order as they are: each one works around an npm
+      # trusted-publishing failure (see `git log -- .github/workflows/publish.yml`).
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
@@ -31,16 +95,22 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Typecheck
-        run: pnpm typecheck
-
       - name: Build workspace
         run: pnpm build
 
-      - name: Test
-        run: pnpm test
+      - name: Dry-run publish
+        if: needs.preflight.outputs.dry-run == 'true'
+        run: |
+          set -euo pipefail
+          for name in "@vixeq/core" "@vixeq/react" "@vixeq/player-react"; do
+            pnpm --filter "$name" publish --dry-run --access public --no-git-checks --tag "$DIST_TAG"
+          done
 
+      # A filtered `pnpm publish` skips a version that is already on the
+      # registry, so re-running this job after a partial failure publishes
+      # only the remaining packages.
       - name: Publish packages via OIDC-exchanged tokens
+        if: needs.preflight.outputs.dry-run == 'false'
         run: |
           set -euo pipefail
 
@@ -67,9 +137,49 @@ jobs:
             fi
             npm config set --location=user "//registry.npmjs.org/:_authToken" "$npm_token"
             trap 'npm config delete --location=user "//registry.npmjs.org/:_authToken"' RETURN
-            pnpm --filter "$name" publish --access public --no-git-checks --provenance
+            pnpm --filter "$name" publish --access public --no-git-checks --provenance --tag "$DIST_TAG"
           }
 
           publish_pkg "@vixeq/core"
           publish_pkg "@vixeq/react"
           publish_pkg "@vixeq/player-react"
+
+      - name: Verify published versions and dist-tags
+        if: needs.preflight.outputs.dry-run == 'false'
+        run: |
+          set -euo pipefail
+          # The registry can take a moment to serve a new dist-tag.
+          for name in "@vixeq/core" "@vixeq/react" "@vixeq/player-react"; do
+            for _ in 1 2 3 4 5 6; do
+              tagged=$(npm view "$name@$DIST_TAG" version 2>/dev/null || true)
+              [ "$tagged" = "$VERSION" ] && break
+              sleep 10
+            done
+            if [ "$tagged" != "$VERSION" ]; then
+              echo "::error::$name@$DIST_TAG is ${tagged:-missing}, expected $VERSION" >&2
+              exit 1
+            fi
+          done
+
+      # The notes are the CHANGELOG section of this version. Skipped when the
+      # Release already exists, so a re-run after a later failure is safe.
+      - name: Create GitHub Release
+        if: needs.preflight.outputs.dry-run == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "::notice::GitHub Release $GITHUB_REF_NAME already exists; leaving it unchanged"
+            exit 0
+          fi
+          node scripts/release-meta.mjs --notes-out "$RUNNER_TEMP/release-notes.md"
+          prerelease_flag=()
+          if [ "$PRERELEASE" = "true" ]; then
+            prerelease_flag=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
+            "${prerelease_flag[@]}"

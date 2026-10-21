@@ -9,6 +9,10 @@
   of TypeScript `<6` is removed. The repository builds with TypeScript 6.0.
 - Browser E2E now runs on `@playwright/test@1.64.0` (Chromium 156, Firefox
   157, WebKit 27.2).
+- Releases are published only by the tag-triggered Publish workflow, after
+  every CI gate passes. Prereleases (starting with `1.0.0-rc.1`) use the
+  `next` dist-tag instead of `beta`, and each release gets a GitHub Release
+  whose notes are its CHANGELOG section.
 
 ### Fixed
 
