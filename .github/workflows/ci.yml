@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - main
+  # The Publish workflow runs these same gates before publishing.
+  workflow_call:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -54,6 +56,9 @@ jobs:
 
       - name: Test Pages artifact builder
         run: node --test scripts/build-pages.test.mjs
+
+      - name: Test release metadata resolver
+        run: node --test scripts/release-meta.test.mjs
 
       - name: Check public API reports
         run: pnpm api:check
