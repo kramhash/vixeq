@@ -267,8 +267,8 @@ All public packages use lockstep versions, including prereleases, through these 
 - [x] Refresh the toolchain to the 1.0 support targets: Node 22/24/26, TypeScript `>=5.5` verified on 5.5, the 6.0 workspace, and a 7.0 consumer fixture, and Playwright re-locked at `1.64.0` with an updated browser table in `SUPPORT.md` (RC1F).
 - [x] Close the Engine re-entrancy gaps found by the adversarial review of RC1B–RC1D: catch-up dispatch in Timeline/Arrangement and the Timeline local-end branch must stop when a listener re-entrantly seeks, hot-swaps, changes loop, or disposes (RC1G).
 - [ ] Make Arrangement delayed-tick dispatch honor `missedStepPolicy` across a local loop wrap, section gaps, and local end, with section and step events in time order (RC1H).
-- [ ] Let callers supply track ids and make generated ids project-local and deterministic, so ids no longer depend on call order (RC1J, issue #V1; moved here from 1.1.0 because generated ids change).
-- [ ] Handle a negative `TimingMap.startPositionMs` (beat 1 before the start of the audio) instead of silently clamping it to 0 (RC1K, issue #V2).
+- [ ] Let callers supply track ids and make generated ids project-local and deterministic, so ids no longer depend on call order (RC1J, issue [#3](https://github.com/kramhash/vixeq/issues/3); moved here from 1.1.0 because generated ids change).
+- [ ] Handle a negative `TimingMap.startPositionMs` (beat 1 before the start of the audio) instead of silently clamping it to 0 (RC1K, issue [#4](https://github.com/kramhash/vixeq/issues/4)).
 - [ ] Harden the tag-triggered publish workflow before the RC: run every repository gate, publish prereleases under the `next` dist-tag, attach npm provenance, and create a GitHub Release. The RC itself is published through this workflow (RC2).
 - [ ] Freeze all three public package APIs against their committed reports.
 - [ ] Publish all public packages at the same RC version.
@@ -305,9 +305,9 @@ changes.
 - [ ] `animateChannels(source, sinks)` in `@vixeq/core/dom`: the non-React rAF loop that `cycling-workout` currently hand-writes, writing to any number of sinks.
 - [ ] `createElementSink(element, mapping)`: the CSS custom property sink, built on the same contract as `bindChannelsToElement`.
 - [ ] Public `getDurationMs()` / `getDurationBeats()` on `SequencerEngine`, `ArrangementEngine`, and `TimelineEngine`.
-- [ ] Pure time-based evaluation for shader and offline rendering: a free-function sampler for a single `SequenceProject`, a "last step at or before" query, envelopes evaluated from position alone (with attack and look-ahead), and a hold easing (issue #V3).
-- [ ] Output-latency compensation on the audio transports (issue #V4).
-- [ ] Move the playground visualizer to `@frapx/fx-canvas` with `bindUniforms`, after the pure evaluation API lands (issue #V5).
+- [ ] Pure time-based evaluation for shader and offline rendering: a free-function sampler for a single `SequenceProject`, a "last step at or before" query, envelopes evaluated from position alone (with attack and look-ahead), and a hold easing (issue [#5](https://github.com/kramhash/vixeq/issues/5)).
+- [ ] Output-latency compensation on the audio transports (issue [#6](https://github.com/kramhash/vixeq/issues/6)).
+- [ ] Move the playground visualizer to `@frapx/fx-canvas` with `bindUniforms`, after the pure evaluation API lands (issue [#7](https://github.com/kramhash/vixeq/issues/7)).
 
 Caller-supplied track ids moved to 1.0.0-rc.1 (RC1J).
 
