@@ -1075,7 +1075,7 @@ export class ArrangementEngine {
 
   /**
    * The beat at a position, snapped up to the next section edge or step start
-   * when that lies within POSITION_EPSILON_MS: an ms -> beat round trip can
+   * when that lies within POSITION_EPSILON_MS: an ms-to-beat round trip can
    * land an ulp below it (for example at transport position 0 when a negative
    * startPositionMs puts a section or step start exactly there).
    */
