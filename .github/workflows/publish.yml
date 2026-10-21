@@ -148,18 +148,29 @@ jobs:
         if: needs.preflight.outputs.dry-run == 'false'
         run: |
           set -euo pipefail
-          # The registry can take a moment to serve a new dist-tag.
-          for name in "@vixeq/core" "@vixeq/react" "@vixeq/player-react"; do
-            for _ in 1 2 3 4 5 6; do
+          # npm processes a publish asynchronously; a new version can take
+          # several minutes to appear (up to ~6.5 min for 1.0.0-rc.1). Poll
+          # all packages against one 15-minute deadline (30 x 30 s).
+          pending=("@vixeq/core" "@vixeq/react" "@vixeq/player-react")
+          for attempt in $(seq 1 30); do
+            still_pending=()
+            for name in "${pending[@]}"; do
               tagged=$(npm view "$name@$DIST_TAG" version 2>/dev/null || true)
-              [ "$tagged" = "$VERSION" ] && break
-              sleep 10
+              [ "$tagged" = "$VERSION" ] || still_pending+=("$name")
             done
-            if [ "$tagged" != "$VERSION" ]; then
-              echo "::error::$name@$DIST_TAG is ${tagged:-missing}, expected $VERSION" >&2
-              exit 1
+            if [ "${#still_pending[@]}" -eq 0 ]; then
+              echo "All packages serve $VERSION under $DIST_TAG"
+              exit 0
             fi
+            pending=("${still_pending[@]}")
+            echo "[check $attempt/30] waiting for $DIST_TAG=$VERSION: ${pending[*]}"
+            [ "$attempt" -lt 30 ] && sleep 30
           done
+          for name in "${pending[@]}"; do
+            tagged=$(npm view "$name@$DIST_TAG" version 2>/dev/null || true)
+            echo "::error::$name@$DIST_TAG is ${tagged:-missing}, expected $VERSION" >&2
+          done
+          exit 1
 
       # The notes are the CHANGELOG section of this version. Skipped when the
       # Release already exists, so a re-run after a later failure is safe.
