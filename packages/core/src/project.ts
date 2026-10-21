@@ -1,12 +1,29 @@
+import { nextAvailableId } from "./ids";
 import { SEQUENCER_LIMITS } from "./limits";
 import type { SequenceProject, StepValue, Track } from "./types";
+
+export type CreateTrackOptions = {
+  /** Track id; trimmed. Blank or omitted means "generate one". */
+  id?: string;
+  name?: string;
+  stepCount?: number;
+  steps?: number[];
+  enabled?: boolean;
+};
 
 export type CreateProjectOptions = {
   bpm?: number;
   stepCount?: number;
   stepsPerBeat?: number;
+  /** Number of generated tracks. Cannot be combined with `tracks`. */
   trackCount?: number;
+  /** Names of the generated tracks. Cannot be combined with `tracks`. */
   trackNames?: string[];
+  /**
+   * Track definitions, one per track, sized to the project's `stepCount`.
+   * Cannot be combined with `trackCount` / `trackNames`.
+   */
+  tracks?: Omit<CreateTrackOptions, "stepCount">[];
 };
 
 export type RandomizeTrackOptions = {
@@ -15,8 +32,6 @@ export type RandomizeTrackOptions = {
   max?: number;
   random?: () => number;
 };
-
-let idCounter = 0;
 
 export const clamp = (value: number, min: number, max: number): number => {
   if (Number.isNaN(value)) {
@@ -28,26 +43,22 @@ export const clamp = (value: number, min: number, max: number): number => {
 
 export const clampStepValue = (value: number): StepValue => clamp(value, 0, 1);
 
-export const createTrackId = (): string => {
-  idCounter += 1;
-  return `track-${idCounter}`;
-};
+const requestedTrackId = (id: unknown): string | undefined =>
+  typeof id === "string" && id.trim() ? id.trim() : undefined;
 
 /**
- * Create a single {@link Track} with a fresh id (via `createTrackId`).
- * `stepCount` is clamped to `SEQUENCER_LIMITS`; any `steps` values beyond
- * that count are ignored, missing steps default to 0, and every value is
- * clamped to [0, 1].
+ * Create a single {@link Track}. `stepCount` is clamped to
+ * `SEQUENCER_LIMITS`; any `steps` values beyond that count are ignored,
+ * missing steps default to 0, and every value is clamped to [0, 1].
  *
- * @param options - Optional name, stepCount, initial steps, and enabled flag.
+ * Without an `id` the track is `"track-1"` every time: it has no sibling
+ * context, so give each track an id yourself when you build several, or use
+ * {@link createProject} / {@link addTrack}, which pick the first unused id.
+ *
+ * @param options - Optional id, name, stepCount, initial steps, and enabled flag.
  * @returns A new `Track`, not yet attached to any project.
  */
-export const createTrack = (options: {
-  name?: string;
-  stepCount?: number;
-  steps?: number[];
-  enabled?: boolean;
-} = {}): Track => {
+export const createTrack = (options: CreateTrackOptions = {}): Track => {
   const stepCount = clamp(
     Math.trunc(options.stepCount ?? SEQUENCER_LIMITS.defaultStepCount),
     SEQUENCER_LIMITS.minStepCount,
@@ -55,7 +66,7 @@ export const createTrack = (options: {
   );
 
   return {
-    id: createTrackId(),
+    id: requestedTrackId(options.id) ?? nextAvailableId("track", []),
     name: options.name?.trim() || "Track",
     enabled: options.enabled ?? true,
     steps: Array.from({ length: stepCount }, (_, index) => clampStepValue(options.steps?.[index] ?? 0)),
@@ -66,16 +77,27 @@ export const createTrack = (options: {
  * Create a new {@link SequenceProject} with default or custom dimensions.
  * All numeric options are truncated to integers and clamped to the ranges
  * in `SEQUENCER_LIMITS` (bpm, step count, steps-per-beat, track count).
- * Generated tracks are named from `trackNames` (falling back to
- * `Track ${n}`) and start with every step at 0.
  *
- * @param options - Optional overrides for bpm, stepCount, stepsPerBeat,
- *   trackCount, and trackNames.
+ * Tracks come either from `trackCount` / `trackNames` (named from
+ * `trackNames`, falling back to `Track ${n}`, every step at 0) or from
+ * `tracks` (one definition per track, normalized like {@link createTrack}).
+ * Track ids are Project-local: a track without a caller-supplied id gets the
+ * first unused `track-N`, so the same options always produce the same ids.
+ *
+ * @param options - Optional overrides for bpm, stepCount, stepsPerBeat, and
+ *   either trackCount/trackNames or tracks.
  * @returns A fresh `SequenceProject` (version 1).
+ * @throws TypeError if `tracks` is combined with `trackCount` or
+ *   `trackNames`, has fewer than `SEQUENCER_LIMITS.minTracks` or more than
+ *   `SEQUENCER_LIMITS.maxTracks` entries, or repeats an id.
  *
  * @example
  * ```ts
  * const project = createProject({ bpm: 128, trackCount: 4, trackNames: ["Kick", "Bass"] });
+ * const pattern = createProject({
+ *   stepCount: 4,
+ *   tracks: [{ id: "kick", steps: [1, 0, 0, 0] }, { id: "hat", steps: [0, 0.5, 0, 0.5] }],
+ * });
  * ```
  */
 export const createProject = (options: CreateProjectOptions = {}): SequenceProject => {
@@ -89,24 +111,70 @@ export const createProject = (options: CreateProjectOptions = {}): SequenceProje
     SEQUENCER_LIMITS.minStepsPerBeat,
     SEQUENCER_LIMITS.maxStepsPerBeat,
   );
-  const trackCount = clamp(
-    Math.trunc(options.trackCount ?? SEQUENCER_LIMITS.defaultTrackCount),
-    SEQUENCER_LIMITS.minTracks,
-    SEQUENCER_LIMITS.maxTracks,
-  );
 
   return {
     version: 1,
     bpm: clamp(options.bpm ?? SEQUENCER_LIMITS.defaultBpm, SEQUENCER_LIMITS.minBpm, SEQUENCER_LIMITS.maxBpm),
     stepCount,
     stepsPerBeat,
-    tracks: Array.from({ length: trackCount }, (_, index) =>
-      createTrack({
-        name: options.trackNames?.[index] ?? `Track ${index + 1}`,
-        stepCount,
-      }),
-    ),
+    tracks: options.tracks === undefined ? createGeneratedTracks(options, stepCount) : createDefinedTracks(options, stepCount),
   };
+};
+
+const createGeneratedTracks = (options: CreateProjectOptions, stepCount: number): Track[] => {
+  const trackCount = clamp(
+    Math.trunc(options.trackCount ?? SEQUENCER_LIMITS.defaultTrackCount),
+    SEQUENCER_LIMITS.minTracks,
+    SEQUENCER_LIMITS.maxTracks,
+  );
+
+  return Array.from({ length: trackCount }, (_, index) =>
+    createTrack({
+      id: `track-${index + 1}`,
+      name: options.trackNames?.[index] ?? `Track ${index + 1}`,
+      stepCount,
+    }),
+  );
+};
+
+const createDefinedTracks = (options: CreateProjectOptions, stepCount: number): Track[] => {
+  const definitions = options.tracks;
+  if (options.trackCount !== undefined || options.trackNames !== undefined) {
+    throw new TypeError("createProject: pass either tracks or trackCount/trackNames, not both.");
+  }
+  if (!Array.isArray(definitions)) {
+    throw new TypeError("Invalid SequenceProject: tracks Tracks must be an array.");
+  }
+  if (definitions.length < SEQUENCER_LIMITS.minTracks || definitions.length > SEQUENCER_LIMITS.maxTracks) {
+    throw new TypeError(
+      `Invalid SequenceProject: tracks Track count must be between ${SEQUENCER_LIMITS.minTracks} and ${SEQUENCER_LIMITS.maxTracks}.`,
+    );
+  }
+
+  // Reserve every caller-supplied id first, so a generated id never takes
+  // one that a later definition asks for.
+  const requestedIds = definitions.map((definition) => requestedTrackId(definition.id));
+  const usedIds = new Set<string>();
+  requestedIds.forEach((id, index) => {
+    if (id === undefined) {
+      return;
+    }
+    if (usedIds.has(id)) {
+      throw new TypeError(`Invalid SequenceProject: tracks.${index}.id Track id must be non-empty and unique.`);
+    }
+    usedIds.add(id);
+  });
+
+  return definitions.map((definition, index) => {
+    const id = requestedIds[index] ?? nextAvailableId("track", usedIds);
+    usedIds.add(id);
+    return createTrack({
+      ...definition,
+      id,
+      name: definition.name?.trim() || `Track ${index + 1}`,
+      stepCount,
+    });
+  });
 };
 
 const updateTrack = (
@@ -266,7 +334,8 @@ export const randomizeTrack = (
 
 /**
  * Append a new track (via {@link createTrack}) to the project, sized to
- * match the project's `stepCount`.
+ * match the project's `stepCount`. Its id is the first `track-N` not used
+ * by the project's tracks, so an id freed by {@link removeTrack} is reused.
  *
  * Returns the original `project` unchanged if it already has
  * `SEQUENCER_LIMITS.maxTracks` tracks.
@@ -286,6 +355,7 @@ export const addTrack = (project: SequenceProject, name?: string): SequenceProje
     tracks: [
       ...project.tracks,
       createTrack({
+        id: nextAvailableId("track", project.tracks.map((track) => track.id)),
         name: name ?? `Track ${project.tracks.length + 1}`,
         stepCount: project.stepCount,
       }),

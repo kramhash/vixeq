@@ -43,8 +43,10 @@ function App() {
 ```
 
 Keep a reference to `trackId` — every project step, playback event, and
-sampled channel is keyed by each track's generated `id` (e.g. `"track-1"`),
-not by its display name.
+sampled channel is keyed by each track's `id`, not by its display name. A
+track you don't give an id gets the first unused `track-N` in its project
+(here `"track-1"`); pass `createProject({ tracks: [{ id: "gate", name: "Gate" }] })`
+to choose your own.
 
 ## 2. Play it
 

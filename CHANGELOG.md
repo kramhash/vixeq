@@ -2,7 +2,48 @@
 
 ## Unreleased
 
+### Added
+
+- `@vixeq/core`: callers can supply track ids. `createTrack({ id })` and the
+  new `createProject({ tracks: [{ id?, name?, steps?, enabled? }] })` set the
+  id (trimmed), and `tracks` also takes each track's initial steps, normalized
+  like `createTrack` (one call instead of a `setStepValue()` per step). The
+  options type is exported as `CreateTrackOptions`. `createProject()` throws a
+  `TypeError` when `tracks` is combined with `trackCount` / `trackNames`, has
+  fewer or more entries than `SEQUENCER_LIMITS` allows, or repeats an id.
+
 ### Changed
+
+- `@vixeq/core`: generated track ids are Project-local and deterministic
+  instead of coming from a module-global counter. `createProject()` yields
+  `track-1`…`track-N` on every call, a definition in `tracks` without an id
+  gets the first `track-N` no other track in the project uses, `addTrack()`
+  takes the first unused `track-N` in its project (reusing a number freed by
+  `removeTrack()`), and `createTrack()` without an id returns `track-1`.
+
+  Migration: generated ids no longer continue across projects. Two projects
+  created with the same options now share ids, so `unionTrackIds()` and
+  `sampleArrangement()` merge their tracks into one channel per id — which is
+  what lets a channel mapping work across patterns. Code that relied on ids
+  being unique across projects (for example, several patterns in one
+  Arrangement that must stay separate channels) should pass explicit ids:
+
+  ```ts
+  // Before: track-1 and track-2, depending on call order.
+  // After: both are track-1.
+  const intro = createProject({ trackCount: 1 });
+  const chorus = createProject({ trackCount: 1 });
+  ```
+
+  To keep them apart, name them:
+
+  ```ts
+  const intro = createProject({ tracks: [{ id: "intro-lead" }] });
+  const chorus = createProject({ tracks: [{ id: "chorus-lead" }] });
+  ```
+
+  Several `createTrack()` results without ids now collide on `track-1`; give
+  each one an id, or build the project with `createProject({ tracks })`.
 
 - The 1.0 support target now covers Node.js 22, 24, and 26 and TypeScript
   `>=5.5` (verified on 5.5, 6.0, and 7.0 consumers); the previous upper bound

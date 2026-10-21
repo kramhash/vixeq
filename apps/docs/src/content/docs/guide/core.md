@@ -36,6 +36,27 @@ await engine.play();
 return a new `SequenceProject` — call `engine.setProject(next)` to hot-swap
 the running engine's project.
 
+## Track ids
+
+Channels, step events, and Arrangement samples are keyed by track id, not by
+display name. Pass your own ids (and initial steps) to keep a mapping stable
+across patterns and renames:
+
+```ts
+const pattern = createProject({
+  stepCount: 4,
+  tracks: [
+    { id: "kick", name: "Kick", steps: [1, 0, 0, 0] },
+    { id: "hat", name: "Hat", steps: [0, 0.5, 0, 0.5] },
+  ],
+});
+```
+
+A track without an id gets the first unused `track-N` in its project:
+`createProject({ trackCount: 3 })` always yields `track-1`…`track-3`, and
+`addTrack` reuses a number freed by `removeTrack`. `tracks` cannot be combined
+with `trackCount` / `trackNames`, and a repeated id throws a `TypeError`.
+
 ## Engine lifecycle
 
 ```ts
@@ -111,8 +132,8 @@ import { bindChannelsToElement } from "@vixeq/core/dom";
 
 // In your rAF loop:
 bindChannelsToElement(rootEl, values, {
-  "track-1": "--pulse-beat",
-  "track-2": "--pulse-cta",
+  kick: "--pulse-beat",
+  hat: "--pulse-cta",
 });
 ```
 

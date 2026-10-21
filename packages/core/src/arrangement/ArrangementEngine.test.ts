@@ -6,7 +6,7 @@ import {
   type PlaybackTransportEvent,
 } from "../playbackTransport";
 import { createEnvelope } from "../envelope";
-import { createProject, setStepValue } from "../project";
+import { createProject } from "../project";
 import { beatToMs } from "../timeline/timing";
 import type { ChannelSource, EnginePlaybackEvent, PlaybackClock, StepEvent } from "../types";
 import { ArrangementEngine } from "./ArrangementEngine";
@@ -127,15 +127,18 @@ const buildTransport = (): { clock: FakeClock; transport: PlaybackTransport } =>
 };
 
 const buildArrangement = (): ArrangementProject => {
-  let intro = createProject({ bpm: 999, stepCount: 2, stepsPerBeat: 1, trackCount: 1, trackNames: ["intro"] });
-  const introTrackId = intro.tracks[0].id;
-  intro = setStepValue(intro, introTrackId, 0, 0);
-  intro = setStepValue(intro, introTrackId, 1, 1);
-
-  let chorus = createProject({ bpm: 999, stepCount: 2, stepsPerBeat: 1, trackCount: 1, trackNames: ["chorus"] });
-  const chorusTrackId = chorus.tracks[0].id;
-  chorus = setStepValue(chorus, chorusTrackId, 0, 1);
-  chorus = setStepValue(chorus, chorusTrackId, 1, 1);
+  const intro = createProject({
+    bpm: 999,
+    stepCount: 2,
+    stepsPerBeat: 1,
+    tracks: [{ id: "intro-track", name: "intro", steps: [0, 1] }],
+  });
+  const chorus = createProject({
+    bpm: 999,
+    stepCount: 2,
+    stepsPerBeat: 1,
+    tracks: [{ id: "chorus-track", name: "chorus", steps: [1, 1] }],
+  });
 
   return createArrangement({
     timing: { bpm: 120 },

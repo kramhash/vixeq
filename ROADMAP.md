@@ -268,7 +268,7 @@ All public packages use lockstep versions, including prereleases, through these 
 - [x] Close the Engine re-entrancy gaps found by the adversarial review of RC1B–RC1D: catch-up dispatch in Timeline/Arrangement and the Timeline local-end branch must stop when a listener re-entrantly seeks, hot-swaps, changes loop, or disposes (RC1G).
 - [x] Make Arrangement delayed-tick dispatch honor `missedStepPolicy` across a local loop wrap, section gaps, and local end, with section and step events in time order (RC1H).
 - [x] Make Timeline `missedCuePolicy: "skip"` dispatch only the most advanced due cue of a whole delayed tick, not one per crossed loop iteration (RC1I).
-- [ ] Let callers supply track ids and make generated ids project-local and deterministic, so ids no longer depend on call order (RC1J, issue [#3](https://github.com/kramhash/vixeq/issues/3); moved here from 1.1.0 because generated ids change).
+- [x] Let callers supply track ids and make generated ids project-local and deterministic, so ids no longer depend on call order (RC1J, issue [#3](https://github.com/kramhash/vixeq/issues/3); moved here from 1.1.0 because generated ids change).
 - [x] Handle a negative `TimingMap.startPositionMs` (beat 1 before the start of the audio) instead of silently clamping it to 0 (RC1K, issue [#4](https://github.com/kramhash/vixeq/issues/4)).
 - [x] Harden the tag-triggered publish workflow before the RC: run every repository gate, publish prereleases under the `next` dist-tag, attach npm provenance, and create a GitHub Release. The RC itself is published through this workflow (RC2).
 - [ ] Freeze all three public package APIs against their committed reports.

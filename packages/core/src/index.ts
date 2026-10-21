@@ -113,5 +113,5 @@ export type {
   ValidationIssue,
   ValidationResult,
 } from "./types";
-export type { CreateProjectOptions, RandomizeTrackOptions } from "./project";
+export type { CreateProjectOptions, CreateTrackOptions, RandomizeTrackOptions } from "./project";
 export type { EasingFunction } from "./easing";
