@@ -1,5 +1,6 @@
 import type { MigrationIssue, MigrationResult } from "../types";
 import { isRecord, sortTimelineEvents, toJsonCompatible } from "./project";
+import { endsAfterTransportStart, validateTimingMap } from "./timing";
 import type { JsonObject, TimelineEvent, TimelineProject, TimelineTrack } from "./types";
 
 // Legacy v1 shapes: the v1 TimelineProject type itself no longer exists
@@ -90,7 +91,8 @@ const migrateEvent = (
 
 /**
  * Migrates a v1 `TimelineProject` to v2 (spec §5). `offsetMs` maps to
- * `startPositionMs` only when valid; `"global"` maps to `null` with no
+ * `startPositionMs` only when finite (negative included) and local end stays
+ * after transport position 0; `"global"` maps to `null` with no
  * warning; `TimelineTrack.type` is dropped with a warning per affected
  * track; `TimelineEvent.durationBeats`/`value` are dropped with a warning
  * by default, or folded into `data` via `options.onRemovedField`, or block
@@ -114,14 +116,33 @@ export const migrateTimelineProject = (
 
   let startPositionMs: number | undefined;
   const offsetMs = project.timing?.offsetMs;
-  if (typeof offsetMs === "number" && Number.isFinite(offsetMs) && offsetMs >= 0) {
+  // v1 applied a negative offsetMs unclamped, so it keeps that meaning in v2.
+  if (typeof offsetMs === "number" && Number.isFinite(offsetMs)) {
     startPositionMs = offsetMs;
   } else {
     errors.push({
       code: "TIMELINE_INVALID_OFFSET_MS",
-      message: "timing.offsetMs must be a finite, non-negative number to migrate to startPositionMs.",
+      message: "timing.offsetMs must be a finite number to migrate to startPositionMs.",
       path: "timing.offsetMs",
     });
+  }
+
+  if (startPositionMs !== undefined && Number.isFinite(options.durationBeats) && options.durationBeats > 0) {
+    const timing = { tempos: project.timing.tempos, startPositionMs };
+    let timingValid = true;
+    try {
+      validateTimingMap(timing);
+    } catch {
+      // Strict Project validation reports an invalid v1 tempo map.
+      timingValid = false;
+    }
+    if (timingValid && !endsAfterTransportStart(timing, options.durationBeats)) {
+      errors.push({
+        code: "TIMELINE_INVALID_OFFSET_MS",
+        message: "timing.offsetMs must leave local end (options.durationBeats) after transport position 0.",
+        path: "timing.offsetMs",
+      });
+    }
   }
 
   const migratedTracks: TimelineTrack[] = [];

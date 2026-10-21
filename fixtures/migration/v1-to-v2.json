@@ -96,7 +96,7 @@
               "bpm": 120
             }
           ],
-          "offsetMs": -1
+          "offsetMs": null
         },
         "tracks": [
           {

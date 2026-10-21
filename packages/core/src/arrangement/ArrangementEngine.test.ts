@@ -1689,3 +1689,225 @@ describe("ArrangementEngine — RC1H catch-up", () => {
     expect(engine.getPlaybackState()).toBe("paused");
   });
 });
+
+describe("ArrangementEngine — negative startPositionMs (RC1K)", () => {
+  // One 4-step pattern at 1 step per beat; at 120 bpm a beat is BEAT_MS. Beat 0
+  // lies 250 ms before transport position 0, so the 4-beat arrangement plays
+  // 1750 ms from the middle of beat 0.
+  const earlyArrangement = (startPositionMs = -250): ArrangementProject =>
+    createArrangement({
+      timing: { bpm: 120, startPositionMs },
+      durationBeats: 4,
+      patterns: { p: createProject({ stepCount: 4, stepsPerBeat: 1, trackCount: 1 }) },
+      sections: [
+        { id: "a", patternId: "p", startBeat: 0, endBeat: 2 },
+        { id: "b", patternId: "p", startBeat: 2, endBeat: 4 },
+      ],
+    });
+
+  const start = async (
+    arrangement: ArrangementProject,
+    options: { loop?: boolean; missedStepPolicy?: "emit" | "skip" } = {},
+  ): Promise<{ transport: ManualTransport; engine: ArrangementEngine; log: string[] }> => {
+    const transport = new ManualTransport();
+    const engine = new ArrangementEngine(arrangement, { transport, lookaheadMs: 10, ...options });
+    const log: string[] = [];
+    engine.on("section", (event) =>
+      log.push(`section:${event.cause}:${event.section?.id ?? "null"}@${event.positionMs}/${event.beat}+${event.lateByMs}`),
+    );
+    engine.on("step", (event) =>
+      log.push(`step:${event.cause}:${event.stepIndex}@${event.scheduledPositionMs}+${event.lateByMs}`),
+    );
+    await engine.play();
+    return { transport, engine, log };
+  };
+
+  const tickAt = async (transport: ManualTransport, positionMs: number): Promise<void> => {
+    transport.snapshot = { ...transport.snapshot, positionMs };
+    await vi.advanceTimersByTimeAsync(10);
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("AR-017 plays from transport 0 mid-step and starts every loop iteration there", async () => {
+    const { transport, engine, log } = await start(earlyArrangement(), { loop: true });
+
+    expect(engine.getPosition()).toEqual({ positionMs: 0, beat: 0.5 });
+
+    await tickAt(transport, 300);
+    await tickAt(transport, 800);
+    await tickAt(transport, 1300);
+    await tickAt(transport, 1850);
+    await tickAt(transport, 2050);
+
+    expect(log).toEqual([
+      "section:play:a@0/0.5+0",
+      "step:play:0@0+0",
+      "step:tick:1@250+50",
+      "section:tick:b@750/2+50",
+      "step:tick:0@750+50",
+      "step:tick:1@1250+50",
+      // The wrap dispatches the section and the step already under way at local 0.
+      "section:tick:a@0/0.5+100",
+      "step:tick:0@0+100",
+      "step:tick:1@250+50",
+    ]);
+    engine.dispose();
+  });
+
+  it("AR-017 dispatches the iteration start with missedStepPolicy skip and across several iterations", async () => {
+    const skip = await start(earlyArrangement(), { loop: true, missedStepPolicy: "skip" });
+    await tickAt(skip.transport, 1300);
+    skip.log.length = 0;
+    await tickAt(skip.transport, 1850);
+
+    expect(skip.log).toEqual(["section:tick:a@0/0.5+100", "step:tick:0@0+100"]);
+    skip.engine.dispose();
+
+    const emit = await start(earlyArrangement(), { loop: true });
+    await tickAt(emit.transport, 1300);
+    emit.log.length = 0;
+    await tickAt(emit.transport, 3600);
+
+    expect(emit.log).toEqual([
+      "section:tick:a@-1750/0.5+1850",
+      "step:tick:0@-1750+1850",
+      "step:tick:1@-1500+1600",
+      "section:tick:b@-1000/2+1100",
+      "step:tick:0@-1000+1100",
+      "step:tick:1@-500+600",
+      "section:tick:a@0/0.5+100",
+      "step:tick:0@0+100",
+    ]);
+    emit.engine.dispose();
+  });
+
+  it("AR-017 starts each loop iteration in a gap at transport 0 with section null and no step", async () => {
+    const { transport, engine, log } = await start(
+      createArrangement({
+        timing: { bpm: 120, startPositionMs: -250 },
+        durationBeats: 4,
+        patterns: { p: createProject({ stepCount: 4, stepsPerBeat: 1, trackCount: 1 }) },
+        sections: [{ id: "a", patternId: "p", startBeat: 1, endBeat: 4 }],
+      }),
+      { loop: true },
+    );
+
+    await tickAt(transport, 300);
+    await tickAt(transport, 1850);
+
+    expect(log).toEqual([
+      "section:play:null@0/0.5+0",
+      "section:tick:a@250/1+50",
+      "step:tick:0@250+50",
+      "step:tick:1@-1000+1100",
+      "step:tick:2@-500+600",
+      "section:tick:null@0/0.5+100",
+    ]);
+    engine.dispose();
+  });
+
+  it("AR-017 resolves a section and step starting exactly at transport 0 when msToBeat(0) lands an ulp below them", async () => {
+    // The file starts on beat 7 at 90 bpm: beatToMs(7) is exactly 0, but
+    // msToBeat(0) is 6.999999999999999.
+    const startPositionMs = -beatToMs(createArrangement({ timing: { bpm: 90 } }).timing, 7);
+    const arrangement = createArrangement({
+      timing: { bpm: 90, startPositionMs },
+      durationBeats: 9,
+      patterns: { p: createProject({ stepCount: 4, stepsPerBeat: 1, trackCount: 1 }) },
+      sections: [
+        { id: "a", patternId: "p", startBeat: 0, endBeat: 7 },
+        { id: "b", patternId: "p", startBeat: 7, endBeat: 9 },
+      ],
+    });
+    const transport = new ManualTransport();
+    const engine = new ArrangementEngine(arrangement, { transport, lookaheadMs: 10, loop: true });
+    const log: string[] = [];
+    engine.on("section", (event) => log.push(`section:${event.cause}:${event.section?.id}/${event.beat}`));
+    engine.on("step", (event) => log.push(`step:${event.cause}:${event.stepIndex}@${Math.round(event.scheduledPositionMs)}`));
+
+    await engine.play();
+    expect(engine.getCurrentSection()?.id).toBe("b");
+    await tickAt(transport, 100);
+    await tickAt(transport, beatToMs(arrangement.timing, 9) + 100);
+
+    expect(log).toEqual([
+      "section:play:b/7",
+      "step:play:0@0",
+      "step:tick:1@-667",
+      "step:tick:0@0",
+    ]);
+    engine.dispose();
+  });
+
+  it("AR-017 dispatches a step snapped up to start an ulp after transport 0 once", async () => {
+    // With a tempo change before the file start, beatToMs(1.25) lands an ulp
+    // after 0 instead of on it.
+    const tempos = [
+      { beat: 0, bpm: 60 },
+      { beat: 1, bpm: 72 },
+    ];
+    const startPositionMs = -beatToMs(createArrangement({ timing: { tempos } }).timing, 1.25);
+    const arrangement = createArrangement({
+      timing: { tempos, startPositionMs },
+      durationBeats: 4,
+      patterns: { p: createProject({ stepCount: 16, stepsPerBeat: 4, trackCount: 1 }) },
+      sections: [{ id: "a", patternId: "p", startBeat: 0, endBeat: 4 }],
+    });
+    expect(beatToMs(arrangement.timing, 1.25)).toBeGreaterThan(0);
+    const { transport, engine, log } = await start(arrangement, { loop: true });
+
+    await tickAt(transport, 10);
+    await engine.seekBeat(0);
+    await tickAt(transport, 10);
+
+    expect(log.filter((entry) => entry.startsWith("step:")).map((entry) => entry.split("@")[0])).toEqual([
+      "step:play:5",
+      "step:seek:5",
+    ]);
+    engine.dispose();
+  });
+
+  it("AR-017 schedules the step under way at transport 0 there when the transport moves back on its own", async () => {
+    const { transport, engine, log } = await start(earlyArrangement());
+    await tickAt(transport, 800);
+    log.length = 0;
+
+    await tickAt(transport, 0);
+
+    expect(log).toEqual(["section:tick:a@0/0.5+0", "step:tick:0@0+0"]);
+    engine.dispose();
+  });
+
+  it("AR-017 seekBeat to a beat before transport 0 seeks to transport 0", async () => {
+    const { engine, log } = await start(earlyArrangement());
+    await engine.seekBeat(3);
+    log.length = 0;
+
+    await engine.seekBeat(0.25);
+
+    expect(log).toEqual(["section:seek:a@0/0.5+0", "step:seek:0@0+0"]);
+    expect(engine.getPosition()).toEqual({ positionMs: 0, beat: 0.5 });
+    engine.dispose();
+  });
+
+  it("AR-017 a hot-swap onto a beat before transport 0 anchors at transport 0", async () => {
+    const { transport, engine } = await start(earlyArrangement(0), { loop: true });
+    const projectEvents: Array<Pick<ArrangementProjectEvent, "positionMs" | "beat">> = [];
+    engine.on("project", (event) => projectEvents.push({ positionMs: event.positionMs, beat: event.beat }));
+
+    transport.snapshot = { ...transport.snapshot, positionMs: 100 };
+    engine.setArrangement(earlyArrangement());
+
+    expect(projectEvents).toEqual([{ positionMs: 0, beat: 0.5 }]);
+    transport.snapshot = { ...transport.snapshot, positionMs: 200 };
+    expect(engine.getPosition().positionMs).toBe(100);
+    engine.dispose();
+  });
+});

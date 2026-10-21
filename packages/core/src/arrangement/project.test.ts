@@ -184,6 +184,33 @@ describe("validateArrangement", () => {
   });
 });
 
+describe("AR-016 local end after transport position 0", () => {
+  // 4 beats at 120 bpm end 2000 ms after beat 0.
+  const withStart = (startPositionMs: number) => ({
+    version: 2,
+    timing: { tempos: [{ beat: 0, bpm: 120 }], startPositionMs },
+    durationBeats: 4,
+    patterns: { intro: validPattern() },
+    sections: [{ id: "s1", patternId: "intro", startBeat: 0, endBeat: 4 }],
+  });
+
+  it("rejects a startPositionMs that leaves nothing to play", () => {
+    expect(validateArrangement(withStart(-1_999)).ok).toBe(true);
+    const atEnd = validateArrangement(withStart(-2_000));
+    expect(atEnd.ok).toBe(false);
+    expect(!atEnd.ok && atEnd.errors.map((issue) => issue.path)).toEqual(["timing.startPositionMs"]);
+  });
+
+  it("normalize and create reset such a start to 0 and keep any other negative start", () => {
+    expect(normalizeArrangement(withStart(-1_999)).timing.startPositionMs).toBe(-1_999);
+    expect(normalizeArrangement(withStart(-2_000)).timing.startPositionMs).toBe(0);
+    expect(createArrangement({ timing: { bpm: 120, startPositionMs: -2_000 }, durationBeats: 4 }).timing.startPositionMs)
+      .toBe(0);
+    expect(createArrangement({ timing: { bpm: 120, startPositionMs: -250 }, durationBeats: 4 }).timing.startPositionMs)
+      .toBe(-250);
+  });
+});
+
 describe("normalizeArrangement", () => {
   it("MIG-009 returns a default v2 arrangement for non-object or wrong-version input", () => {
     expect(normalizeArrangement(null)).toEqual(createArrangement());
@@ -194,7 +221,7 @@ describe("normalizeArrangement", () => {
     const intro = validPattern();
     const result = normalizeArrangement({
       version: 2,
-      timing: { tempos: [{ beat: 1, bpm: 90 }], startPositionMs: -1 },
+      timing: { tempos: [{ beat: 1, bpm: 90 }], startPositionMs: Number.NaN },
       durationBeats: 8,
       patterns: { intro },
       sections: [

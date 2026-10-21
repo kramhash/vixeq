@@ -544,6 +544,10 @@ Arrangement delayed-callback dispatch:
 - A section change is a boundary (beat `0`, a section's `startBeat`, or its
   `endBeat`) where the active section differs from the last one emitted. A
   single-section loop crosses its iteration boundary without a section event.
+  With a negative `TimingMap.startPositionMs`, beat `0` lies before transport
+  position 0; the iteration boundary is then transport position 0 instead,
+  and it also dispatches the step already under way there
+  ([`timeline-arrangement-v2.md`](timeline-arrangement-v2.md) §4).
 - `scheduledPositionMs` of a step and `positionMs` of a section event are
   measured from the start of the loop iteration the tick landed in. Items of
   that iteration keep their in-iteration values; items of earlier iterations

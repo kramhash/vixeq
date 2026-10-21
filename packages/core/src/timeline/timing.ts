@@ -9,7 +9,9 @@ const normalizeStartPositionMs = (value: unknown): number => {
     return DEFAULT_START_POSITION_MS;
   }
 
-  return Math.max(0, Number(value));
+  // A negative start position is kept: it puts beat 0 before transport
+  // position 0 (a file whose head was clipped, or a pickup before the bar).
+  return Number(value);
 };
 
 export const normalizeTempoEvent = (tempo: Partial<TempoEvent>, fallbackBeat = 0): TempoEvent => ({
@@ -68,6 +70,22 @@ export const normalizeTimingMap = (input: Partial<TimingMap> | CreateTimingMapOp
     startPositionMs: normalizeStartPositionMs(input.startPositionMs),
   };
 };
+
+/**
+ * Internal: whether local end (`durationBeats`) lies after transport position
+ * 0. A negative `startPositionMs` that reaches past the whole Project leaves
+ * nothing to play, so strict Project validation rejects it.
+ */
+export const endsAfterTransportStart = (timing: TimingMap, durationBeats: number): boolean =>
+  beatToMs(timing, durationBeats) > 0;
+
+/**
+ * Internal: Project normalization's repair for a `startPositionMs` that
+ * leaves nothing to play (see `endsAfterTransportStart`): it resets the start
+ * position to 0.
+ */
+export const normalizeTimingForDuration = (timing: TimingMap, durationBeats: number): TimingMap =>
+  endsAfterTransportStart(timing, durationBeats) ? timing : { ...timing, startPositionMs: DEFAULT_START_POSITION_MS };
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -132,8 +150,8 @@ export const validateTimingMap = (timing: TimingMap): void => {
     throw new TypeError("TimingMap.startPositionMs must be a number.");
   }
 
-  if (!Number.isFinite(timing.startPositionMs) || timing.startPositionMs < 0) {
-    throw new RangeError("TimingMap.startPositionMs must be a finite, non-negative number.");
+  if (!Number.isFinite(timing.startPositionMs)) {
+    throw new RangeError("TimingMap.startPositionMs must be a finite number.");
   }
 };
 
@@ -141,6 +159,8 @@ export const validateTimingMap = (timing: TimingMap): void => {
  * Pure conversion: beat `->` transport-relative milliseconds. Assumes `timing`
  * is already a valid `TimingMap` (see `createTimingMap`/`normalizeTimingMap`
  * to construct one, or `validateTimingMap` to check strictly). Never repairs.
+ * Returns a negative position for a beat before transport position 0 when
+ * `startPositionMs` is negative.
  */
 export const beatToMs = (timing: TimingMap, beat: number): number => {
   const targetBeat = Math.max(0, beat);
@@ -165,7 +185,9 @@ export const beatToMs = (timing: TimingMap, beat: number): number => {
 
 /**
  * Pure conversion: transport-relative milliseconds `->` beat. Assumes `timing`
- * is already a valid `TimingMap`. Never repairs.
+ * is already a valid `TimingMap`. Never repairs. A position before beat 0
+ * returns 0; with a negative `startPositionMs`, position 0 returns the beat at
+ * transport position 0 (greater than 0).
  */
 export const msToBeat = (timing: TimingMap, ms: number): number => {
   const targetMs = ms - timing.startPositionMs;

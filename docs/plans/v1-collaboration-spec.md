@@ -408,7 +408,15 @@ type TimingMap = {
 ```
 
 - Rename `offsetMs` to `startPositionMs`.
-- It is finite, non-negative pre-roll measured from transport position 0.
+- It is the finite transport position of beat 0. A positive value is pre-roll;
+  a negative value puts beat 0 before transport position 0 (an audio file
+  whose head was clipped, or a pickup before the first bar), so Engines start
+  mid-beat at transport position 0. Decided in RC1K (issue #4) instead of
+  keeping it non-negative and rejecting negative values in
+  `createTimingMap()`, which would leave such files impossible to describe.
+- A Project's local end (`beatToMs(timing, durationBeats)`) must lie after
+  transport position 0. Positions before transport position 0 are never
+  dispatched; `seekBeat()` to a beat there seeks to transport position 0.
 - It is never a clock epoch.
 - The first tempo event must be at beat 0.
 - Tempo beats are finite, non-negative, and strictly increasing.
@@ -566,8 +574,9 @@ type MigrationResult<T> =
 - If duration cannot be derived safely, require an explicit migration option
   and return `ok: false` when absent.
 - Arrangement v1 BPM maps to one tempo event at beat 0.
-- Timeline v1 `offsetMs` maps to `startPositionMs` only when valid and
-  non-negative.
+- Timeline v1 `offsetMs` maps to `startPositionMs` only when finite and local
+  end stays after transport position 0. v1 applied a negative `offsetMs`
+  unclamped, so it keeps that meaning.
 - Removed Timeline range/value fields produce documented warnings or require
   caller-provided conversion where meaning cannot be preserved.
 - CHANGELOG and package READMEs include concrete before/after examples.
@@ -826,7 +835,7 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | S1 | 1.0 | After the 14-day RC observation window, publish `1.0.0`, run the post-publish clean-install smoke test, and remove pre-1.0 disclaimers | RC3 | pending | — | package metadata, READMEs, `CHANGELOG.md`, `SUPPORT.md` |
 | DOC1 | 1.0-rc | Add React rhythm game tutorial | — | done | Codex (author) | `apps/docs/src/content/docs/guide/`, `apps/docs/astro.config.mts` |
 | RC1J | 1.0-rc | Caller-supplied track ids and project-local deterministic id generation (details: issue [#3](https://github.com/kramhash/vixeq/issues/3)) | — | pending | — | `packages/core/src/project.ts`, validation, API report |
-| RC1K | 1.0-rc | Negative `TimingMap.startPositionMs` (details: issue [#4](https://github.com/kramhash/vixeq/issues/4)) | — | pending | — | `packages/core/src/timeline/timing.ts`, API report |
+| RC1K | 1.0-rc | Negative `TimingMap.startPositionMs` (details: issue [#4](https://github.com/kramhash/vixeq/issues/4)) | — | in_progress | Claude | `packages/core/src/timeline/timing.ts`, Timeline/Arrangement project validation, migration, `TimelineEngine.ts`, `ArrangementEngine.ts`, `docs/behavior/`, `CHANGELOG.md` |
 
 ### Integration order
 

@@ -40,16 +40,39 @@ describe("migrateTimelineProject", () => {
 
     expect(result.ok).toBe(true);
     expect(result.ok && result.project.timing.startPositionMs).toBe(250);
+
+    // v1 applied a negative offsetMs unclamped; it keeps that meaning.
+    const negative = migrateTimelineProject(
+      v1Project({ timing: { tempos: [{ beat: 0, bpm: 120 }], offsetMs: -29.3 } }),
+      { durationBeats: 4 },
+    );
+    expect(negative.ok && negative.project.timing.startPositionMs).toBe(-29.3);
   });
 
   it("MIG-002 returns ok:false with a MigrationIssue for an invalid v1 offsetMs", () => {
-    const result = migrateTimelineProject(
-      v1Project({ timing: { tempos: [{ beat: 0, bpm: 120 }], offsetMs: -1 } }),
+    for (const offsetMs of [Number.NaN, Number.POSITIVE_INFINITY, undefined]) {
+      const result = migrateTimelineProject(
+        v1Project({ timing: { tempos: [{ beat: 0, bpm: 120 }], offsetMs: offsetMs as number } }),
+        { durationBeats: 4 },
+      );
+
+      expect(result.ok).toBe(false);
+      expect(!result.ok && result.errors.some((issue) => issue.path === "timing.offsetMs")).toBe(true);
+    }
+
+    // A negative offsetMs that reaches past durationBeats leaves nothing to play.
+    const pastEnd = migrateTimelineProject(
+      v1Project({ timing: { tempos: [{ beat: 0, bpm: 120 }], offsetMs: -2_000 } }),
       { durationBeats: 4 },
     );
+    expect(!pastEnd.ok && pastEnd.errors.map((issue) => issue.code)).toEqual(["TIMELINE_INVALID_OFFSET_MS"]);
 
-    expect(result.ok).toBe(false);
-    expect(!result.ok && result.errors.some((issue) => issue.path === "timing.offsetMs")).toBe(true);
+    // An invalid v1 tempo map skips that check; strict Project validation reports it.
+    const invalidTempos = migrateTimelineProject(
+      v1Project({ timing: { tempos: [], offsetMs: -2_000 } }),
+      { durationBeats: 4 },
+    );
+    expect(invalidTempos.ok).toBe(true);
   });
 
   it("MIG-003 rewrites trackId \"global\" to null with no warning", () => {

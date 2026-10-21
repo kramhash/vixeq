@@ -7,7 +7,7 @@ import {
 } from "../playbackTransport";
 import type { PlaybackClock } from "../types";
 import { TimelineEngine } from "./TimelineEngine";
-import { addTimelineEvent, createTimelineProject } from "./index";
+import { addTimelineEvent, beatToMs, createTimelineProject, createTimingMap, msToBeat } from "./index";
 import type { TimelineCueEvent, TimelineEvent, TimelinePlaybackEvent, TimelineProject } from "./types";
 
 class FakeClock implements PlaybackClock {
@@ -1890,5 +1890,109 @@ describe("TimelineEngine — RC1G re-entrancy", () => {
       }, false),
     ).toEqual({ log: ["play", "pause", "loopchange", "loopchange"], state: "ended" });
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe("TimelineEngine — negative startPositionMs (RC1K)", () => {
+  // At 60 bpm a beat is 1000 ms; beat 0 lies 250 ms before transport position
+  // 0, so the 4-beat project plays 3750 ms from beat 0.25.
+  const earlyProject = (events: Array<Pick<TimelineEvent, "id" | "beat">>): TimelineProject =>
+    createTimelineProject({
+      timing: { bpm: 60, startPositionMs: -250 },
+      durationBeats: 4,
+      events: events.map((event) => ({ ...event, type: "cue", trackId: null })),
+    });
+
+  it("TL-EN-015 plays from transport 0 mid-beat and never dispatches cues before transport 0", async () => {
+    vi.useFakeTimers();
+    const clock = new FakeClock();
+    const transport = createClockTransport(clock);
+    const engine = new TimelineEngine(
+      earlyProject([
+        { id: "pickup", beat: 0 },
+        { id: "head", beat: 0.25 },
+        { id: "one", beat: 1 },
+        { id: "three", beat: 3 },
+      ]),
+      { transport, loop: true, lookaheadMs: 10 },
+    );
+    const cues: string[] = [];
+    engine.on("cue", (event) => cues.push(`${event.event.id}:${event.iteration}@${event.scheduledPositionMs}`));
+
+    await engine.play();
+
+    expect(cues).toEqual(["head:0@0"]);
+    expect(engine.getPosition()).toEqual({ positionMs: 0, beat: 0.25 });
+
+    await tickEngine(clock, 3_800);
+
+    expect(cues).toEqual(["head:0@0", "one:0@750", "three:0@2750", "head:1@3750"]);
+    expect(engine.getPosition().beat).toBeCloseTo(0.3, 10);
+    engine.dispose();
+  });
+
+  it("TL-EN-015 dispatches a cue exactly at transport 0 when msToBeat(0) lands an ulp above its beat", async () => {
+    vi.useFakeTimers();
+    const clock = new FakeClock();
+    const transport = createClockTransport(clock);
+    // The file starts on beat 11 at 72 bpm: beatToMs(11) is exactly 0, but
+    // msToBeat(0) is 11.000000000000002.
+    const startPositionMs = -beatToMs(createTimingMap({ bpm: 72 }), 11);
+    const project = createTimelineProject({
+      timing: { bpm: 72, startPositionMs },
+      durationBeats: 13,
+      events: [
+        { id: "eleven", beat: 11, type: "cue", trackId: null },
+        { id: "twelve", beat: 12, type: "cue", trackId: null },
+      ],
+    });
+    expect(msToBeat(project.timing, 0)).not.toBe(11);
+    const engine = new TimelineEngine(project, { transport, loop: true, lookaheadMs: 10 });
+    const cues: string[] = [];
+    engine.on("cue", (event) => cues.push(`${event.event.id}:${event.iteration}`));
+
+    await engine.play();
+    await tickEngine(clock, 900);
+    await tickEngine(clock, beatToMs(project.timing, 13) - 800);
+
+    expect(cues).toEqual(["eleven:0", "twelve:0", "eleven:1"]);
+    engine.dispose();
+  });
+
+  it("TL-EN-015 seekBeat to a beat before transport 0 seeks to transport 0", async () => {
+    vi.useFakeTimers();
+    const transport = createClockTransport(new FakeClock());
+    const engine = new TimelineEngine(earlyProject([{ id: "head", beat: 0.25 }]), { transport });
+    const cues: TimelineCueEvent[] = [];
+    engine.on("cue", (event) => cues.push(event));
+
+    await engine.seekBeat(1);
+    expect(engine.getPosition()).toEqual({ positionMs: 750, beat: 1 });
+
+    await engine.seekBeat(0);
+    expect(engine.getPosition()).toEqual({ positionMs: 0, beat: 0.25 });
+
+    await engine.seekBeat(1);
+    await engine.seekBeat(0.1);
+    expect(engine.getPosition()).toEqual({ positionMs: 0, beat: 0.25 });
+    expect(cues).toEqual([]);
+    expect(() => engine.seekBeat(-0.1)).toThrow(RangeError);
+  });
+
+  it("TL-EN-015 a hot-swap onto a beat before transport 0 anchors at transport 0", async () => {
+    vi.useFakeTimers();
+    const transport = new ManualTransport();
+    const engine = new TimelineEngine(projectWithEvents(4, []), { transport, loop: true, lookaheadMs: 10 });
+    const projectEvents: Array<{ positionMs: number; beat: number }> = [];
+    engine.on("project", (event) => projectEvents.push({ positionMs: event.positionMs, beat: event.beat }));
+
+    await engine.play();
+    transport.snapshot = { ...transport.snapshot, positionMs: 100 };
+    engine.setProject(earlyProject([]));
+
+    expect(projectEvents).toEqual([{ positionMs: 0, beat: 0.25 }]);
+    transport.snapshot = { ...transport.snapshot, positionMs: 200 };
+    expect(engine.getPosition().positionMs).toBe(100);
+    engine.dispose();
   });
 });

@@ -261,6 +261,28 @@ describe("TimelineProject v2 strict validation", () => {
     expect(nonFinite.ok).toBe(false);
   });
 
+  it("TL-020 requires local end after transport position 0 and normalize resets a start that passes it", () => {
+    // 4 beats at 120 bpm end 2000 ms after beat 0.
+    const withStart = (startPositionMs: number) => ({
+      version: 2,
+      timing: { tempos: [{ beat: 0, bpm: 120 }], startPositionMs },
+      durationBeats: 4,
+      tracks: [],
+      events: [{ id: "pickup", trackId: null, beat: 0, type: "cue" }],
+    });
+
+    expect(validateTimelineProject(withStart(-1_999)).ok).toBe(true);
+    const atEnd = validateTimelineProject(withStart(-2_000));
+    expect(atEnd.ok).toBe(false);
+    expect(!atEnd.ok && atEnd.errors.map((issue) => issue.path)).toEqual(["timing.startPositionMs"]);
+    expect(validateTimelineProject(withStart(-5_000)).ok).toBe(false);
+
+    expect(normalizeTimelineProject(withStart(-1_999)).timing.startPositionMs).toBe(-1_999);
+    expect(normalizeTimelineProject(withStart(-2_000)).timing.startPositionMs).toBe(0);
+    expect(createTimelineProject({ timing: { bpm: 120, startPositionMs: -2_000 }, durationBeats: 4 }).timing.startPositionMs)
+      .toBe(0);
+  });
+
   it("rejects events that are not pre-sorted by beat", () => {
     const result = validateTimelineProject({
       version: 2,
