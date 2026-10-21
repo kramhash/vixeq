@@ -13,6 +13,42 @@
   every CI gate passes. Prereleases (starting with `1.0.0-rc.1`) use the
   `next` dist-tag instead of `beta`, and each release gets a GitHub Release
   whose notes are its CHANGELOG section.
+- `@vixeq/core`: `TimingMap.startPositionMs` may be negative. It puts beat 0
+  before transport position 0, for an audio file whose head was clipped or a
+  song that starts with a pickup, and `TimelineEngine` / `ArrangementEngine`
+  then start mid-beat at transport position 0.
+  Previously `createTimingMap()` and `normalizeTimingMap()` silently clamped a
+  negative value to 0 and `validateTimingMap()` rejected it.
+  - `beatToMs()` returns a negative position for a beat before transport
+    position 0, and `msToBeat(timing, 0)` returns the beat at transport
+    position 0. Cues, steps, and section boundaries before transport position
+    0 are never dispatched; `seekBeat()` to such a beat seeks to transport
+    position 0, and each Arrangement loop iteration starts there with the
+    section and the step already under way.
+  - A Timeline or Arrangement Project whose local end
+    (`beatToMs(timing, durationBeats)`) is at or before transport position 0
+    is invalid (path `timing.startPositionMs`); `normalizeTimelineProject()`,
+    `createTimelineProject()`, `normalizeArrangement()`, and
+    `createArrangement()` reset its `startPositionMs` to 0.
+  - `migrateTimelineProject()` maps a negative v1 `offsetMs` unchanged instead
+    of failing with `TIMELINE_INVALID_OFFSET_MS` (v1 applied it unclamped). It
+    still fails for a missing or non-finite `offsetMs`, and now also for one
+    that puts local end at or before transport position 0.
+
+  Migration: code that passed a negative `startPositionMs` and relied on the
+  clamp gets a different timing now. Pass `0` (or omit it) to keep the old
+  result:
+
+  ```ts
+  // Before: silently became startPositionMs: 0
+  createTimingMap({ bpm: 128, startPositionMs: -29.3 });
+  // After: beat 0 is 29.3 ms before transport position 0.
+  // To keep the old timing, drop the negative value:
+  createTimingMap({ bpm: 128 });
+  ```
+
+  A workaround that added the lead to the transport position outside vixeq
+  (`transport.getPositionMs() + 29.3`) can move into the `TimingMap` instead.
 
 ### Fixed
 

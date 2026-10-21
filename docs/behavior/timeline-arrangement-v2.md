@@ -32,8 +32,13 @@ export type TimingMap = {
 ```
 
 - `offsetMs` is renamed to `startPositionMs`. No compatibility alias is retained.
-- `startPositionMs` is finite and non-negative. It is pre-roll measured from
-  transport position 0, never a clock epoch and never negative pre-roll.
+- `startPositionMs` is finite. It is the transport position of beat 0, never a
+  clock epoch. A positive value is pre-roll before beat 0. A negative value puts
+  beat 0 before transport position 0, for an audio file whose head was clipped
+  or a song that starts with a pickup: `beatToMs()` returns a negative position
+  for a beat before transport position 0, and `msToBeat(timing, 0)` returns the
+  beat at transport position 0 (greater than 0). Positions before beat 0 still
+  return beat 0.
 - `tempos` must contain at least one entry, and the first entry's `beat` must be
   `0`.
 - Tempo beats are finite, non-negative, and strictly increasing; duplicate beats
@@ -53,11 +58,19 @@ export function normalizeTimingMap(input: Partial<TimingMap> | CreateTimingMapOp
 
 - `createTimingMap()` and `normalizeTimingMap()` repair or default within the v2
   schema (for example: inserting a synthesized beat-0 tempo, clamping BPM,
-  defaulting `startPositionMs` to `0`). They never throw on malformed input.
+  defaulting a missing or non-finite `startPositionMs` to `0`). They keep a
+  finite negative `startPositionMs`. They never throw on malformed input.
 - `validateTimingMap()` is strict: it throws `TypeError` for wrong-typed fields and
   `RangeError` for out-of-range or structurally invalid values (missing beat-0
-  tempo, non-increasing beats, duplicate beats, out-of-range BPM, negative or
-  non-finite `startPositionMs`). It performs no repair.
+  tempo, non-increasing beats, duplicate beats, out-of-range BPM, non-finite
+  `startPositionMs`). It performs no repair.
+- A Timeline or Arrangement Project's local end, `beatToMs(timing,
+  durationBeats)`, must lie after transport position 0; a negative
+  `startPositionMs` that reaches past it leaves nothing to play. Strict
+  validation reports it at path `timing.startPositionMs`. Project
+  normalization (`normalizeTimelineProject()`, `createTimelineProject()`,
+  `normalizeArrangement()`, `createArrangement()`) repairs it by resetting
+  `startPositionMs` to `0`.
 - Strict Engine and Project construction paths call `validateTimingMap()`, not
   `normalizeTimingMap()`. Import/migration paths call `normalizeTimingMap()` or
   `migrateTimelineProject()`/`migrateArrangementProject()` (§5) explicitly.
@@ -192,7 +205,9 @@ TimelineEngine.seekBeat(beat: number): Promise<void>;
 - `TimelineEngine` does not implement `ChannelSource`. It is a cue scheduler, not
   a continuous channel source; it has no `sampleChannels()`/`sampleChannelsAt()`.
 - `seekBeat()` validates synchronously (`0 <= beat <= durationBeats`, finite, or
-  throws `RangeError`) and emits no cue events for the seek itself. Consumers that
+  throws `RangeError`) and emits no cue events for the seek itself. A beat
+  before transport position 0 (negative `startPositionMs`) seeks to transport
+  position 0, so `seekBeat(0)` always returns to the start. Consumers that
   need events "as of" a seek position use a pure query (§2.2), not a dispatch
   side effect.
 - Dispatch policy for events skipped by natural transport delay is
@@ -214,6 +229,9 @@ TimelineEngine.seekBeat(beat: number): Promise<void>;
 - Loop dispatch repeats every event on every iteration, including any event at
   beat `0`. A looping `TimelineEngine` does not deduplicate the boundary event
   across iterations.
+- Events before transport position 0 (negative `startPositionMs`) are never
+  dispatched; range queries still return them. Play, seek, and each loop
+  iteration start at transport position 0, mid-beat.
 - Dispatch events (delivered on the `"cue"` event channel) include:
 
 ```ts
@@ -227,7 +245,8 @@ export type TimelineCueEvent<TEvent extends TimelineEvent = TimelineEvent> = {
 ```
 
 - During Project hot-swap (`setProject()`), the current beat position is
-  preserved; hot-swap never seeks the transport.
+  preserved; hot-swap never seeks the transport. A beat that lies before
+  transport position 0 in the new Project maps to transport position 0.
 - Events newly added at or before the current beat by a hot-swap are not emitted
   retroactively. They become eligible only on a future pass through that beat
   (natural playback past it again, or a loop iteration).
@@ -274,7 +293,18 @@ export type ArrangementProject = {
     continue playback.
 - A forced reposition from hot-swap emits exactly one destination step with
   `cause: "project-change"`. Intermediate steps between the old and new position
-  are never replayed.
+  are never replayed. As in Timeline, a beat before transport position 0 in the
+  new Arrangement maps to transport position 0, and `seekBeat()` to such a beat
+  seeks there.
+- With a negative `startPositionMs`, playback starts at transport position 0
+  inside the arrangement: play, seek, and the start of every local loop
+  iteration dispatch the section there and the step already under way (its
+  `scheduledPositionMs` is the iteration start, as for play; the same applies
+  when a transport moves back to it on its own). Section boundaries and steps
+  before transport position 0 are never dispatched. A section edge or step
+  start exactly at transport position 0 resolves as starting there, even when
+  the ms -> beat round trip lands an ulp below it; likewise a Timeline event
+  exactly there is dispatched.
 - Natural transport delay applies `missedStepPolicy` across a local loop wrap,
   section gaps, and local end, with section changes and steps in timeline
   order (`playback-v2.md` §5, "Arrangement delayed-callback dispatch"). Unlike
@@ -309,8 +339,10 @@ export type MigrationResult<T> =
   determine a required v2 value, migration requires an explicit caller-supplied
   option and returns `{ ok: false, errors: [...] }` when that option is absent.
 - `TimelineProject_v1.timing.offsetMs` maps to `startPositionMs` only when it is a
-  valid, non-negative finite number; otherwise migration records an error rather
-  than defaulting silently to `0`.
+  finite number that keeps local end (`options.durationBeats`) after transport
+  position 0; otherwise migration records an error rather than defaulting
+  silently to `0`. v1 applied a negative `offsetMs` unclamped, so a negative
+  value maps unchanged and keeps its meaning.
 - `ArrangementProject_v1.bpm` maps to a single `TempoEvent` at `beat: 0` with that
   BPM value only when it is a finite number within
   `SEQUENCER_LIMITS.minBpm`/`maxBpm`; otherwise migration records an error

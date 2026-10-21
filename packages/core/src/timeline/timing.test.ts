@@ -25,10 +25,12 @@ describe("TimingMap v2", () => {
     expect(timing.tempos[1]).toEqual({ beat: 4, bpm: 90 });
   });
 
-  it("TM-003 createTimingMap clamps a negative or non-finite startPositionMs option to 0", () => {
-    expect(createTimingMap({ bpm: 120, startPositionMs: -50 }).startPositionMs).toBe(0);
+  it("TM-003 createTimingMap keeps a finite negative startPositionMs and defaults a non-finite one to 0", () => {
+    expect(createTimingMap({ bpm: 128, startPositionMs: -29.3 }).startPositionMs).toBe(-29.3);
+    expect(normalizeTimingMap({ tempos: [{ beat: 0, bpm: 128 }], startPositionMs: -29.3 }).startPositionMs).toBe(-29.3);
     expect(createTimingMap({ bpm: 120, startPositionMs: Number.NaN }).startPositionMs).toBe(0);
     expect(createTimingMap({ bpm: 120, startPositionMs: Number.POSITIVE_INFINITY }).startPositionMs).toBe(0);
+    expect(normalizeTimingMap({ startPositionMs: Number.NEGATIVE_INFINITY }).startPositionMs).toBe(0);
   });
 
   it("TM-004 normalizeTimingMap clamps out-of-range bpm into [minBpm, maxBpm]", () => {
@@ -136,12 +138,14 @@ describe("TimingMap v2", () => {
     expect(() => validateTimingMap(nonFinite)).toThrow(RangeError);
   });
 
-  it("TM-010 validateTimingMap rejects a negative or non-finite startPositionMs", () => {
-    const negative: TimingMap = { tempos: [{ beat: 0, bpm: 120 }], startPositionMs: -1 };
+  it("TM-010 validateTimingMap rejects a non-finite startPositionMs and accepts a finite negative one", () => {
+    const negative: TimingMap = { tempos: [{ beat: 0, bpm: 120 }], startPositionMs: -29.3 };
     const nonFinite: TimingMap = { tempos: [{ beat: 0, bpm: 120 }], startPositionMs: Number.POSITIVE_INFINITY };
+    const notANumber: TimingMap = { tempos: [{ beat: 0, bpm: 120 }], startPositionMs: Number.NaN };
 
-    expect(() => validateTimingMap(negative)).toThrow(RangeError);
+    expect(() => validateTimingMap(negative)).not.toThrow();
     expect(() => validateTimingMap(nonFinite)).toThrow(RangeError);
+    expect(() => validateTimingMap(notANumber)).toThrow(RangeError);
   });
 
   it("validateTimingMap rejects empty tempos and non-finite tempo beats", () => {
@@ -241,6 +245,34 @@ describe("TimingMap v2", () => {
     expect(msToBeat(timing, 0)).toBe(0);
     expect(msToBeat(timing, 249)).toBe(0);
     expect(msToBeat(timing, 250)).toBe(0);
+
+    // A negative start puts beat 0 before transport position 0.
+    const early = createTimingMap({ bpm: 120, startPositionMs: -250 });
+    expect(msToBeat(early, -300)).toBe(0);
+    expect(msToBeat(early, -250)).toBe(0);
+    expect(msToBeat(early, 0)).toBe(0.5);
+  });
+
+  it("TM-017 a negative startPositionMs puts beat 0 before transport position 0", () => {
+    // An export whose head was clipped by 1292 samples at 44.1 kHz.
+    const timing = createTimingMap({ bpm: 128, startPositionMs: -29.3 });
+
+    expect(beatToMs(timing, 0)).toBe(-29.3);
+    expect(beatToMs(timing, 1)).toBeCloseTo(439.45, 10);
+    expect(msToBeat(timing, 0)).toBeCloseTo(29.3 / 468.75, 12);
+
+    const tempoChange = createTimingMap({
+      tempos: [
+        { beat: 0, bpm: 120 },
+        { beat: 4, bpm: 60 },
+      ],
+      startPositionMs: -750,
+    });
+    expect(beatToMs(tempoChange, 1)).toBe(-250);
+    expect(beatToMs(tempoChange, 5)).toBe(2_250);
+    for (const beat of [0, 1, 1.5, 4, 5, 10]) {
+      expect(msToBeat(tempoChange, beatToMs(tempoChange, beat))).toBeCloseTo(beat, 10);
+    }
   });
 
   it("TM-016 beatToMs/msToBeat are pure functions of TimingMap and a transport-relative value, never a clock timestamp", () => {

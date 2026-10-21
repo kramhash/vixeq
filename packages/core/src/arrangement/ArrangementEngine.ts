@@ -87,6 +87,8 @@ export type ArrangementEngineOptions = {
   onListenerError?: (error: unknown, context: ListenerErrorContext) => void;
 };
 
+const POSITION_EPSILON_MS = 1e-9;
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
@@ -290,7 +292,9 @@ export class ArrangementEngine {
       throw new RangeError(`beat must be a finite number from 0 to ${durationBeats}.`);
     }
     if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
-    return this.runTransportCommands(["seek"], () => this.transport.seekMs(beatToMs(this.arrangement.timing, beat)));
+    // A beat before transport position 0 (negative startPositionMs) seeks to 0.
+    const positionMs = Math.max(0, beatToMs(this.arrangement.timing, beat));
+    return this.runTransportCommands(["seek"], () => this.transport.seekMs(positionMs));
   }
 
   seekPositionMs(positionMs: number): Promise<void> {
@@ -380,7 +384,7 @@ export class ArrangementEngine {
     this.trackIds = unionTrackIds(this.arrangement);
 
     const nextBeat = this.normalizeBeatForArrangement(previousBeat, arrangement);
-    const nextPositionMs = beatToMs(arrangement.timing, nextBeat);
+    const nextPositionMs = Math.max(0, beatToMs(arrangement.timing, nextBeat));
     this.projectAnchor = {
       transportPositionMs,
       projectPositionMs: nextPositionMs,
@@ -836,7 +840,10 @@ export class ArrangementEngine {
     const resolved = this.resolveAtPosition(transportPositionMs);
     const iteration = this.getIteration(toRawPositionMs);
     if (resolved && this.stepKey(resolved, iteration) !== this.lastEmittedStepKey) {
-      this.emitStepResolution(resolved, iteration, "tick", transportPositionMs);
+      this.skipSnappedStepStart(resolved, transportPositionMs);
+      // A step already under way at transport position 0 (negative
+      // startPositionMs) is scheduled there, as at a local loop wrap.
+      this.emitStepResolution(resolved, iteration, "tick", transportPositionMs, Math.max(0, resolved.scheduledPositionMs));
     }
     return this.dispatchGeneration === generation;
   }
@@ -872,7 +879,16 @@ export class ArrangementEngine {
       this.lastEmittedStepKey = null;
       return;
     }
+    this.skipSnappedStepStart(resolved, positionMs);
     this.emitStepResolution(resolved, this.getIteration(this.getRawPositionMs()), cause, positionMs, positionMs);
+  }
+
+  /**
+   * Moves the dispatch cursor past a step start that beatAtPosition snapped up
+   * to from just before it, so the next tick does not dispatch that step again.
+   */
+  private skipSnappedStepStart(resolved: ArrangementStepResolution, positionMs: number): void {
+    this.lastDispatchedRawPositionMs += Math.max(0, resolved.scheduledPositionMs - positionMs);
   }
 
   private emitStepResolution(
@@ -915,7 +931,7 @@ export class ArrangementEngine {
   }
 
   private emitSectionForPosition(positionMs: number, cause: StepEventCause, force: boolean): void {
-    const beat = msToBeat(this.arrangement.timing, positionMs);
+    const beat = this.beatAtPosition(positionMs);
     const lookup = sectionAtBeat(this.arrangement, beat);
     const section = lookup?.section ?? null;
     const sectionId = section?.id ?? null;
@@ -961,7 +977,7 @@ export class ArrangementEngine {
   }
 
   private syncCurrentSection(positionMs: number): void {
-    const beat = msToBeat(this.arrangement.timing, positionMs);
+    const beat = this.beatAtPosition(positionMs);
     this.currentSection = sectionAtBeat(this.arrangement, beat)?.section ?? null;
   }
 
@@ -1057,8 +1073,29 @@ export class ArrangementEngine {
     return !this.localLoop && positionMs >= this.getDurationMs();
   }
 
-  private resolveAtPosition(positionMs: number, arrangement = this.arrangement): ArrangementStepResolution | null {
+  /**
+   * The beat at a position, snapped up to the next section edge or step start
+   * when that lies within POSITION_EPSILON_MS: an ms-to-beat round trip can
+   * land an ulp below it (for example at transport position 0 when a negative
+   * startPositionMs puts a section or step start exactly there).
+   */
+  private beatAtPosition(positionMs: number, arrangement = this.arrangement): number {
     const beat = msToBeat(arrangement.timing, positionMs);
+    let nextBeat = Number.POSITIVE_INFINITY;
+    for (const section of arrangement.sections) {
+      if (section.startBeat >= beat) {
+        nextBeat = Math.min(nextBeat, section.startBeat);
+      } else if (section.endBeat > beat) {
+        const { stepsPerBeat } = arrangement.patterns[section.patternId];
+        const stepBeat = section.startBeat + Math.ceil((beat - section.startBeat) * stepsPerBeat) / stepsPerBeat;
+        nextBeat = Math.min(nextBeat, stepBeat, section.endBeat);
+      }
+    }
+    return beatToMs(arrangement.timing, nextBeat) - positionMs <= POSITION_EPSILON_MS ? nextBeat : beat;
+  }
+
+  private resolveAtPosition(positionMs: number, arrangement = this.arrangement): ArrangementStepResolution | null {
+    const beat = this.beatAtPosition(positionMs, arrangement);
     const resolved = resolveArrangementStep(arrangement, beat);
     if (!resolved) {
       return null;
@@ -1110,10 +1147,30 @@ export class ArrangementEngine {
     toLocalMs: number,
   ): void {
     const { timing, sections, patterns } = this.arrangement;
-    const isDue = (localMs: number): boolean => localMs > fromLocalMs && localMs <= toLocalMs;
+    // Positions before transport 0 (a negative startPositionMs) are never due.
+    const isDue = (localMs: number): boolean => localMs >= 0 && localMs > fromLocalMs && localMs <= toLocalMs;
     const durationBeats = this.getDurationBeats();
 
-    const boundaryBeats = new Set([0, ...sections.flatMap((section) => [section.startBeat, section.endBeat])]);
+    // A negative startPositionMs puts beat 0 before transport position 0, so an
+    // iteration starts at local 0 inside the arrangement. Like play() from
+    // there, its start dispatches the section and the step already under way.
+    const startsBeforeTransport = timing.startPositionMs < 0;
+    if (startsBeforeTransport && isDue(0)) {
+      const beat = this.beatAtPosition(0);
+      items.push({
+        kind: "section",
+        rawPositionMs: iterationStartMs,
+        section: sectionAtBeat(this.arrangement, beat)?.section ?? null,
+        beat,
+      });
+      const resolved = this.resolveAtPosition(0);
+      if (resolved && resolved.scheduledPositionMs < 0) {
+        items.push({ kind: "step", rawPositionMs: iterationStartMs, iteration, resolved });
+      }
+    }
+
+    const sectionEdges = sections.flatMap((section) => [section.startBeat, section.endBeat]);
+    const boundaryBeats = new Set(startsBeforeTransport ? sectionEdges : [0, ...sectionEdges]);
     for (const beat of boundaryBeats) {
       const localMs = beatToMs(timing, beat);
       if (beat >= durationBeats || !isDue(localMs)) {
@@ -1189,7 +1246,7 @@ export class ArrangementEngine {
     positionMs: number,
     easing: EasingFunction = linear,
   ): Record<string, number> {
-    const beat = msToBeat(arrangement.timing, positionMs);
+    const beat = this.beatAtPosition(positionMs, arrangement);
     return sampleArrangement(arrangement, beat, easing, unionTrackIds(arrangement));
   }
 

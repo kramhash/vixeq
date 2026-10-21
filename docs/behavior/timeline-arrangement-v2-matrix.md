@@ -1,6 +1,6 @@
 # Timing, Timeline, and Arrangement v2 Behavior Matrix
 
-- Status: 79 of 79 rows `covered` as of the RC0 follow-up. CI
+- Status: 89 of 89 rows `covered` as of RC1K. CI
   (`pnpm behavior:check`) fails if a `covered` row's ID is not found in any
   test.
 - Normative contract: [`timeline-arrangement-v2.md`](timeline-arrangement-v2.md)
@@ -17,20 +17,21 @@ Status values: `planned`, `covered`, `blocked`.
 | --- | --- | --- | --- |
 | TM-001 | createTimingMap with single bpm | one tempo at beat 0; startPositionMs 0 | covered |
 | TM-002 | createTimingMap with tempos list missing beat 0 | normalize synthesizes a beat-0 tempo | covered |
-| TM-003 | createTimingMap with negative/non-finite startPositionMs option | normalize clamps/defaults to 0 | covered |
+| TM-003 | createTimingMap/normalizeTimingMap with negative or non-finite startPositionMs | a finite negative value is kept; a non-finite one defaults to 0 | covered |
 | TM-004 | normalizeTimingMap with out-of-range bpm | clamps into [minBpm, maxBpm] | covered |
 | TM-005 | normalizeTimingMap with unsorted/duplicate tempo beats | sorts and repairs to strictly increasing beats | covered |
 | TM-006 | validateTimingMap with valid map | returns without throwing | covered |
 | TM-007 | validateTimingMap missing beat-0 tempo | throws RangeError | covered |
 | TM-008 | validateTimingMap with non-increasing or duplicate beats | throws RangeError | covered |
 | TM-009 | validateTimingMap with out-of-range bpm | throws RangeError | covered |
-| TM-010 | validateTimingMap with negative/non-finite startPositionMs | throws RangeError | covered |
+| TM-010 | validateTimingMap with negative or non-finite startPositionMs | non-finite throws RangeError; a finite negative value is accepted | covered |
 | TM-011 | validateTimingMap with wrong-typed field | throws TypeError | covered |
 | TM-012 | beatToMs across a single-tempo map | linear conversion from startPositionMs | covered |
 | TM-013 | beatToMs across multiple tempo segments | segment-accumulated conversion at each boundary | covered |
 | TM-014 | msToBeat is the inverse of beatToMs | round-trip beat -> ms -> beat within floating tolerance | covered |
-| TM-015 | msToBeat before startPositionMs | returns beat 0 | covered |
+| TM-015 | msToBeat before startPositionMs | returns beat 0; with a negative startPositionMs, position 0 returns the beat at transport position 0 | covered |
 | TM-016 | beatToMs/msToBeat never receive or return a clock timestamp | pure functions of TimingMap + transport-relative value only | covered |
+| TM-017 | beatToMs/msToBeat with a negative startPositionMs | beats before transport position 0 map to negative positions; round trip holds across tempo segments | covered |
 
 ## TimelineProject v2 schema and validation (`TL-*`)
 
@@ -57,6 +58,7 @@ Status values: `planned`, `covered`, `blocked`.
 | TL-019 | construction with a domain validator that throws | rejection propagates like a structural validation failure | covered |
 | TL-019A | construction with a domain validator that does not throw | event accepted; behavior identical to Core-only checks | covered |
 | TL-019B | construction with no domain validator | no extra domain validation performed | covered |
+| TL-020 | negative startPositionMs that puts local end at or before transport position 0 | validateTimelineProject ok:false at timing.startPositionMs; normalize/create reset startPositionMs to 0 | covered |
 
 ## TimelineQueryOptions and range queries (`TL-Q-*`)
 
@@ -89,6 +91,7 @@ Status values: `planned`, `covered`, `blocked`.
 | TL-EN-012 | 100,000-event fixture range query | bounded index probes independent of total event count | covered |
 | TL-EN-013 | 100,000-event fixture per-tick dispatch | no full-event-list scan per tick | covered |
 | TL-EN-014 | delayed tick crosses one or more local loop wraps | missedCuePolicy emit dispatches every cue of every crossed iteration in order; skip dispatches exactly one cue, the last due across all crossed iterations (or none if nothing is due) | covered |
+| TL-EN-015 | negative startPositionMs | play and loop iterations start mid-beat at transport position 0; cues before it never dispatch, a cue exactly at it does (also when msToBeat(0) lands an ulp off); seekBeat before it and hot-swap onto a beat before it land on transport position 0 | covered |
 
 ## ArrangementProject v2 (`AR-*`)
 
@@ -109,13 +112,15 @@ Status values: `planned`, `covered`, `blocked`.
 | AR-013 | delayed tick crosses section boundaries or a gap | section changes and steps dispatch in timeline order (section before a step at the same time); section events carry the boundary positionMs/beat and lateByMs | covered |
 | AR-014 | delayed tick or late pause crosses non-looping local end | steps before local end dispatch, then terminal section null, then ended | covered |
 | AR-015 | delayed tick with missedStepPolicy skip | only the landing section change and the landing step (none in a gap or at local end), also across a wrap that lands on the same step | covered |
+| AR-016 | negative startPositionMs that puts local end at or before transport position 0 | strict construction rejects it at timing.startPositionMs; normalize/create reset startPositionMs to 0 | covered |
+| AR-017 | negative startPositionMs | play, seek, and every loop iteration start at transport position 0 with the section there and the step under way (also with skip, across several iterations, in a gap, when msToBeat(0) lands an ulp below a section or step start, once when a snapped step starts an ulp after it, and when the transport moves back on its own); seekBeat before it and hot-swap onto a beat before it land on transport position 0 | covered |
 
 ## Migration (`MIG-*`)
 
 | ID | Scenario | Expected result | Status |
 | --- | --- | --- | --- |
-| MIG-001 | migrateTimelineProject with valid v1 offsetMs | maps to startPositionMs unchanged | covered |
-| MIG-002 | migrateTimelineProject with invalid v1 offsetMs | returns ok:false with a MigrationIssue | covered |
+| MIG-001 | migrateTimelineProject with finite v1 offsetMs, negative included | maps to startPositionMs unchanged | covered |
+| MIG-002 | migrateTimelineProject with missing or non-finite v1 offsetMs, or one that puts local end at or before transport position 0 | returns ok:false with a MigrationIssue | covered |
 | MIG-003 | migrateTimelineProject with trackId "global" | rewritten to trackId null with no warning | covered |
 | MIG-004 | migrateTimelineProject with event durationBeats/value present | ok:true with one warning per affected event, or ok:false when meaning cannot be preserved without caller option | covered |
 | MIG-005 | migrateTimelineProject with track type present | ok:true with one warning per affected track | covered |

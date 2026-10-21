@@ -49,6 +49,7 @@ type DueCue<TEvent extends TimelineEvent> = {
 };
 
 const POSITION_EPSILON_MS = 1e-9;
+const BEAT_EPSILON = 1e-9;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -248,7 +249,9 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
       throw new RangeError(`beat must be a finite number from 0 to ${this.project.durationBeats}.`);
     }
     if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
-    return this.runTransportCommands(["seek"], () => this.transport.seekMs(beatToMs(this.project.timing, beat)));
+    // A beat before transport position 0 (negative startPositionMs) seeks to 0.
+    const positionMs = Math.max(0, beatToMs(this.project.timing, beat));
+    return this.runTransportCommands(["seek"], () => this.transport.seekMs(positionMs));
   }
 
   seekPositionMs(positionMs: number): Promise<void> {
@@ -305,7 +308,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     const previousState = this.playbackState;
     const transportPositionMs = this.getTransportPositionMs();
     const nextBeat = this.normalizeBeatForProject(previousBeat, project);
-    const nextPositionMs = beatToMs(project.timing, nextBeat);
+    const nextPositionMs = Math.max(0, beatToMs(project.timing, nextBeat));
 
     this.dispatchGeneration += 1;
     this.project = project;
@@ -677,7 +680,9 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     const iteration = this.localLoop && durationMs > 0 ? Math.floor(rawPositionMs / durationMs) : 0;
     const localPositionMs = this.normalizePosition(rawPositionMs);
     const beat = msToBeat(this.project.timing, localPositionMs);
-    const events = this.eventIndex.getEventsAtBeat(beat).filter((event) => {
+    // The ms filter decides; the beat tolerance only absorbs an ms -> beat
+    // round trip that lands an ulp off the event's beat.
+    const events = this.eventIndex.getEventsAtBeat(beat, BEAT_EPSILON).filter((event) => {
       const scheduledPositionMs = beatToMs(this.project.timing, event.beat);
       return Math.abs(scheduledPositionMs - localPositionMs) <= POSITION_EPSILON_MS;
     });
@@ -769,7 +774,11 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     const fromPositionMs = Math.max(0, fromLocalPositionMs);
     const toPositionMs = Math.min(durationMs, Math.max(0, toLocalPositionMs));
 
-    const fromBeat = msToBeat(this.project.timing, fromPositionMs);
+    // The beat range starts an ulp-absorbing BEAT_EPSILON early because an
+    // ms -> beat round trip can land above an event exactly at
+    // fromPositionMs (transport position 0 with a negative startPositionMs);
+    // the ms checks below decide.
+    const fromBeat = Math.max(0, msToBeat(this.project.timing, fromPositionMs) - BEAT_EPSILON);
     const toBeat = msToBeat(this.project.timing, toPositionMs);
     const events = this.eventIndex.getEventsInBeatRangeInclusiveEnd(fromBeat, toBeat);
     const exclusiveFromPositionMs = fromLocalPositionMs < 0 ? fromLocalPositionMs : fromLocalPositionMs + POSITION_EPSILON_MS;

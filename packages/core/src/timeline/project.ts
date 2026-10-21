@@ -1,5 +1,5 @@
 import type { ValidationIssue, ValidationResult } from "../types";
-import { normalizeTimingMap, validateTimingMap } from "./timing";
+import { endsAfterTransportStart, normalizeTimingForDuration, normalizeTimingMap, validateTimingMap } from "./timing";
 import type {
   CreateTimelineProjectOptions,
   JsonObject,
@@ -174,7 +174,10 @@ export const normalizeTimelineProject = (input: unknown): TimelineProject => {
 
   return {
     version: 2,
-    timing: normalizeTimingMap(isRecord(source.timing) ? source.timing : undefined),
+    timing: normalizeTimingForDuration(
+      normalizeTimingMap(isRecord(source.timing) ? source.timing : undefined),
+      durationBeats,
+    ),
     durationBeats,
     tracks,
     events: sortTimelineEvents(events),
@@ -209,6 +212,12 @@ export const validateTimelineProject = (
   } else {
     try {
       validateTimingMap(input.timing as TimingMap);
+      if (durationBeats !== undefined && !endsAfterTransportStart(input.timing as TimingMap, durationBeats)) {
+        errors.push({
+          path: "timing.startPositionMs",
+          message: "startPositionMs must leave local end (durationBeats) after transport position 0.",
+        });
+      }
     } catch (error) {
       errors.push({ path: "timing", message: error instanceof Error ? error.message : String(error) });
     }

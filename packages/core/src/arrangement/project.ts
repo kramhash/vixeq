@@ -1,5 +1,11 @@
 import { normalizeProject, validateProject } from "../validation";
-import { createTimingMap, normalizeTimingMap, validateTimingMap } from "../timeline/timing";
+import {
+  createTimingMap,
+  endsAfterTransportStart,
+  normalizeTimingForDuration,
+  normalizeTimingMap,
+  validateTimingMap,
+} from "../timeline/timing";
 import type { SequenceProject, ValidationIssue, ValidationResult } from "../types";
 import type { ArrangementProject, ArrangementSection, CreateArrangementOptions } from "./types";
 
@@ -10,15 +16,18 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const isFiniteNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
-export const createArrangement = (options: CreateArrangementOptions = {}): ArrangementProject => ({
-  version: 2,
-  timing: normalizeTimingMap(options.timing),
-  durationBeats: isFiniteNumber(options.durationBeats) && options.durationBeats > 0
+export const createArrangement = (options: CreateArrangementOptions = {}): ArrangementProject => {
+  const durationBeats = isFiniteNumber(options.durationBeats) && options.durationBeats > 0
     ? options.durationBeats
-    : DEFAULT_DURATION_BEATS,
-  patterns: options.patterns ?? {},
-  sections: options.sections ?? [],
-});
+    : DEFAULT_DURATION_BEATS;
+  return {
+    version: 2,
+    timing: normalizeTimingForDuration(normalizeTimingMap(options.timing), durationBeats),
+    durationBeats,
+    patterns: options.patterns ?? {},
+    sections: options.sections ?? [],
+  };
+};
 
 /**
  * Validates ArrangementProject v2 strictly. Migration from v1 is explicit;
@@ -39,11 +48,13 @@ export const validateArrangement = (input: unknown): ValidationResult => {
     errors.push({ path: "bpm", message: "Arrangement must not include the removed bpm field." });
   }
 
+  let timingValid = false;
   if (!isRecord(input.timing)) {
     errors.push({ path: "timing", message: "Timing must be an object." });
   } else {
     try {
       validateTimingMap(input.timing as ArrangementProject["timing"]);
+      timingValid = true;
     } catch (error) {
       errors.push({ path: "timing", message: error instanceof Error ? error.message : String(error) });
     }
@@ -56,6 +67,17 @@ export const validateArrangement = (input: unknown): ValidationResult => {
     errors.push({ path: "durationBeats", message: "durationBeats must be a finite number greater than 0." });
   } else {
     durationBeats = input.durationBeats;
+  }
+
+  if (
+    timingValid &&
+    durationBeats !== undefined &&
+    !endsAfterTransportStart(input.timing as ArrangementProject["timing"], durationBeats)
+  ) {
+    errors.push({
+      path: "timing.startPositionMs",
+      message: "startPositionMs must leave local end (durationBeats) after transport position 0.",
+    });
   }
 
   const patterns = isRecord(input.patterns) ? input.patterns : null;
@@ -176,7 +198,10 @@ export const normalizeArrangement = (input: unknown): ArrangementProject => {
 
   return {
     version: 2,
-    timing: normalizeTimingMap(isRecord(input.timing) ? input.timing : createTimingMap()),
+    timing: normalizeTimingForDuration(
+      normalizeTimingMap(isRecord(input.timing) ? input.timing : createTimingMap()),
+      durationBeats,
+    ),
     durationBeats,
     patterns,
     sections,
