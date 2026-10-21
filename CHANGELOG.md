@@ -14,6 +14,17 @@ the period.
   - [`@vixeq/core@1.0.0-rc.1`](https://www.npmjs.com/package/@vixeq/core/v/1.0.0-rc.1)
   - [`@vixeq/react@1.0.0-rc.1`](https://www.npmjs.com/package/@vixeq/react/v/1.0.0-rc.1)
   - [`@vixeq/player-react@1.0.0-rc.1`](https://www.npmjs.com/package/@vixeq/player-react/v/1.0.0-rc.1)
+- Verified release gates before publish: typecheck, build, unit tests,
+  coverage thresholds, API checks, behavior matrix, packed-package smoke
+  (including every official example built against the packed RC tarballs),
+  React 18 and TypeScript 5.5 / 7.0 smoke fixtures, browser E2E, and the
+  Publish workflow's dry run and gates (Node 22/24/26, E2E, docs).
+- Verified against clean consumers installing from the npm registry (not
+  local tarballs), on React 19 with TypeScript 6.0, React 18, TypeScript 5.5,
+  and TypeScript 7.0: ESM/CJS imports, Timeline/Arrangement migration APIs,
+  public types, React SSR, and `@vixeq/player-react/styles.css` Vite
+  resolution all pass; `publint` and Are The Types Wrong (`node16`) pass on
+  the registry packages.
 
 ### Known caveats
 
@@ -23,6 +34,8 @@ the period.
   start/progression when Linux headless Playwright cannot start or advance
   `AudioContext.currentTime`.
 - Node.js 20 is not supported for the 1.0 line.
+- The packages carry no npm provenance attestation (nor did `0.9.0`),
+  although the Publish workflow passes `--provenance`.
 
 ### Added
 
