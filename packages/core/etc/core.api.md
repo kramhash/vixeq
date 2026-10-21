@@ -178,12 +178,6 @@ export type ChannelSource = {
 };
 
 // @public (undocumented)
-export const clamp: (value: number, min: number, max: number) => number;
-
-// @public (undocumented)
-export const clamp01: (value: number) => number;
-
-// @public (undocumented)
 export const clampStepValue: (value: number) => StepValue;
 
 // @public (undocumented)
@@ -378,6 +372,13 @@ export const migrateArrangementProject: (input: unknown, options?: ArrangementMi
 export const migrateTimelineProject: (project: TimelineProjectV1, options: TimelineMigrationOptions) => MigrationResult<TimelineProject>;
 
 // @public (undocumented)
+export type MigrationIssue = {
+    code: string;
+    message: string;
+    path?: string;
+};
+
+// @public (undocumented)
 export type MigrationResult<T> = {
     ok: true;
     project: T;
@@ -398,12 +399,6 @@ export const normalizeArrangement: (input: unknown) => ArrangementProject;
 
 // @public (undocumented)
 export const normalizeProject: (input: unknown) => SequenceProject;
-
-// @public (undocumented)
-export const normalizeTempoEvent: (tempo: Partial<TempoEvent>, fallbackBeat?: number) => TempoEvent;
-
-// @public (undocumented)
-export const normalizeTempos: (tempos: Partial<TempoEvent>[] | undefined) => TempoEvent[];
 
 // @public
 export const normalizeTimelineEvent: (event?: Partial<TimelineEvent>, index?: number) => TimelineEvent;
@@ -433,9 +428,6 @@ export class PlaybackError extends Error {
 
 // @public (undocumented)
 export type PlaybackErrorCode = "TRANSPORT_DISPOSED" | "DURATION_UNAVAILABLE";
-
-// @public (undocumented)
-export type PlaybackOperation = "play" | "pause" | "stop" | "seek" | "ratechange" | "transport-loop";
 
 // @public (undocumented)
 export type PlaybackSnapshot = {
@@ -532,7 +524,6 @@ export type ProjectEvent = {
     channels: Record<string, number>;
     positionMs: number;
     beat: number;
-    timestamp?: number;
 };
 
 // @public
@@ -666,16 +657,6 @@ export type SequencerPlaybackSnapshot = EnginePlaybackSnapshot & {
 };
 
 // @public (undocumented)
-export type SequencerTransport = {
-    clock: PlaybackClock;
-    play(): void | Promise<void>;
-    stop(): void | Promise<void>;
-    pause?(): void | Promise<void>;
-    seek?(timeMs: number): void | Promise<void>;
-    dispose?(): void;
-};
-
-// @public (undocumented)
 export const setProjectBpm: (project: SequenceProject, bpm: number) => SequenceProject;
 
 // @public
@@ -709,7 +690,6 @@ export type StepEvent = {
     durationMs: number;
     cause: StepEventCause;
     tracks: StepEventTrack[];
-    timestamp?: number;
 };
 
 // @public
@@ -914,30 +894,6 @@ export type Track = {
     steps: StepValue[];
 };
 
-// @public (undocumented)
-export type TransportEvent = {
-    type: "start";
-    bpm: number;
-    stepIndex: number;
-    timestamp: number;
-} | {
-    type: "stop";
-    bpm: number;
-    stepIndex: number;
-    timestamp: number;
-} | {
-    type: "reset";
-    bpm: number;
-    stepIndex: number;
-    timestamp: number;
-} | {
-    type: "bpm";
-    bpm: number;
-    previousBpm: number;
-    stepIndex: number;
-    timestamp: number;
-};
-
 // @public
 export const unionTrackIds: (arrangement: ArrangementProject) => string[];
 
@@ -973,10 +929,6 @@ export type ValidationResult = {
     ok: false;
     errors: ValidationIssue[];
 };
-
-// Warnings were encountered during analysis:
-//
-// dist/index.d.ts:210:5 - (ae-forgotten-export) The symbol "MigrationIssue" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

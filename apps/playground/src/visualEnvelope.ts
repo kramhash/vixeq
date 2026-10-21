@@ -1,5 +1,5 @@
-import { clamp01, decaySmoothedValue, exciteSmoothedValue, type SmoothingConfig } from "@vixeq/core";
-import type { VisualizerState } from "./visualizerState";
+import { decaySmoothedValue, exciteSmoothedValue, type SmoothingConfig } from "@vixeq/core";
+import { clamp01, type VisualizerState } from "./visualizerState";
 
 export type VisualEnvelopeState = {
   energy: number;

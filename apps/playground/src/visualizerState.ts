@@ -17,7 +17,7 @@ export type VisualizerState = {
 
 const TRACK_COMPLEXITY_WEIGHTS = [0.55, 0.8, 1.15, 0.65];
 
-const clamp01 = (value: number): number => Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
+export const clamp01 = (value: number): number => Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
 
 const getStepValues = (project: SequenceProject, stepIndex: number): number[] =>
   project.tracks.map((track) => (track.enabled ? clamp01(track.steps[stepIndex] ?? 0) : 0));
