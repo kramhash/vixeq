@@ -210,7 +210,7 @@ to the same timing map without building a DAW editor.
 
 ---
 
-### 0.9.0 — Release Readiness
+### 0.9.0 — Release Readiness ✓
 
 **Theme**: Make public stability measurable before the API freeze.
 
@@ -266,10 +266,11 @@ All public packages use lockstep versions, including prereleases, through these 
 - [x] Close the remaining 100%-tier Engine branch gaps and wire `pnpm test:coverage` into CI (RC1B-RC1E).
 - [x] Refresh the toolchain to the 1.0 support targets: Node 22/24/26, TypeScript `>=5.5` verified on 5.5, the 6.0 workspace, and a 7.0 consumer fixture, and Playwright re-locked at `1.64.0` with an updated browser table in `SUPPORT.md` (RC1F).
 - [x] Close the Engine re-entrancy gaps found by the adversarial review of RC1B–RC1D: catch-up dispatch in Timeline/Arrangement and the Timeline local-end branch must stop when a listener re-entrantly seeks, hot-swaps, changes loop, or disposes (RC1G).
-- [ ] Make Arrangement delayed-tick dispatch honor `missedStepPolicy` across a local loop wrap, section gaps, and local end, with section and step events in time order (RC1H).
+- [x] Make Arrangement delayed-tick dispatch honor `missedStepPolicy` across a local loop wrap, section gaps, and local end, with section and step events in time order (RC1H).
+- [x] Make Timeline `missedCuePolicy: "skip"` dispatch only the most advanced due cue of a whole delayed tick, not one per crossed loop iteration (RC1I).
 - [ ] Let callers supply track ids and make generated ids project-local and deterministic, so ids no longer depend on call order (RC1J, issue [#3](https://github.com/kramhash/vixeq/issues/3); moved here from 1.1.0 because generated ids change).
 - [ ] Handle a negative `TimingMap.startPositionMs` (beat 1 before the start of the audio) instead of silently clamping it to 0 (RC1K, issue [#4](https://github.com/kramhash/vixeq/issues/4)).
-- [ ] Harden the tag-triggered publish workflow before the RC: run every repository gate, publish prereleases under the `next` dist-tag, attach npm provenance, and create a GitHub Release. The RC itself is published through this workflow (RC2).
+- [x] Harden the tag-triggered publish workflow before the RC: run every repository gate, publish prereleases under the `next` dist-tag, attach npm provenance, and create a GitHub Release. The RC itself is published through this workflow (RC2).
 - [ ] Freeze all three public package APIs against their committed reports.
 - [ ] Publish all public packages at the same RC version.
 - [ ] Make the official examples consume the packed RC packages rather than workspace source paths for release verification.
