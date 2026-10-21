@@ -834,7 +834,7 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | RC3 | 1.0-rc | Publish `1.0.0-rc.1` through the RC2 workflow, verify official examples against the packed RC packages, and run the registry smoke test | RC2 | pending | — | package metadata, `CHANGELOG.md`, examples, release docs |
 | S1 | 1.0 | After the 14-day RC observation window, publish `1.0.0`, run the post-publish clean-install smoke test, and remove pre-1.0 disclaimers | RC3 | pending | — | package metadata, READMEs, `CHANGELOG.md`, `SUPPORT.md` |
 | DOC1 | 1.0-rc | Add React rhythm game tutorial | — | done | Codex (author) | `apps/docs/src/content/docs/guide/`, `apps/docs/astro.config.mts` |
-| RC1J | 1.0-rc | Caller-supplied track ids and project-local deterministic id generation (details: issue [#3](https://github.com/kramhash/vixeq/issues/3)) | — | pending | — | `packages/core/src/project.ts`, validation, API report |
+| RC1J | 1.0-rc | Caller-supplied track ids and project-local deterministic id generation (details: issue [#3](https://github.com/kramhash/vixeq/issues/3)) | — | in_progress | Claude (author) | `packages/core/src/project.ts`, validation, API report |
 | RC1K | 1.0-rc | Negative `TimingMap.startPositionMs` (details: issue [#4](https://github.com/kramhash/vixeq/issues/4)) | — | done | Claude (author), Claude critic (reviewer) | `packages/core/src/timeline/timing.ts`, Timeline/Arrangement project validation, migration, `TimelineEngine.ts`, `ArrangementEngine.ts`, `docs/behavior/`, `CHANGELOG.md` |
 
 ### Integration order

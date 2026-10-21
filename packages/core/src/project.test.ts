@@ -40,6 +40,77 @@ describe("project utilities", () => {
     expect(track.steps.slice(0, 3)).toEqual([0, 0.5, 1]);
   });
 
+  it("createTrack uses a trimmed caller id and otherwise always track-1", () => {
+    expect(createTrack({ id: "  kick  " }).id).toBe("kick");
+    expect(createTrack({ id: "   " }).id).toBe("track-1");
+    expect(createTrack().id).toBe("track-1");
+    expect(createTrack().id).toBe("track-1");
+  });
+
+  it("generates the same project-local ids on every createProject call", () => {
+    const first = createProject({ trackNames: ["kick", "hat", "energy"], trackCount: 3 });
+    const second = createProject({ trackNames: ["kick", "hat", "energy"], trackCount: 3 });
+
+    expect(first.tracks.map((track) => track.id)).toEqual(["track-1", "track-2", "track-3"]);
+    expect(second.tracks.map((track) => track.id)).toEqual(["track-1", "track-2", "track-3"]);
+    expect(createProject().tracks.map((track) => track.id)).toEqual(["track-1", "track-2", "track-3", "track-4"]);
+  });
+
+  it("creates tracks from definitions with ids, names, steps, and enabled flags", () => {
+    const project = createProject({
+      stepCount: 4,
+      tracks: [
+        { id: "kick", name: "Kick", steps: [1, 0, 2, -1, 1] },
+        { name: "  ", enabled: false },
+        { id: " hat ", steps: [0.5] },
+      ],
+    });
+
+    expect(project.tracks).toEqual([
+      { id: "kick", name: "Kick", enabled: true, steps: [1, 0, 1, 0] },
+      { id: "track-1", name: "Track 2", enabled: false, steps: [0, 0, 0, 0] },
+      { id: "hat", name: "Track 3", enabled: true, steps: [0.5, 0, 0, 0] },
+    ]);
+    expect(validateProject(project)).toEqual({ ok: true, errors: [] });
+    expect(normalizeProject(project)).toEqual(project);
+  });
+
+  it("does not generate an id that a later definition asks for", () => {
+    const project = createProject({ tracks: [{}, { id: "track-1" }, {}] });
+
+    expect(project.tracks.map((track) => track.id)).toEqual(["track-2", "track-1", "track-3"]);
+  });
+
+  it("rejects duplicate caller ids, mixed track options, and out-of-range track counts", () => {
+    expect(() => createProject({ tracks: [{ id: "kick" }, { id: " kick " }] })).toThrow(
+      new TypeError("Invalid SequenceProject: tracks.1.id Track id must be non-empty and unique."),
+    );
+    expect(() => createProject({ tracks: [{}], trackCount: 1 })).toThrow(TypeError);
+    expect(() => createProject({ tracks: [{}], trackNames: ["Kick"] })).toThrow(
+      new TypeError("createProject: pass either tracks or trackCount/trackNames, not both."),
+    );
+    expect(() => createProject({ tracks: [] })).toThrow(
+      new TypeError(
+        `Invalid SequenceProject: tracks Track count must be between ${SEQUENCER_LIMITS.minTracks} and ${SEQUENCER_LIMITS.maxTracks}.`,
+      ),
+    );
+    expect(() =>
+      createProject({ tracks: Array.from({ length: SEQUENCER_LIMITS.maxTracks + 1 }, () => ({})) }),
+    ).toThrow(TypeError);
+  });
+
+  it("addTrack takes the first unused track-N, reusing an id freed by removeTrack", () => {
+    const project = createProject({ trackCount: 3 });
+    const removed = removeTrack(project, "track-2");
+    const added = addTrack(removed, "Again");
+
+    expect(added.tracks.map((track) => track.id)).toEqual(["track-1", "track-3", "track-2"]);
+    expect(addTrack(added).tracks[3].id).toBe("track-4");
+
+    const custom = createProject({ tracks: [{ id: "track-1" }, { id: "kick" }] });
+    expect(addTrack(custom).tracks[2].id).toBe("track-2");
+  });
+
   it("updates step values immutably and clamps values", () => {
     const project = createProject({ trackCount: 1 });
     const trackId = project.tracks[0].id;

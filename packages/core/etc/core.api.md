@@ -239,6 +239,7 @@ export type CreateProjectOptions = {
     stepsPerBeat?: number;
     trackCount?: number;
     trackNames?: string[];
+    tracks?: Omit<CreateTrackOptions, "stepCount">[];
 };
 
 // @public (undocumented)
@@ -265,12 +266,16 @@ export type CreateTimingMapOptions = {
 };
 
 // @public
-export const createTrack: (options?: {
+export const createTrack: (options?: CreateTrackOptions) => Track;
+
+// @public (undocumented)
+export type CreateTrackOptions = {
+    id?: string;
     name?: string;
     stepCount?: number;
     steps?: number[];
     enabled?: boolean;
-}) => Track;
+};
 
 // @public (undocumented)
 export const decaySmoothedValue: (current: number, deltaSeconds: number, config: SmoothingConfig) => number;

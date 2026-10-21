@@ -10,10 +10,12 @@ const buildBasicArrangement = (): ArrangementProject => {
   intro = setStepValue(intro, introTrackId, 0, 0);
   intro = setStepValue(intro, introTrackId, 1, 1);
 
-  let chorus = createProject({ bpm: 999, stepCount: 2, stepsPerBeat: 1, trackCount: 1, trackNames: ["chorus-track"] });
-  const chorusTrackId = chorus.tracks[0].id;
-  chorus = setStepValue(chorus, chorusTrackId, 0, 1);
-  chorus = setStepValue(chorus, chorusTrackId, 1, 1);
+  const chorus = createProject({
+    bpm: 999,
+    stepCount: 2,
+    stepsPerBeat: 1,
+    tracks: [{ id: "chorus-track", name: "chorus-track", steps: [1, 1] }],
+  });
 
   return createArrangement({
     timing: { bpm: 120 },
@@ -27,6 +29,21 @@ const buildBasicArrangement = (): ArrangementProject => {
 };
 
 describe("unionTrackIds", () => {
+  it("shares generated ids between patterns built with the same track names", () => {
+    const options = { stepCount: 4, trackCount: 3, trackNames: ["kick", "hat", "energy"] };
+    const arrangement = createArrangement({
+      timing: { bpm: 120 },
+      durationBeats: 8,
+      patterns: { a: createProject(options), b: createProject(options) },
+      sections: [
+        { id: "s1", patternId: "a", startBeat: 0, endBeat: 4 },
+        { id: "s2", patternId: "b", startBeat: 4, endBeat: 8 },
+      ],
+    });
+
+    expect(unionTrackIds(arrangement)).toEqual(["track-1", "track-2", "track-3"]);
+  });
+
   it("returns the union of every pattern's track ids, first-seen order, deduped", () => {
     const arrangement = buildBasicArrangement();
     const ids = unionTrackIds(arrangement);
