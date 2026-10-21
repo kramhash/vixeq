@@ -138,9 +138,12 @@ const createGeneratedTracks = (options: CreateProjectOptions, stepCount: number)
 };
 
 const createDefinedTracks = (options: CreateProjectOptions, stepCount: number): Track[] => {
-  const definitions = options.tracks ?? [];
+  const definitions = options.tracks;
   if (options.trackCount !== undefined || options.trackNames !== undefined) {
     throw new TypeError("createProject: pass either tracks or trackCount/trackNames, not both.");
+  }
+  if (!Array.isArray(definitions)) {
+    throw new TypeError("Invalid SequenceProject: tracks Tracks must be an array.");
   }
   if (definitions.length < SEQUENCER_LIMITS.minTracks || definitions.length > SEQUENCER_LIMITS.maxTracks) {
     throw new TypeError(

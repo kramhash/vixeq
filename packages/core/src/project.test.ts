@@ -79,6 +79,8 @@ describe("project utilities", () => {
     const project = createProject({ tracks: [{}, { id: "track-1" }, {}] });
 
     expect(project.tracks.map((track) => track.id)).toEqual(["track-2", "track-1", "track-3"]);
+    // An untyped caller's non-string id counts as missing, as in Timeline.
+    expect(createProject({ tracks: [{ id: 5 as unknown as string }] }).tracks[0].id).toBe("track-1");
   });
 
   it("rejects duplicate caller ids, mixed track options, and out-of-range track counts", () => {
@@ -88,6 +90,9 @@ describe("project utilities", () => {
     expect(() => createProject({ tracks: [{}], trackCount: 1 })).toThrow(TypeError);
     expect(() => createProject({ tracks: [{}], trackNames: ["Kick"] })).toThrow(
       new TypeError("createProject: pass either tracks or trackCount/trackNames, not both."),
+    );
+    expect(() => createProject({ tracks: "abc" as unknown as [] })).toThrow(
+      new TypeError("Invalid SequenceProject: tracks Tracks must be an array."),
     );
     expect(() => createProject({ tracks: [] })).toThrow(
       new TypeError(

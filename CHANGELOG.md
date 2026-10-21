@@ -29,10 +29,15 @@
   Arrangement that must stay separate channels) should pass explicit ids:
 
   ```ts
-  // Before: track-1 and track-2, depending on call order
+  // Before: track-1 and track-2, depending on call order.
+  // After: both are track-1.
   const intro = createProject({ trackCount: 1 });
   const chorus = createProject({ trackCount: 1 });
-  // After: both are track-1. To keep them apart, name them:
+  ```
+
+  To keep them apart, name them:
+
+  ```ts
   const intro = createProject({ tracks: [{ id: "intro-lead" }] });
   const chorus = createProject({ tracks: [{ id: "chorus-lead" }] });
   ```
