@@ -1,5 +1,13 @@
 import type { SequenceProject } from "./types";
 
+const deepFreeze = <T>(value: T): T => {
+  if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const entry of Object.values(value)) deepFreeze(entry);
+  }
+  return value;
+};
+
 const makeSteps = (active: number[], values?: Record<number, number>): number[] =>
   Array.from({ length: 16 }, (_, index) => (active.includes(index) ? values?.[index] ?? 1 : 0));
 
@@ -7,14 +15,15 @@ const makeSteps = (active: number[], values?: Record<number, number>): number[] 
  * Built-in example {@link SequenceProject}s, keyed by name (`"default"`,
  * `"pulse"`, `"alternating"`). Useful as starting points for demos, tests, or
  * a "load preset" UI — pass one directly to `new SequencerEngine(...)`, or as
- * the seed state for the `project.ts` editing helpers.
+ * the seed state for the `project.ts` editing helpers. The presets are deeply
+ * frozen; the editing helpers return new projects instead of mutating them.
  *
  * @example
  * ```ts
  * const engine = new SequencerEngine(presets.pulse);
  * ```
  */
-export const presets: Record<string, SequenceProject> = {
+export const presets: Record<string, SequenceProject> = deepFreeze({
   default: {
     version: 1,
     bpm: 120,
@@ -85,4 +94,4 @@ export const presets: Record<string, SequenceProject> = {
       },
     ],
   },
-};
+});

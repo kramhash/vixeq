@@ -71,6 +71,10 @@ export type UseTimelineOptions<TEvent extends TimelineEvent = TimelineEvent> = {
   /**
    * Optional domain validator invoked once per event after Core's
    * structural checks; throw inside it to reject a domain-invalid event.
+   * Keep the reference stable (define it outside the component or wrap it in
+   * `useCallback`): unlike the event callbacks, a new validator disposes and
+   * recreates the engine (with the default transport, playback restarts
+   * from 0).
    */
   eventValidator?: TimelineEventValidator<TEvent>;
   /** Called with every `TimelineCueEvent` the engine schedules. */
@@ -150,7 +154,12 @@ export type UseTimelineState<TEvent extends TimelineEvent = TimelineEvent> = {
   setPlaybackRate: (rate: number) => Promise<void>;
   /** Sets whether the transport loops at its known duration. */
   setTransportLoop: (loop: boolean) => Promise<void>;
-  /** Sets the engine-local loop flag (repeat from beat 0 at timeline end), independent of transport looping. */
+  /**
+   * Sets the engine-local loop flag (repeat from beat 0 at timeline end),
+   * independent of transport looping. Unlike the engine's synchronous
+   * `setLoop`, it runs after the hook's earlier commands, like every hook
+   * command, and resolves once applied.
+   */
   setLoop: (loop: boolean) => Promise<void>;
 };
 

@@ -50,6 +50,21 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
   `Envelope.trigger`/`sample` name their argument `positionMs` (the
   `RangeError` message says `positionMs`); `TimelineEngine.getPosition()`
   returns `ChannelPosition`.
+- `presets` is deeply frozen. Mutating it used to change the output of
+  engines built from it, including values outside 0–1
+  ([#25](https://github.com/kramhash/vixeq/issues/25)).
+- `SUPPORT.md` states the semver policy for 1.x: values added to emitted
+  unions and fields added to emitted payloads are minor changes, consumer
+  implemented contracts (`PlaybackTransport`, `PlaybackClock`,
+  `ChannelSource`, `Envelope`, `TimelineEventValidator`) gain only optional
+  members, every export is public, and projects are treated as immutable
+  ([#25](https://github.com/kramhash/vixeq/issues/25)).
+- The playback contract lists `"loop"` in `StepEventCause` and no longer
+  promises an `iteration` field on Arrangement and Timeline snapshots, which
+  was never implemented. `useTimeline` documents that a new
+  `eventValidator` reference recreates the engine, and the hooks document
+  that their `setLoop` is queued behind earlier commands
+  ([#25](https://github.com/kramhash/vixeq/issues/25)).
 
 ### Fixed
 

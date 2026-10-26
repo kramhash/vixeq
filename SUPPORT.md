@@ -96,6 +96,39 @@ After `1.0.0`:
   removals, export removals, or semantic behavior changes that existing
   consumers cannot adopt without code changes.
 
+What counts as public API:
+
+- Everything exported from a package entry point (`@vixeq/core`,
+  `@vixeq/core/dom`, `@vixeq/react`, `@vixeq/player-react`, and
+  `@vixeq/player-react/styles.css`) is public. There are no release tiers
+  such as `@beta` or `@internal`.
+- Projects passed in, and projects and presets handed out (`presets`,
+  `getProject()`, event payloads), are treated as immutable. `presets` is
+  frozen; mutating any other project in place is unsupported, and a change
+  in what such a mutation does is not a breaking change. The editing
+  helpers return new projects.
+
+Unions and payloads that Vixeq emits can grow in a minor release. Handle
+unknown values with a default branch instead of an exhaustive `switch` that
+fails to compile when a value is added. This covers, among others:
+
+- `PlaybackState`
+- `EnginePlaybackEvent.type` and `EnginePlaybackCause`
+- `StepEventCause`
+- `PlaybackErrorCode`
+- `PlaybackTransportEvent`
+- `ListenerErrorContext.source`
+- `SequencePlayerChangeReason`
+- the hooks' pending-operation unions
+
+Fields added to emitted event payloads and snapshots are also minor.
+
+Some types are contracts that consumers implement: `PlaybackTransport`,
+`PlaybackClock`, `ChannelSource`, `Envelope`, and `TimelineEventValidator`.
+In 1.x they gain only optional members; adding a required member is a major
+change. New engine capabilities, such as the duration getters planned for
+1.1, go on the engine classes, not on `ChannelSource`.
+
 Public API changes must update the affected API Extractor report in the same
 change as the implementation.
 
