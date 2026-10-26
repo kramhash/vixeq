@@ -8,8 +8,10 @@ import {
   updateTimelineEvent,
   removeTimelineEvent,
   setTimelineTrackEnabled,
+  sortTimelineEvents,
   validateTimelineProject,
 } from "./index";
+import type { TimelineEngine } from "./TimelineEngine";
 import * as timelineModule from "./index";
 import type { TimelineEvent, TimelineProject } from "./types";
 
@@ -205,7 +207,7 @@ describe("TimelineProject v2 strict validation", () => {
     expect(result.ok).toBe(false);
 
     const project = validProject();
-    const invalidData = { trackId: null, beat: 1, type: "cue", data: { fn: () => 1 } } as unknown as Partial<TimelineEvent>;
+    const invalidData = { trackId: null, beat: 1, type: "cue", data: { fn: () => 1 } } as unknown as Omit<TimelineEvent, "id">;
     expect(() => addTimelineEvent(project, invalidData)).toThrow(TypeError);
   });
 
@@ -500,5 +502,58 @@ describe("TL-019/TL-019A/TL-019B domain validation callback", () => {
 
     expect(result.ok).toBe(false);
     expect(calls).toBe(0);
+  });
+});
+
+describe("typed Timeline update helpers", () => {
+  type FlashEvent = TimelineEvent<"flash", { strength: number }>;
+  type FadeEvent = TimelineEvent<"fade", { from: number; to: number }>;
+  type MyEvent = FlashEvent | FadeEvent;
+
+  const typedProject = (): TimelineProject<MyEvent> => ({
+    ...createTimelineProject({ durationBeats: 8, tracks: [{ id: "a", name: "A", enabled: true }] }),
+    events: [],
+  });
+  const acceptEngineProject = (project: Parameters<TimelineEngine<MyEvent>["setProject"]>[0]) => project;
+
+  it("keeps the event type through every helper without a cast", () => {
+    let project = addTimelineTrack(typedProject(), { name: "B", enabled: true });
+    project = addTimelineEvent(project, { trackId: "a", beat: 2, type: "flash", data: { strength: 1 } });
+    project = addTimelineEvent(project, { id: "fade", trackId: "track-1", beat: 1, type: "fade", data: { from: 0, to: 1 } });
+    project = updateTimelineEvent(project, "fade", { beat: 3 });
+    project = setTimelineTrackEnabled(project, "a", false);
+    project = removeTimelineEvent(project, "event-1");
+    project = removeTimelineTrack(project, "a");
+    const sorted: MyEvent[] = sortTimelineEvents(project.events);
+
+    expect(acceptEngineProject(project)).toBe(project);
+    expect(sorted.map((event) => [event.id, event.beat])).toEqual([["fade", 3]]);
+  });
+
+  it("passes the typed event validator the typed events", () => {
+    const strengths: number[] = [];
+
+    addTimelineEvent(typedProject(), { trackId: null, beat: 0, type: "flash", data: { strength: 0.5 } }, (event) => {
+      if (event.type === "flash") strengths.push(event.data?.strength ?? -1);
+    });
+
+    expect(strengths).toEqual([0.5]);
+  });
+
+  it("requires every field except id when adding, and still rejects the omission at runtime", () => {
+    const project = typedProject();
+    const untyped = createTimelineProject({ durationBeats: 4 });
+
+    // @ts-expect-error trackId is required.
+    expect(() => addTimelineEvent(project, { beat: 1, type: "flash", data: { strength: 1 } })).toThrow(TypeError);
+    // @ts-expect-error type is required.
+    expect(() => addTimelineEvent(untyped, { trackId: null, beat: 1 })).toThrow(TypeError);
+    // @ts-expect-error name and enabled are required.
+    expect(() => addTimelineTrack(project, {})).toThrow(TypeError);
+    // @ts-expect-error enabled is required.
+    expect(() => addTimelineTrack(project, { id: "t2", name: "N" })).toThrow(TypeError);
+    // A union member's data must match its own type.
+    // @ts-expect-error "flash" does not carry fade data.
+    addTimelineEvent(project, { trackId: null, beat: 1, type: "flash", data: { from: 0, to: 1 } });
   });
 });

@@ -43,6 +43,10 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
   disposal errors. Install the packages side by side
   (`npm install @vixeq/core @vixeq/react @vixeq/player-react`)
   ([#20](https://github.com/kramhash/vixeq/issues/20)).
+- `addTimelineEvent` and `addTimelineTrack` take every field except `id`
+  (TypeScript only). Calls that omitted another field compiled but always
+  threw a `TypeError`; they now fail to compile
+  ([#18](https://github.com/kramhash/vixeq/issues/18)).
 
 ### Added
 
@@ -82,6 +86,13 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
   move to `ended`) instead of throwing `RangeError`. Negative and non-finite
   positions still throw
   ([#24](https://github.com/kramhash/vixeq/issues/24)).
+- The Timeline update helpers (`addTimelineEvent`, `updateTimelineEvent`,
+  `removeTimelineEvent`, `addTimelineTrack`, `removeTimelineTrack`,
+  `setTimelineTrackEnabled`) and `sortTimelineEvents` are generic over the
+  event type. A `TimelineProject<MyEvent>` keeps its type through them, so
+  it fits `TimelineEngine<MyEvent>` and `useTimeline<MyEvent>` without a
+  cast, and the event validator receives `MyEvent`
+  ([#18](https://github.com/kramhash/vixeq/issues/18)).
 
 ### Fixed
 

@@ -4,11 +4,15 @@
 
 ```ts
 
-// @public (undocumented)
-export const addTimelineEvent: (project: TimelineProject, event: Partial<TimelineEvent>, eventValidator?: TimelineEventValidator) => TimelineProject;
+// @public
+export const addTimelineEvent: <TEvent extends TimelineEvent>(project: TimelineProject<TEvent>, event: TEvent extends TimelineEvent ? Omit<TEvent, "id"> & {
+    id?: string;
+} : never, eventValidator?: TimelineEventValidator<TEvent>) => TimelineProject<TEvent>;
 
-// @public (undocumented)
-export const addTimelineTrack: (project: TimelineProject, track: Partial<TimelineTrack>) => TimelineProject;
+// @public
+export const addTimelineTrack: <TEvent extends TimelineEvent>(project: TimelineProject<TEvent>, track: Omit<TimelineTrack, "id"> & {
+    id?: string;
+}) => TimelineProject<TEvent>;
 
 // @public
 export const addTrack: (project: SequenceProject, name?: string) => SequenceProject;
@@ -538,10 +542,10 @@ export type RandomizeTrackOptions = {
 };
 
 // @public (undocumented)
-export const removeTimelineEvent: (project: TimelineProject, eventId: string) => TimelineProject;
+export const removeTimelineEvent: <TEvent extends TimelineEvent>(project: TimelineProject<TEvent>, eventId: string) => TimelineProject<TEvent>;
 
 // @public (undocumented)
-export const removeTimelineTrack: (project: TimelineProject, trackId: string) => TimelineProject;
+export const removeTimelineTrack: <TEvent extends TimelineEvent>(project: TimelineProject<TEvent>, trackId: string) => TimelineProject<TEvent>;
 
 // @public (undocumented)
 export const removeTrack: (project: SequenceProject, trackId: string) => SequenceProject;
@@ -663,7 +667,7 @@ export const setProjectBpm: (project: SequenceProject, bpm: number) => SequenceP
 export const setStepValue: (project: SequenceProject, trackId: string, stepIndex: number, value: number) => SequenceProject;
 
 // @public (undocumented)
-export const setTimelineTrackEnabled: (project: TimelineProject, trackId: string, enabled: boolean) => TimelineProject;
+export const setTimelineTrackEnabled: <TEvent extends TimelineEvent>(project: TimelineProject<TEvent>, trackId: string, enabled: boolean) => TimelineProject<TEvent>;
 
 // @public (undocumented)
 export const setTrackEnabled: (project: SequenceProject, trackId: string, enabled: boolean) => SequenceProject;
@@ -678,7 +682,7 @@ export type SmoothingConfig = {
 };
 
 // @public (undocumented)
-export const sortTimelineEvents: (events: TimelineEvent[]) => TimelineEvent[];
+export const sortTimelineEvents: <TEvent extends TimelineEvent>(events: readonly TEvent[]) => TEvent[];
 
 // @public (undocumented)
 export type StepEvent = {
@@ -898,7 +902,7 @@ export const unionTrackIds: (arrangement: ArrangementProject) => string[];
 export type Unsubscribe = () => void;
 
 // @public (undocumented)
-export const updateTimelineEvent: (project: TimelineProject, eventId: string, patch: Partial<TimelineEvent>, eventValidator?: TimelineEventValidator) => TimelineProject;
+export const updateTimelineEvent: <TEvent extends TimelineEvent>(project: TimelineProject<TEvent>, eventId: string, patch: Partial<TEvent>, eventValidator?: TimelineEventValidator<TEvent>) => TimelineProject<TEvent>;
 
 // @public
 export const validateArrangement: (input: unknown) => ValidationResult;
