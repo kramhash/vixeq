@@ -591,6 +591,33 @@ describe("TimelineEngine", () => {
     expect(endedEngine.getPosition().positionMs).toBe(1_000);
   });
 
+  it("PB-EN-031 seekPositionMs past local end on a longer transport matches a direct transport seek", async () => {
+    const record = async (seek: (engine: TimelineEngine, transport: PlaybackTransport) => Promise<void>) => {
+      const transport = createClockTransport(new FakeClock());
+      const engine = new TimelineEngine(projectWithEvents(2, [{ id: "a", beat: 1, type: "cue" }]), { transport });
+      const events: string[] = [];
+      // `cause` differs by design ("command" vs "transport"), so it is left out.
+      engine.on("playback", (event) => events.push(`${event.type}:${event.snapshot.state}`));
+      engine.on("cue", (event) => events.push(`cue:${event.event.id}`));
+      await seek(engine, transport);
+      const result = {
+        events,
+        state: engine.getPlaybackState(),
+        position: engine.getPosition(),
+        transportPositionMs: transport.getPositionMs(),
+      };
+      engine.dispose();
+      return result;
+    };
+
+    const viaEngine = await record((engine) => engine.seekPositionMs(10_000));
+    const viaTransport = await record((_engine, transport) => transport.seekPositionMs(10_000));
+
+    expect(viaEngine).toEqual(viaTransport);
+    expect(viaEngine.state).toBe("ended");
+    expect(viaEngine.transportPositionMs).toBe(10_000);
+  });
+
   it("validates seekPositionMs and public APIs after disposal", async () => {
     const transport = createClockTransport(new FakeClock());
     const engine = new TimelineEngine(projectWithEvents(2, []), { transport });
@@ -598,7 +625,7 @@ describe("TimelineEngine", () => {
     await engine.seekPositionMs(500);
     expect(engine.getPosition()).toEqual({ positionMs: 500, beat: 0.5 });
     expect(() => engine.seekPositionMs(-1)).toThrow(RangeError);
-    expect(() => engine.seekPositionMs(2_001)).toThrow(RangeError);
+    expect(() => engine.seekPositionMs(Number.POSITIVE_INFINITY)).toThrow(RangeError);
 
     engine.dispose();
     engine.dispose();

@@ -300,10 +300,8 @@ export class ArrangementEngine {
   seekPositionMs(positionMs: number): Promise<void> {
     this.assertLive();
     assertFiniteNonNegative(positionMs, "positionMs");
-    const durationMs = this.getDurationMs();
-    if (positionMs > durationMs) {
-      throw new RangeError(`positionMs must be a finite number from 0 to ${durationMs}.`);
-    }
+    // The transport owns the upper bound (a position past local end is valid
+    // on a longer transport), exactly as when it is sought directly.
     if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
     return this.runTransportCommands(["seek"], () => this.transport.seekPositionMs(positionMs));
   }

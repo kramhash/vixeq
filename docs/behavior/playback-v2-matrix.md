@@ -1,6 +1,6 @@
 # Playback v2 Behavior Matrix
 
-- Status: 112 of 112 rows `covered` as of the RC0 follow-up. CI
+- Status: 114 of 114 rows `covered` as of #24. CI
   (`pnpm behavior:check`) fails if a `covered` row's ID is not found in any
   test.
 - Normative contract: [`playback-v2.md`](playback-v2.md)
@@ -98,6 +98,7 @@ Status values: `planned`, `covered`, `blocked`.
 | PB-EN-027 | Engine attaches to an already-playing transport | snapshot adopted immediately; no synthetic step events for time already elapsed | covered |
 | PB-EN-028 | external (non-command) transport events | mapped to Engine playback events with cause transport | covered |
 | PB-EN-029 | attached transport wraps on a natural loop | SequencerEngine emits one cause:"loop" step at the wrapped position and resumes ordinary tick-caused step emission afterward (does not permanently stop) | covered |
+| PB-EN-031 | Arrangement/Timeline seekPositionMs past local end on a longer transport | resolves; same events, state (ended without local loop), and position as a direct transport seek | covered |
 | PB-EN-030 | pause lands at or past local finite end while playing | Timeline/Arrangement enter ended and emit pause, then what the local-end tick would dispatch, then one ended with cause local-end | covered |
 
 ## Sampling, Project events, and Envelopes
