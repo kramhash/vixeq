@@ -13,7 +13,8 @@ import {
   type PlaybackTransport,
   type StepEvent,
 } from "@vixeq/core";
-import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { ReadonlyRef } from "./readonlyRef";
 
 /**
  * Name of a `useArrangement` command while it sits at the head of the
@@ -116,7 +117,7 @@ export type UseArrangementState = {
    * re-render — read it inside animation callbacks instead of depending on
    * hook state for continuous progress.
    */
-  positionRef: MutableRefObject<ChannelPosition>;
+  positionRef: ReadonlyRef<ChannelPosition>;
   /**
    * Ref holding the most recent step, playback, project, or section event
    * emitted by the engine. Updated on every step (not just once per frame),
@@ -125,7 +126,7 @@ export type UseArrangementState = {
    * track `onStep`/`onSection` into their own state instead, since a ref
    * mutation does not itself schedule a render.
    */
-  latestEventRef: MutableRefObject<ArrangementLatestEvent | null>;
+  latestEventRef: ReadonlyRef<ArrangementLatestEvent | null>;
   /**
    * Error from the most recent engine construction or `setProject`
    * call, or `null` if it succeeded. Construction/hot-swap failures are

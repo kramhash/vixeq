@@ -50,16 +50,16 @@ to choose your own.
 
 ## 2. Play it
 
-`useSequencerEngine` owns the `SequencerEngine` lifecycle: it creates the
+`useSequencer` owns the `SequencerEngine` lifecycle: it creates the
 engine on mount, hot-swaps it whenever `project` changes, and disposes it on
 unmount.
 
 ```tsx
-import { useSequencerEngine } from "@vixeq/react";
+import { useSequencer } from "@vixeq/react";
 
 function App() {
   const [project, setProject] = useState<SequenceProject>(initialProject);
-  const player = useSequencerEngine({ project });
+  const player = useSequencer({ project });
 
   return (
     <button type="button" onClick={() => void player.toggle()}>
@@ -84,13 +84,13 @@ DOM as a CSS custom property with `bindChannelsToElement`, keyed by the same
 ```tsx
 import { easeOutCubic } from "@vixeq/core";
 import { bindChannelsToElement } from "@vixeq/core/dom";
-import { useAnimatedChannels, useSequencerEngine } from "@vixeq/react";
+import { useAnimatedChannels, useSequencer } from "@vixeq/react";
 import { useRef } from "react";
 
 function App() {
   const [project, setProject] = useState<SequenceProject>(initialProject);
   const trackId = project.tracks[0].id;
-  const player = useSequencerEngine({ project });
+  const player = useSequencer({ project });
   const boxRef = useRef<HTMLDivElement>(null);
 
   useAnimatedChannels(player.engine, {
@@ -139,7 +139,7 @@ respects a visitor's OS-level motion setting without extra code.
 ```tsx
 import { createProject, easeOutCubic, toggleStep, type SequenceProject } from "@vixeq/core";
 import { bindChannelsToElement } from "@vixeq/core/dom";
-import { useAnimatedChannels, useSequencerEngine } from "@vixeq/react";
+import { useAnimatedChannels, useSequencer } from "@vixeq/react";
 import { useRef, useState } from "react";
 
 const initialProject = (): SequenceProject => {
@@ -154,7 +154,7 @@ const initialProject = (): SequenceProject => {
 export function App() {
   const [project] = useState<SequenceProject>(initialProject);
   const trackId = project.tracks[0].id;
-  const player = useSequencerEngine({ project });
+  const player = useSequencer({ project });
   const boxRef = useRef<HTMLDivElement>(null);
 
   useAnimatedChannels(player.engine, {
@@ -179,7 +179,7 @@ export function App() {
 ## Next steps
 
 - Full hook reference — [`@vixeq/react` guide](../react/) and
-  [`useSequencerEngine` API](../../api/vixeq/react/functions/usesequencerengine/)
+  [`useSequencer` API](../../api/vixeq/react/functions/usesequencerengine/)
 - Prefer a ready-made, editable grid UI instead of a hand-rolled one? See the
   [`@vixeq/player-react` guide](../player-react/)
 - Turn the pulse into a playable timing challenge —

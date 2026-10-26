@@ -15,7 +15,6 @@ import { ChannelSource } from '@vixeq/core';
 import { EasingFunction } from '@vixeq/core';
 import { Envelope } from '@vixeq/core';
 import { MissedStepPolicy } from '@vixeq/core';
-import { MutableRefObject } from 'react';
 import { PlaybackState } from '@vixeq/core';
 import { PlaybackTransport } from '@vixeq/core';
 import { ProjectEvent } from '@vixeq/core';
@@ -49,46 +48,15 @@ export type ArrangementPendingOperation = "play" | "pause" | "stop" | "toggle" |
 export type MotionPreference = "system" | "reduce" | "no-preference";
 
 // @public
-export type SequencePlayerHookState = SequencerEngineHookState;
-
-// @public
-export type SequencerEngineHookOptions = {
-    project: SequenceProject;
-    transport?: PlaybackTransport;
-    lookaheadMs?: number;
-    missedStepPolicy?: MissedStepPolicy;
-    onStep?: (event: StepEvent) => void;
-    onPlaybackChange?: (event: SequencerPlaybackEvent) => void;
-    onPosition?: (position: ChannelPosition) => void;
-    onProjectError?: (error: Error) => void;
-    onTransportError?: (error: unknown) => void;
+export type ReadonlyRef<T> = {
+    readonly current: T;
 };
 
 // @public
-export type SequencerEngineHookState = {
-    engine: SequencerEngine | null;
-    playbackState: PlaybackState;
-    positionRef: MutableRefObject<ChannelPosition>;
-    latestEventRef: MutableRefObject<SequencerEngineLatestEvent | null>;
-    projectError: Error | null;
-    transportError: unknown | null;
-    pendingOperation: SequencerEnginePendingOperation | null;
-    isBusy: boolean;
-    play: () => Promise<void>;
-    pause: () => Promise<void>;
-    stop: () => Promise<void>;
-    toggle: () => Promise<void>;
-    seekPositionMs: (positionMs: number) => Promise<void>;
-    seekStep: (stepIndex: number) => Promise<void>;
-    setPlaybackRate: (rate: number) => Promise<void>;
-    setTransportLoop: (loop: boolean) => Promise<void>;
-};
+export type SequencerLatestEvent = StepEvent | SequencerPlaybackEvent | ProjectEvent;
 
 // @public
-export type SequencerEngineLatestEvent = StepEvent | SequencerPlaybackEvent | ProjectEvent;
-
-// @public
-export type SequencerEnginePendingOperation = "play" | "pause" | "stop" | "toggle" | "seekPositionMs" | "seekStep" | "setPlaybackRate" | "setTransportLoop";
+export type SequencerPendingOperation = "play" | "pause" | "stop" | "toggle" | "seekPositionMs" | "seekStep" | "setPlaybackRate" | "setTransportLoop";
 
 // @public
 export type TimelineLatestEvent<TEvent extends TimelineEvent = TimelineEvent> = TimelineCueEvent<TEvent> | TimelinePlaybackEvent | TimelineProjectEvent<TEvent>;
@@ -97,7 +65,7 @@ export type TimelineLatestEvent<TEvent extends TimelineEvent = TimelineEvent> = 
 export type TimelinePendingOperation = "play" | "pause" | "stop" | "toggle" | "seekPositionMs" | "seekBeat" | "setPlaybackRate" | "setTransportLoop" | "setLoop";
 
 // @public
-export function useAnimatedChannels(engine: ChannelSource | null, options?: AnimatedChannelsOptions): MutableRefObject<Record<string, number>>;
+export function useAnimatedChannels(engine: ChannelSource | null, options?: AnimatedChannelsOptions): ReadonlyRef<Record<string, number>>;
 
 // @public
 export function useArrangement(options: UseArrangementOptions): UseArrangementState;
@@ -122,8 +90,8 @@ export type UseArrangementState = {
     engine: ArrangementEngine | null;
     currentSection: ArrangementSection | null;
     playbackState: PlaybackState;
-    positionRef: MutableRefObject<ChannelPosition>;
-    latestEventRef: MutableRefObject<ArrangementLatestEvent | null>;
+    positionRef: ReadonlyRef<ChannelPosition>;
+    latestEventRef: ReadonlyRef<ArrangementLatestEvent | null>;
     projectError: Error | null;
     transportError: unknown | null;
     pendingOperation: ArrangementPendingOperation | null;
@@ -143,10 +111,40 @@ export type UseArrangementState = {
 export function usePrefersReducedMotion(): boolean;
 
 // @public
-export function useSequencePlayer(options: SequencerEngineHookOptions): SequencePlayerHookState;
+export function useSequencer(options: UseSequencerOptions): UseSequencerState;
 
 // @public
-export function useSequencerEngine(options: SequencerEngineHookOptions): SequencerEngineHookState;
+export type UseSequencerOptions = {
+    project: SequenceProject;
+    transport?: PlaybackTransport;
+    lookaheadMs?: number;
+    missedStepPolicy?: MissedStepPolicy;
+    onStep?: (event: StepEvent) => void;
+    onPlaybackChange?: (event: SequencerPlaybackEvent) => void;
+    onPosition?: (position: ChannelPosition) => void;
+    onProjectError?: (error: Error) => void;
+    onTransportError?: (error: unknown) => void;
+};
+
+// @public
+export type UseSequencerState = {
+    engine: SequencerEngine | null;
+    playbackState: PlaybackState;
+    positionRef: ReadonlyRef<ChannelPosition>;
+    latestEventRef: ReadonlyRef<SequencerLatestEvent | null>;
+    projectError: Error | null;
+    transportError: unknown | null;
+    pendingOperation: SequencerPendingOperation | null;
+    isBusy: boolean;
+    play: () => Promise<void>;
+    pause: () => Promise<void>;
+    stop: () => Promise<void>;
+    toggle: () => Promise<void>;
+    seekPositionMs: (positionMs: number) => Promise<void>;
+    seekStep: (stepIndex: number) => Promise<void>;
+    setPlaybackRate: (rate: number) => Promise<void>;
+    setTransportLoop: (loop: boolean) => Promise<void>;
+};
 
 // @public
 export function useTimeline<TEvent extends TimelineEvent = TimelineEvent>(options: UseTimelineOptions<TEvent>): UseTimelineState<TEvent>;
@@ -170,8 +168,8 @@ export type UseTimelineOptions<TEvent extends TimelineEvent = TimelineEvent> = {
 export type UseTimelineState<TEvent extends TimelineEvent = TimelineEvent> = {
     engine: TimelineEngine<TEvent> | null;
     playbackState: PlaybackState;
-    positionRef: MutableRefObject<ChannelPosition>;
-    latestEventRef: MutableRefObject<TimelineLatestEvent<TEvent> | null>;
+    positionRef: ReadonlyRef<ChannelPosition>;
+    latestEventRef: ReadonlyRef<TimelineLatestEvent<TEvent> | null>;
     projectError: Error | null;
     transportError: unknown | null;
     pendingOperation: TimelinePendingOperation | null;

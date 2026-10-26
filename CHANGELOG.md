@@ -5,7 +5,8 @@
 Fixes from the pre-1.0 API audit
 ([`docs/reviews/rc2-api-audit-claude.md`](docs/reviews/rc2-api-audit-claude.md)).
 They change the public API, so they ship as `1.0.0-rc.2` and restart the
-14-day observation period.
+14-day observation period. The renames are collected in the
+[rc.1 → rc.2 naming guide](./docs/migrations/1.0-rc2-naming.md).
 
 ### Breaking
 
@@ -52,6 +53,16 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
     (it was ignored). When the event type is a union, `type` and `data`
     change only together, as a pair from one member, so a patch can no
     longer give a `"flash"` event `"fade"` data.
+- `@vixeq/react` hook names follow one pattern
+  ([#23](https://github.com/kramhash/vixeq/issues/23)):
+  - `useSequencerEngine` is now `useSequencer`, with `UseSequencerOptions`,
+    `UseSequencerState`, `SequencerPendingOperation`, and
+    `SequencerLatestEvent`. The aliases `useSequencePlayer` and
+    `SequencePlayerHookState` are removed.
+  - `positionRef`, `latestEventRef`, and the `useAnimatedChannels` result are
+    typed `ReadonlyRef<T>` (`{ readonly current: T }`, newly exported)
+    instead of the deprecated `MutableRefObject<T>`. Reading is unchanged;
+    assigning to `current` no longer compiles.
 
 ### Added
 

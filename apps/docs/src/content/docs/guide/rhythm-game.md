@@ -50,17 +50,17 @@ becomes a repeating rhythm.
 
 ## 2. Play the sequence
 
-`useSequencerEngine` creates and owns the engine. The returned `positionRef`
+`useSequencer` creates and owns the engine. The returned `positionRef`
 is important for a game: it gives the current playback position without
 forcing React to re-render every animation frame.
 
 ```tsx
-import { useSequencerEngine } from "@vixeq/react";
+import { useSequencer } from "@vixeq/react";
 import { useState } from "react";
 
 function RhythmGame() {
   const [project] = useState<SequenceProject>(initialProject);
-  const player = useSequencerEngine({ project });
+  const player = useSequencer({ project });
 
   return (
     <button type="button" onClick={() => void player.toggle()}>
@@ -80,13 +80,13 @@ CSS. A value of `1` excites the ring; a value of `0` lets it rest.
 ```tsx
 import { createEnvelope, easeOutCubic } from "@vixeq/core";
 import { bindChannelsToElement } from "@vixeq/core/dom";
-import { useAnimatedChannels, useSequencerEngine } from "@vixeq/react";
+import { useAnimatedChannels, useSequencer } from "@vixeq/react";
 import { useMemo, useRef, useState } from "react";
 
 function RhythmGame() {
   const [project] = useState<SequenceProject>(initialProject);
   const trackId = project.tracks[0].id;
-  const player = useSequencerEngine({ project });
+  const player = useSequencer({ project });
   const stageRef = useRef<HTMLDivElement>(null);
 
   const envelopes = useMemo(
@@ -238,7 +238,7 @@ import {
   type SequenceProject,
 } from "@vixeq/core";
 import { bindChannelsToElement } from "@vixeq/core/dom";
-import { useAnimatedChannels, useSequencerEngine } from "@vixeq/react";
+import { useAnimatedChannels, useSequencer } from "@vixeq/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const PULSE_STEPS = [0, 2, 4, 7, 10, 12, 14];
@@ -307,7 +307,7 @@ export function RhythmGame() {
   const lastHitRef = useRef<string | null>(null);
   const trackId = project.tracks[0].id;
 
-  const player = useSequencerEngine({ project });
+  const player = useSequencer({ project });
 
   const envelopes = useMemo(
     () => ({
@@ -480,7 +480,7 @@ export function RhythmGame() {
 ## What Vixeq is doing
 
 - The `SequenceProject` stores the rhythm pattern.
-- `useSequencerEngine` plays that pattern on a stable timing grid.
+- `useSequencer` plays that pattern on a stable timing grid.
 - `useAnimatedChannels` converts active rhythm steps into a per-frame `--beat`
   value for CSS.
 - `positionRef.current.positionMs` gives input code the same playback position

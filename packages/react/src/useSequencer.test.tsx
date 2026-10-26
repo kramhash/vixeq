@@ -12,7 +12,7 @@ import {
   type PlaybackTransport,
   type PlaybackTransportEvent,
 } from "@vixeq/core";
-import { useSequencerEngine } from "./useSequencerEngine";
+import { useSequencer } from "./useSequencer";
 
 class FakeClock implements PlaybackClock {
   time = 0;
@@ -145,7 +145,7 @@ class DeferredTransport implements PlaybackTransport {
   }
 }
 
-describe("useSequencerEngine", () => {
+describe("useSequencer", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -155,7 +155,7 @@ describe("useSequencerEngine", () => {
     const transport = createClockTransport(clock, { durationMs: 2000 });
     const project = createProject({ stepCount: 4, trackCount: 1 });
     const wrapper = ({ children }: { children: ReactNode }) => <StrictMode>{children}</StrictMode>;
-    const { result, unmount } = renderHook(() => useSequencerEngine({ project, transport }), { wrapper });
+    const { result, unmount } = renderHook(() => useSequencer({ project, transport }), { wrapper });
 
     expect(result.current.engine).not.toBeNull();
     expect(result.current.playbackState).toBe("stopped");
@@ -201,7 +201,7 @@ describe("useSequencerEngine", () => {
     const invalidProject = { ...createProject({ stepCount: 4, trackCount: 1 }), stepCount: 0 };
     const validProject = createProject({ stepCount: 4, trackCount: 1 });
     const { result, rerender } = renderHook(
-      ({ value }) => useSequencerEngine({ project: value }),
+      ({ value }) => useSequencer({ project: value }),
       { initialProps: { value: invalidProject } },
     );
 
@@ -221,7 +221,7 @@ describe("useSequencerEngine", () => {
     const transport = createClockTransport(new FakeClock());
     const project = createProject({ stepCount: 4, trackCount: 1 });
     const { result, rerender } = renderHook(
-      ({ value }) => useSequencerEngine({ project: value, transport }),
+      ({ value }) => useSequencer({ project: value, transport }),
       { initialProps: { value: project } },
     );
     const engine = result.current.engine;
@@ -242,7 +242,7 @@ describe("useSequencerEngine", () => {
     const transport = createClockTransport(new FakeClock());
     const project = createProject({ stepCount: 4, trackCount: 1 });
     const { result, rerender } = renderHook(
-      ({ value }) => useSequencerEngine({ project: value, transport }),
+      ({ value }) => useSequencer({ project: value, transport }),
       { initialProps: { value: project } },
     );
 
@@ -271,7 +271,7 @@ describe("useSequencerEngine", () => {
     const transport = new DeferredTransport();
     const project = createProject({ stepCount: 4, trackCount: 1 });
     const onTransportError = vi.fn();
-    const { result } = renderHook(() => useSequencerEngine({ project, transport, onTransportError }));
+    const { result } = renderHook(() => useSequencer({ project, transport, onTransportError }));
     const failure = new Error("lost device");
 
     act(() => {
@@ -282,10 +282,28 @@ describe("useSequencerEngine", () => {
     expect(onTransportError).toHaveBeenCalledWith(failure);
   });
 
+  it("exposes positionRef and latestEventRef as read-only refs", () => {
+    const transport = createClockTransport(new FakeClock());
+    const project = createProject({ stepCount: 4, trackCount: 1 });
+    const { result } = renderHook(() => useSequencer({ project, transport }));
+    const { positionRef, latestEventRef } = result.current;
+
+    expect(positionRef.current).toEqual({ positionMs: 0, beat: 0 });
+    expect(latestEventRef.current).toBeNull();
+    // Type-level only: the hook owns these refs, so writes do not compile.
+    const writeRefs = () => {
+      // @ts-expect-error positionRef is a ReadonlyRef.
+      positionRef.current = { positionMs: 1, beat: 1 };
+      // @ts-expect-error latestEventRef is a ReadonlyRef.
+      latestEventRef.current = null;
+    };
+    expect(typeof writeRefs).toBe("function");
+  });
+
   it("PB-RE-007 queued toggles evaluate playback state at execution time", async () => {
     const transport = createClockTransport(new FakeClock());
     const project = createProject({ stepCount: 4, trackCount: 1 });
-    const { result } = renderHook(() => useSequencerEngine({ project, transport }));
+    const { result } = renderHook(() => useSequencer({ project, transport }));
 
     await act(async () => {
       await Promise.all([result.current.toggle(), result.current.toggle()]);
@@ -297,7 +315,7 @@ describe("useSequencerEngine", () => {
   it("PB-RE-008 exposes the queued operation head until commands settle", async () => {
     const transport = new DeferredTransport();
     const project = createProject({ stepCount: 4, trackCount: 1 });
-    const { result } = renderHook(() => useSequencerEngine({ project, transport }));
+    const { result } = renderHook(() => useSequencer({ project, transport }));
 
     let playPromise!: Promise<void>;
     let pausePromise!: Promise<void>;
@@ -328,7 +346,7 @@ describe("useSequencerEngine", () => {
   it("PB-LC-002 survives unmount during a queued operation and keeps borrowed transport alive", async () => {
     const transport = new DeferredTransport();
     const project = createProject({ stepCount: 4, trackCount: 1 });
-    const { result, unmount } = renderHook(() => useSequencerEngine({ project, transport }));
+    const { result, unmount } = renderHook(() => useSequencer({ project, transport }));
 
     let playPromise!: Promise<void>;
     act(() => {
@@ -350,7 +368,7 @@ describe("useSequencerEngine", () => {
     const cancelAnimationFrame = vi.fn();
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 7));
     vi.stubGlobal("cancelAnimationFrame", cancelAnimationFrame);
-    const { result, unmount } = renderHook(() => useSequencerEngine({ project, transport }));
+    const { result, unmount } = renderHook(() => useSequencer({ project, transport }));
 
     await act(async () => {
       await result.current.play();
@@ -369,7 +387,7 @@ describe("useSequencerEngine", () => {
     let renders = 0;
     const { result } = renderHook(() => {
       renders += 1;
-      return useSequencerEngine({ project, transport, onPosition });
+      return useSequencer({ project, transport, onPosition });
     });
 
     await act(async () => {
@@ -396,7 +414,7 @@ describe("useSequencerEngine", () => {
       let renders = 0;
       const { result } = renderHook(() => {
         renders += 1;
-        return useSequencerEngine({ project, transport, lookaheadMs: 1000 });
+        return useSequencer({ project, transport, lookaheadMs: 1000 });
       });
 
       await act(async () => {

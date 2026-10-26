@@ -123,7 +123,7 @@ function PlayerWithVisual({ project, onProjectChange }) {
 
 `onPlaybackChange` reports the same Playback v2 snapshots
 (`playbackState`, `positionRef`, `pendingOperation`, ...) exposed by
-`useSequencePlayer` in `@vixeq/react`, for hosts that want to mirror
+`useSequencer` in `@vixeq/react`, for hosts that want to mirror
 transport state without holding their own ref.
 
 ## Next steps

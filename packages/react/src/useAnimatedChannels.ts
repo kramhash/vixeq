@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { type ChannelSource, type EasingFunction, type Envelope } from "@vixeq/core";
+import type { ReadonlyRef } from "./readonlyRef";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 
 export type MotionPreference = "system" | "reduce" | "no-preference";
@@ -53,7 +54,7 @@ const isDisposedSourceError = (error: unknown): boolean =>
 export function useAnimatedChannels(
   engine: ChannelSource | null,
   options: AnimatedChannelsOptions = {},
-): MutableRefObject<Record<string, number>> {
+): ReadonlyRef<Record<string, number>> {
   const { envelopes, easing, motionPreference = "system", onFrame } = options;
   const systemReducedMotion = usePrefersReducedMotion();
   const reducedMotion = motionPreference === "reduce" || (motionPreference === "system" && systemReducedMotion);
