@@ -270,6 +270,14 @@ describe("project utilities", () => {
     expect(normalized.stepsPerBeat).toBe(4);
   });
 
+  it("validateProject requires stepsPerBeat; normalizeProject repairs legacy data", () => {
+    const { stepsPerBeat: _omitted, ...legacy } = createProject({ trackCount: 1 });
+    const result = validateProject(legacy);
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errors.map((issue) => issue.path)).toEqual(["stepsPerBeat"]);
+    expect(validateProject(normalizeProject(legacy)).ok).toBe(true);
+  });
+
   it("normalizeProject clamps stepsPerBeat", () => {
     const input = { version: 1, bpm: 120, stepCount: 4, stepsPerBeat: 0, tracks: [] };
     expect(normalizeProject(input).stepsPerBeat).toBe(1);

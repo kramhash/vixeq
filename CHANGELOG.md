@@ -28,6 +28,16 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
   `MigrationResult` warnings and errors
   ([#17](https://github.com/kramhash/vixeq/issues/17)).
 
+### Fixed
+
+- `validateProject` requires `stepsPerBeat`. A project without it used to pass
+  validation, and `SequencerEngine` then reported `NaN` for the step index and
+  every channel (an Arrangement pattern silently sampled 0). Engine
+  constructors, `validateArrangement`, and `migrateArrangementProject` now
+  reject such a project or pattern; run data saved before 0.3 (when
+  `stepsPerBeat` was added) through `normalizeProject`, which fills in 4
+  ([#16](https://github.com/kramhash/vixeq/issues/16)).
+
 ## 1.0.0-rc.1 - 2026-10-21
 
 First release candidate for `1.0.0`. The public API is frozen for the 14-day

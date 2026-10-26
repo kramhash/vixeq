@@ -31,9 +31,9 @@ export const validateProject = (input: unknown): ValidationResult => {
     errors.push({ path: "stepCount", message: `Step count must be between ${SEQUENCER_LIMITS.minStepCount} and ${SEQUENCER_LIMITS.maxStepCount}.` });
   }
 
-  if (input.stepsPerBeat !== undefined && (typeof input.stepsPerBeat !== "number" || !Number.isInteger(input.stepsPerBeat))) {
+  if (typeof input.stepsPerBeat !== "number" || !Number.isInteger(input.stepsPerBeat)) {
     errors.push({ path: "stepsPerBeat", message: "Steps per beat must be an integer." });
-  } else if (typeof input.stepsPerBeat === "number" && (input.stepsPerBeat < SEQUENCER_LIMITS.minStepsPerBeat || input.stepsPerBeat > SEQUENCER_LIMITS.maxStepsPerBeat)) {
+  } else if (input.stepsPerBeat < SEQUENCER_LIMITS.minStepsPerBeat || input.stepsPerBeat > SEQUENCER_LIMITS.maxStepsPerBeat) {
     errors.push({ path: "stepsPerBeat", message: `Steps per beat must be between ${SEQUENCER_LIMITS.minStepsPerBeat} and ${SEQUENCER_LIMITS.maxStepsPerBeat}.` });
   }
 

@@ -32,6 +32,17 @@ describe("project storage", () => {
     expect(loaded.project?.bpm).toBe(142);
   });
 
+  it("loads a project saved before stepsPerBeat existed with the default of 4", () => {
+    const storage = new MemoryStorage();
+    const { stepsPerBeat: _omitted, ...legacy } = setProjectBpm(createProject(), 142);
+    storage.setItem(PROJECT_STORAGE_KEY, JSON.stringify({ storageVersion: 1, project: legacy }));
+
+    const loaded = loadStoredProject(storage);
+    expect(loaded.status).toBe("loaded");
+    expect(loaded.project?.stepsPerBeat).toBe(4);
+    expect(loaded.project?.bpm).toBe(142);
+  });
+
   it("ignores invalid stored JSON", () => {
     const storage = new MemoryStorage();
     storage.setItem(PROJECT_STORAGE_KEY, "{");

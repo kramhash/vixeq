@@ -31,6 +31,14 @@ export type ProjectStorageSaveResult = "saved" | "unavailable";
 
 type ProjectStorage = Pick<Storage, "getItem" | "setItem">;
 
+// Projects saved before 0.3 have no stepsPerBeat, which validateProject now
+// requires. Fill in the 0.3 default (4) so the rest of the data is still
+// validated strictly.
+export const upgradeLegacyProject = (input: unknown): unknown =>
+  input && typeof input === "object" && !Array.isArray(input) && !("stepsPerBeat" in input)
+    ? { ...input, stepsPerBeat: 4 }
+    : input;
+
 const isEnvelope = (input: unknown): input is ProjectStorageEnvelope => {
   if (!input || typeof input !== "object") {
     return false;
@@ -62,14 +70,15 @@ export const loadStoredProject = (storage: ProjectStorage | undefined): ProjectS
       return { status: "ignored", project: null };
     }
 
-    const result = validateProject(parsed.project);
+    const project = upgradeLegacyProject(parsed.project);
+    const result = validateProject(project);
     if (!result.ok) {
       return { status: "ignored", project: null };
     }
 
     return {
       status: "loaded",
-      project: normalizeProject(parsed.project),
+      project: normalizeProject(project),
     };
   } catch {
     return { status: "ignored", project: null };
