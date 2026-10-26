@@ -155,6 +155,16 @@ const validateV1Arrangement = (input: unknown): { ok: true; project: Arrangement
   return { ok: true, project: input as ArrangementProjectV1 };
 };
 
+/**
+ * Migrates a v1 arrangement to v2: its `bpm` becomes a one-tempo `timing`,
+ * and `options.durationBeats` supplies the length v1 never had. It does not
+ * throw; problems come back as errors.
+ *
+ * @param input - The v1 arrangement, typically parsed JSON.
+ * @param options - `durationBeats`, at least the last section's `endBeat`.
+ * @returns The v2 project, or errors such as `ARRANGEMENT_DURATION_REQUIRED`
+ *   and `ARRANGEMENT_DURATION_TOO_SHORT`.
+ */
 export const migrateArrangementProject = (
   input: unknown,
   options: ArrangementMigrationOptions = {},

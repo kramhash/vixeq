@@ -15,44 +15,30 @@ export const addTimelineTrack: <TEvent extends TimelineEvent>(project: TimelineP
 // @public
 export const addTrack: (project: SequenceProject, name?: string) => SequenceProject;
 
-// @public (undocumented)
+// @public
 export const arrangementDurationBeats: (arrangement: ArrangementProject) => number;
 
 // @public
 export class ArrangementEngine {
     constructor(arrangement: ArrangementProject, options?: ArrangementEngineOptions);
-    // (undocumented)
     dispose(): void;
-    // (undocumented)
     getCurrentSection(): ArrangementSection | null;
-    // (undocumented)
     getPlaybackState(): PlaybackState;
-    // (undocumented)
     getPosition(): ChannelPosition;
-    // (undocumented)
     getProject(): ArrangementProject;
-    // (undocumented)
     on<TEventName extends ArrangementEventName>(eventName: TEventName, handler: ArrangementEventHandler<TEventName>): Unsubscribe;
-    // (undocumented)
     pause(): Promise<void>;
-    // (undocumented)
     play(): Promise<void>;
-    // (undocumented)
     sampleChannels(easing?: EasingFunction): Record<string, number>;
-    // (undocumented)
     sampleChannelsAt(positionMs: number, easing?: EasingFunction): Record<string, number>;
-    // (undocumented)
     seekBeat(beat: number): Promise<void>;
-    // (undocumented)
     seekPositionMs(positionMs: number): Promise<void>;
-    // (undocumented)
     setLoop(loop: boolean): void;
     setProject(project: ArrangementProject): void;
-    // (undocumented)
     stop(): Promise<void>;
 }
 
-// @public (undocumented)
+// @public
 export type ArrangementEngineOptions = {
     transport?: PlaybackTransport;
     lookaheadMs?: number;
@@ -63,10 +49,10 @@ export type ArrangementEngineOptions = {
     onListenerError?: (error: unknown, context: ListenerErrorContext) => void;
 };
 
-// @public (undocumented)
+// @public
 export type ArrangementEventHandler<TEventName extends ArrangementEventName> = (event: ArrangementEventMap[TEventName]) => void;
 
-// @public (undocumented)
+// @public
 export type ArrangementEventMap = {
     step: StepEvent;
     playback: ArrangementPlaybackEvent;
@@ -74,23 +60,23 @@ export type ArrangementEventMap = {
     section: ArrangementSectionEvent;
 };
 
-// @public (undocumented)
+// @public
 export type ArrangementEventName = keyof ArrangementEventMap;
 
-// @public (undocumented)
+// @public
 export type ArrangementMigrationOptions = {
     durationBeats?: number;
 };
 
-// @public (undocumented)
+// @public
 export type ArrangementMigrationResult = MigrationResult<ArrangementProject>;
 
-// @public (undocumented)
+// @public
 export type ArrangementPlaybackEvent = Omit<EnginePlaybackEvent, "snapshot"> & {
     snapshot: ArrangementPlaybackSnapshot;
 };
 
-// @public (undocumented)
+// @public
 export type ArrangementPlaybackSnapshot = EnginePlaybackSnapshot & {
     section: ArrangementSection | null;
 };
@@ -104,7 +90,7 @@ export type ArrangementProject = {
     sections: ArrangementSection[];
 };
 
-// @public (undocumented)
+// @public
 export type ArrangementProjectEvent = {
     project: ArrangementProject;
     previousProject: ArrangementProject;
@@ -115,7 +101,7 @@ export type ArrangementProjectEvent = {
     beat: number;
 };
 
-// @public (undocumented)
+// @public
 export type ArrangementProjectV1 = {
     version: 1;
     bpm: number;
@@ -141,7 +127,7 @@ export type ArrangementSectionEvent = {
     cause: StepEventCause;
 };
 
-// @public (undocumented)
+// @public
 export type AudioBufferTransportOptions = PlaybackTransportBaseOptions & {
     destination?: AudioNode;
     loop?: boolean;
@@ -150,16 +136,16 @@ export type AudioBufferTransportOptions = PlaybackTransportBaseOptions & {
 // @public
 export const beatToMs: (timing: TimingMap, beat: number) => number;
 
-// @public (undocumented)
+// @public
 export const browserClock: PlaybackClock;
 
-// @public (undocumented)
+// @public
 export type ChannelPosition = {
     positionMs: number;
     beat: number;
 };
 
-// @public (undocumented)
+// @public
 export type ChannelProjectEvent = {
     changedChannelIds: string[];
     previousChannels: Record<string, number>;
@@ -179,22 +165,22 @@ export type ChannelSource = {
     on(eventName: "project", handler: (event: ChannelProjectEvent) => void): Unsubscribe;
 };
 
-// @public (undocumented)
+// @public
 export const clampStepValue: (value: number) => StepValue;
 
-// @public (undocumented)
+// @public
 export const clearTrack: (project: SequenceProject, trackId: string) => SequenceProject;
 
-// @public (undocumented)
+// @public
 export type ClockTransportOptions = PlaybackTransportBaseOptions & {
     durationMs?: number;
     loop?: boolean;
 };
 
-// @public (undocumented)
+// @public
 export const createArrangement: (options?: CreateArrangementOptions) => ArrangementProject;
 
-// @public (undocumented)
+// @public
 export type CreateArrangementOptions = {
     timing?: CreateTimingMapOptions | TimingMap;
     durationBeats?: number;
@@ -205,7 +191,7 @@ export type CreateArrangementOptions = {
 // @public
 export function createAudioBufferTransport(audioContext: AudioContext, buffer: AudioBuffer, options?: AudioBufferTransportOptions): PlaybackTransport;
 
-// @public (undocumented)
+// @public
 export function createClockTransport(clock: PlaybackClock, options?: ClockTransportOptions): PlaybackTransport;
 
 // @public
@@ -214,7 +200,7 @@ export const createDecayEnvelope: (config: SmoothingConfig) => Envelope;
 // @public
 export const createEnvelope: (options?: CreateEnvelopeOptions) => Envelope;
 
-// @public (undocumented)
+// @public
 export type CreateEnvelopeOptions = {
     attack?: number;
     decay?: number;
@@ -228,7 +214,7 @@ export function createMediaElementTransport(media: HTMLMediaElement, options?: M
 // @public
 export const createProject: (options?: CreateProjectOptions) => SequenceProject;
 
-// @public (undocumented)
+// @public
 export type CreateProjectOptions = {
     bpm?: number;
     stepCount?: number;
@@ -238,10 +224,10 @@ export type CreateProjectOptions = {
     tracks?: Omit<CreateTrackOptions, "stepCount">[];
 };
 
-// @public (undocumented)
+// @public
 export const createTimelineProject: (options?: CreateTimelineProjectOptions) => TimelineProject;
 
-// @public (undocumented)
+// @public
 export type CreateTimelineProjectOptions = {
     timing?: CreateTimingMapOptions | TimingMap;
     durationBeats?: number;
@@ -249,10 +235,10 @@ export type CreateTimelineProjectOptions = {
     events?: Partial<TimelineEvent>[];
 };
 
-// @public (undocumented)
+// @public
 export const createTimingMap: (options?: CreateTimingMapOptions) => TimingMap;
 
-// @public (undocumented)
+// @public
 export type CreateTimingMapOptions = {
     bpm: number;
     startPositionMs?: number;
@@ -264,7 +250,7 @@ export type CreateTimingMapOptions = {
 // @public
 export const createTrack: (options?: CreateTrackOptions) => Track;
 
-// @public (undocumented)
+// @public
 export type CreateTrackOptions = {
     id?: string;
     name?: string;
@@ -273,7 +259,7 @@ export type CreateTrackOptions = {
     enabled?: boolean;
 };
 
-// @public (undocumented)
+// @public
 export const decaySmoothedValue: (current: number, deltaSeconds: number, config: SmoothingConfig) => number;
 
 // @public
@@ -294,13 +280,13 @@ export const easeOutCubic: EasingFunction;
 // @public
 export const easeOutQuad: EasingFunction;
 
-// @public (undocumented)
+// @public
 export type EasingFunction = (t: number) => number;
 
-// @public (undocumented)
+// @public
 export type EnginePlaybackCause = "command" | "transport" | "local-end";
 
-// @public (undocumented)
+// @public
 export type EnginePlaybackEvent = {
     type: "play" | "pause" | "stop" | "seek" | "ratechange" | "loopchange" | "loop" | "durationchange" | "bufferingchange" | "ended" | "error";
     cause: EnginePlaybackCause;
@@ -309,7 +295,7 @@ export type EnginePlaybackEvent = {
     error?: unknown;
 };
 
-// @public (undocumented)
+// @public
 export type EnginePlaybackSnapshot = {
     state: PlaybackState;
     positionMs: number;
@@ -327,27 +313,27 @@ export type Envelope = {
     reset(): void;
 };
 
-// @public (undocumented)
+// @public
 export const exciteSmoothedValue: (current: number, input: number, config: SmoothingConfig) => number;
 
-// @public (undocumented)
+// @public
 export const getEventsAtBeat: (project: TimelineProject, beat: number, toleranceBeats?: number, options?: TimelineQueryOptions) => TimelineEvent[];
 
 // @public
 export const getEventsInBeatRange: (project: TimelineProject, fromBeat: number, toBeat: number, options?: TimelineQueryOptions) => TimelineEvent[];
 
-// @public (undocumented)
+// @public
 export const getNextEvents: (project: TimelineProject, beat: number, count: number, options?: TimelineQueryOptions) => TimelineEvent[];
 
-// @public (undocumented)
+// @public
 export type JsonObject = {
     [key: string]: JsonValue;
 };
 
-// @public (undocumented)
+// @public
 export type JsonPrimitive = string | number | boolean | null;
 
-// @public (undocumented)
+// @public
 export type JsonValue = JsonPrimitive | JsonValue[] | JsonObject;
 
 // @public
@@ -356,31 +342,31 @@ export const lerp: (from: number, to: number, t: number) => number;
 // @public
 export const linear: EasingFunction;
 
-// @public (undocumented)
+// @public
 export type ListenerErrorContext = {
     source: "transport" | "engine";
     eventName: string;
 };
 
-// @public (undocumented)
+// @public
 export type MediaElementTransportOptions = PlaybackTransportBaseOptions & {
     audioContext?: AudioContext;
 };
 
-// @public (undocumented)
+// @public
 export const migrateArrangementProject: (input: unknown, options?: ArrangementMigrationOptions) => ArrangementMigrationResult;
 
 // @public
 export const migrateTimelineProject: (project: TimelineProjectV1, options?: TimelineMigrationOptions) => MigrationResult<TimelineProject>;
 
-// @public (undocumented)
+// @public
 export type MigrationIssue = {
     code: string;
     message: string;
     path?: string;
 };
 
-// @public (undocumented)
+// @public
 export type MigrationResult<T> = {
     ok: true;
     project: T;
@@ -390,7 +376,7 @@ export type MigrationResult<T> = {
     errors: MigrationIssue[];
 };
 
-// @public (undocumented)
+// @public
 export type MissedStepPolicy = "emit" | "skip";
 
 // @public
@@ -399,39 +385,38 @@ export const msToBeat: (timing: TimingMap, ms: number) => number;
 // @public
 export const normalizeArrangement: (input: unknown) => ArrangementProject;
 
-// @public (undocumented)
+// @public
 export const normalizeProject: (input: unknown) => SequenceProject;
 
 // @public
 export const normalizeTimelineEvent: (event?: Partial<TimelineEvent>, index?: number) => TimelineEvent;
 
-// @public (undocumented)
+// @public
 export const normalizeTimelineProject: (input: unknown) => TimelineProject;
 
 // @public
 export const normalizeTimelineTrack: (track?: Partial<TimelineTrack>, index?: number) => TimelineTrack;
 
-// @public (undocumented)
+// @public
 export const normalizeTimingMap: (input: Partial<TimingMap> | CreateTimingMapOptions | undefined) => TimingMap;
 
-// @public (undocumented)
+// @public
 export type PlaybackClock = {
     now(): number;
     setTimer(callback: () => void, delayMs: number): unknown;
     clearTimer(timerId: unknown): void;
 };
 
-// @public (undocumented)
+// @public
 export class PlaybackError extends Error {
     constructor(code: PlaybackErrorCode, message?: string);
-    // (undocumented)
     readonly code: PlaybackErrorCode;
 }
 
-// @public (undocumented)
+// @public
 export type PlaybackErrorCode = "TRANSPORT_DISPOSED" | "DURATION_UNAVAILABLE";
 
-// @public (undocumented)
+// @public
 export type PlaybackSnapshot = {
     state: PlaybackState;
     positionMs: number;
@@ -441,10 +426,10 @@ export type PlaybackSnapshot = {
     buffering: boolean;
 };
 
-// @public (undocumented)
+// @public
 export type PlaybackState = "stopped" | "playing" | "paused" | "ended";
 
-// @public (undocumented)
+// @public
 export type PlaybackTransport = {
     getSnapshot(): PlaybackSnapshot;
     getPlaybackState(): PlaybackState;
@@ -462,12 +447,12 @@ export type PlaybackTransport = {
     dispose(): void;
 };
 
-// @public (undocumented)
+// @public
 export type PlaybackTransportBaseOptions = {
     onListenerError?: (error: unknown, context: ListenerErrorContext) => void;
 };
 
-// @public (undocumented)
+// @public
 export type PlaybackTransportEvent = {
     type: "play";
     snapshot: PlaybackSnapshot;
@@ -516,7 +501,7 @@ export type PlaybackTransportEvent = {
 // @public
 export const presets: Record<string, SequenceProject>;
 
-// @public (undocumented)
+// @public
 export type ProjectEvent = {
     project: SequenceProject;
     previousProject: SequenceProject;
@@ -531,7 +516,7 @@ export type ProjectEvent = {
 // @public
 export const randomizeTrack: (project: SequenceProject, trackId: string, options?: RandomizeTrackOptions) => SequenceProject;
 
-// @public (undocumented)
+// @public
 export type RandomizeTrackOptions = {
     probability?: number;
     min?: number;
@@ -539,22 +524,22 @@ export type RandomizeTrackOptions = {
     random?: () => number;
 };
 
-// @public (undocumented)
+// @public
 export const removeTimelineEvent: <TEvent extends TimelineEvent>(project: TimelineProject<TEvent>, eventId: string) => TimelineProject<TEvent>;
 
-// @public (undocumented)
+// @public
 export const removeTimelineTrack: <TEvent extends TimelineEvent>(project: TimelineProject<TEvent>, trackId: string) => TimelineProject<TEvent>;
 
-// @public (undocumented)
+// @public
 export const removeTrack: (project: SequenceProject, trackId: string) => SequenceProject;
 
-// @public (undocumented)
+// @public
 export const renameTrack: (project: SequenceProject, trackId: string, name: string) => SequenceProject;
 
 // @public
 export const resolveArrangementStep: (arrangement: ArrangementProject, beat: number) => ResolvedArrangementStep | null;
 
-// @public (undocumented)
+// @public
 export type ResolvedArrangementStep = {
     section: ArrangementSection;
     stepIndex: number;
@@ -571,13 +556,13 @@ export const sampleArrangement: (arrangement: ArrangementProject, beat: number, 
 // @public
 export const sectionAtBeat: (arrangement: ArrangementProject, beat: number) => SectionLookup | null;
 
-// @public (undocumented)
+// @public
 export type SectionLookup = {
     section: ArrangementSection;
     localBeat: number;
 };
 
-// @public (undocumented)
+// @public
 export type SequenceProject = {
     version: 1;
     bpm: number;
@@ -586,7 +571,7 @@ export type SequenceProject = {
     tracks: Track[];
 };
 
-// @public (undocumented)
+// @public
 export const SEQUENCER_LIMITS: {
     readonly minBpm: 20;
     readonly maxBpm: 300;
@@ -606,15 +591,10 @@ export const SEQUENCER_LIMITS: {
 export class SequencerEngine {
     constructor(project: SequenceProject, options?: SequencerEngineOptions);
     dispose(): void;
-    // (undocumented)
     getCurrentStepIndex(): number;
-    // (undocumented)
     getPlaybackState(): PlaybackState;
-    // (undocumented)
     getPosition(): ChannelPosition;
-    // (undocumented)
     getProject(): SequenceProject;
-    // (undocumented)
     on<TEventName extends SequencerEventName>(eventName: TEventName, handler: SequencerEventHandler<TEventName>): Unsubscribe;
     pause(): Promise<void>;
     play(): Promise<void>;
@@ -626,7 +606,7 @@ export class SequencerEngine {
     stop(): Promise<void>;
 }
 
-// @public (undocumented)
+// @public
 export type SequencerEngineOptions = {
     transport?: PlaybackTransport;
     lookaheadMs?: number;
@@ -635,42 +615,42 @@ export type SequencerEngineOptions = {
     onListenerError?: (error: unknown, context: ListenerErrorContext) => void;
 };
 
-// @public (undocumented)
+// @public
 export type SequencerEventHandler<TEventName extends SequencerEventName> = (event: SequencerEventMap[TEventName]) => void;
 
-// @public (undocumented)
+// @public
 export type SequencerEventMap = {
     step: StepEvent;
     playback: SequencerPlaybackEvent;
     project: ProjectEvent;
 };
 
-// @public (undocumented)
+// @public
 export type SequencerEventName = keyof SequencerEventMap;
 
-// @public (undocumented)
+// @public
 export type SequencerPlaybackEvent = Omit<EnginePlaybackEvent, "snapshot"> & {
     snapshot: SequencerPlaybackSnapshot;
 };
 
-// @public (undocumented)
+// @public
 export type SequencerPlaybackSnapshot = EnginePlaybackSnapshot & {
     stepIndex: number;
 };
 
-// @public (undocumented)
+// @public
 export const setProjectBpm: (project: SequenceProject, bpm: number) => SequenceProject;
 
 // @public
 export const setStepValue: (project: SequenceProject, trackId: string, stepIndex: number, value: number) => SequenceProject;
 
-// @public (undocumented)
+// @public
 export const setTimelineTrackEnabled: <TEvent extends TimelineEvent>(project: TimelineProject<TEvent>, trackId: string, enabled: boolean) => TimelineProject<TEvent>;
 
-// @public (undocumented)
+// @public
 export const setTrackEnabled: (project: SequenceProject, trackId: string, enabled: boolean) => SequenceProject;
 
-// @public (undocumented)
+// @public
 export type SmoothingConfig = {
     decayRate: number;
     impact: number;
@@ -679,10 +659,10 @@ export type SmoothingConfig = {
     holdWhenInputZero?: boolean;
 };
 
-// @public (undocumented)
+// @public
 export const sortTimelineEvents: <TEvent extends TimelineEvent>(events: readonly TEvent[]) => TEvent[];
 
-// @public (undocumented)
+// @public
 export type StepEvent = {
     stepIndex: number;
     bpm: number;
@@ -697,7 +677,7 @@ export type StepEvent = {
 // @public
 export type StepEventCause = "play" | "tick" | "seek" | "project-change" | "loop";
 
-// @public (undocumented)
+// @public
 export type StepEventTrack = {
     id: string;
     name: string;
@@ -706,22 +686,22 @@ export type StepEventTrack = {
     nextValue: StepValue;
 };
 
-// @public (undocumented)
+// @public
 export type StepValue = number;
 
-// @public (undocumented)
+// @public
 export type TempoEvent = {
     beat: number;
     bpm: number;
 };
 
-// @public (undocumented)
+// @public
 export type TempoEventV1 = {
     beat: number;
     bpm: number;
 };
 
-// @public (undocumented)
+// @public
 export type TimelineCueEvent<TEvent extends TimelineEvent = TimelineEvent> = {
     event: TEvent;
     iteration: number;
@@ -733,33 +713,21 @@ export type TimelineCueEvent<TEvent extends TimelineEvent = TimelineEvent> = {
 // @public
 export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     constructor(project: TimelineProject<TEvent>, options?: TimelineEngineOptions<TEvent>);
-    // (undocumented)
     dispose(): void;
-    // (undocumented)
     getPlaybackState(): PlaybackState;
-    // (undocumented)
     getPosition(): ChannelPosition;
-    // (undocumented)
     getProject(): TimelineProject<TEvent>;
-    // (undocumented)
     on<TEventName extends TimelineEventName>(eventName: TEventName, handler: TimelineEventHandler<TEventName, TEvent>): Unsubscribe;
-    // (undocumented)
     pause(): Promise<void>;
-    // (undocumented)
     play(): Promise<void>;
-    // (undocumented)
     seekBeat(beat: number): Promise<void>;
-    // (undocumented)
     seekPositionMs(positionMs: number): Promise<void>;
-    // (undocumented)
     setLoop(loop: boolean): void;
-    // (undocumented)
     setProject(project: TimelineProject<TEvent>): void;
-    // (undocumented)
     stop(): Promise<void>;
 }
 
-// @public (undocumented)
+// @public
 export type TimelineEngineOptions<TEvent extends TimelineEvent = TimelineEvent> = {
     transport?: PlaybackTransport;
     lookaheadMs?: number;
@@ -770,7 +738,7 @@ export type TimelineEngineOptions<TEvent extends TimelineEvent = TimelineEvent> 
     onListenerError?: (error: unknown, context: ListenerErrorContext) => void;
 };
 
-// @public (undocumented)
+// @public
 export type TimelineEvent<TType extends string = string, TData extends JsonObject = JsonObject> = {
     id: string;
     trackId: string | null;
@@ -779,7 +747,7 @@ export type TimelineEvent<TType extends string = string, TData extends JsonObjec
     data?: TData;
 };
 
-// @public (undocumented)
+// @public
 export type TimelineEventHandler<TEventName extends TimelineEventName, TEvent extends TimelineEvent = TimelineEvent> = (event: TimelineEventMap<TEvent>[TEventName]) => void;
 
 // @public
@@ -787,14 +755,14 @@ export type TimelineEventInput<TEvent extends TimelineEvent = TimelineEvent> = T
     id?: string;
 } : never;
 
-// @public (undocumented)
+// @public
 export type TimelineEventMap<TEvent extends TimelineEvent = TimelineEvent> = {
     cue: TimelineCueEvent<TEvent>;
     playback: TimelinePlaybackEvent;
     project: TimelineProjectEvent<TEvent>;
 };
 
-// @public (undocumented)
+// @public
 export type TimelineEventName = keyof TimelineEventMap;
 
 // @public
@@ -806,7 +774,7 @@ export type TimelineEventPatch<TEvent extends TimelineEvent = TimelineEvent, TUn
     data: TEvent["data"];
 }) : never;
 
-// @public (undocumented)
+// @public
 export type TimelineEventV1 = {
     id: string;
     trackId: string;
@@ -820,21 +788,21 @@ export type TimelineEventV1 = {
 // @public
 export type TimelineEventValidator<TEvent extends TimelineEvent = TimelineEvent> = (event: TEvent) => void;
 
-// @public (undocumented)
+// @public
 export type TimelineMigrationOptions = {
     durationBeats?: number;
     onRemovedField?: (event: TimelineEventV1) => JsonObject | undefined;
 };
 
-// @public (undocumented)
+// @public
 export type TimelinePlaybackEvent = Omit<EnginePlaybackEvent, "snapshot"> & {
     snapshot: TimelinePlaybackSnapshot;
 };
 
-// @public (undocumented)
+// @public
 export type TimelinePlaybackSnapshot = EnginePlaybackSnapshot;
 
-// @public (undocumented)
+// @public
 export type TimelineProject<TEvent extends TimelineEvent = TimelineEvent> = {
     version: 2;
     timing: TimingMap;
@@ -843,7 +811,7 @@ export type TimelineProject<TEvent extends TimelineEvent = TimelineEvent> = {
     events: TEvent[];
 };
 
-// @public (undocumented)
+// @public
 export type TimelineProjectEvent<TEvent extends TimelineEvent = TimelineEvent> = {
     project: TimelineProject<TEvent>;
     previousProject: TimelineProject<TEvent>;
@@ -851,7 +819,7 @@ export type TimelineProjectEvent<TEvent extends TimelineEvent = TimelineEvent> =
     beat: number;
 };
 
-// @public (undocumented)
+// @public
 export type TimelineProjectV1 = {
     version: 1;
     timing: TimingMapV1;
@@ -859,7 +827,7 @@ export type TimelineProjectV1 = {
     events: TimelineEventV1[];
 };
 
-// @public (undocumented)
+// @public
 export type TimelineQueryOptions = {
     trackIds?: string[];
     includeDisabledTracks?: boolean;
@@ -867,7 +835,7 @@ export type TimelineQueryOptions = {
     eventTypes?: string[];
 };
 
-// @public (undocumented)
+// @public
 export type TimelineTrack = {
     id: string;
     name: string;
@@ -875,7 +843,7 @@ export type TimelineTrack = {
     data?: JsonObject;
 };
 
-// @public (undocumented)
+// @public
 export type TimelineTrackV1 = {
     id: string;
     name: string;
@@ -884,13 +852,13 @@ export type TimelineTrackV1 = {
     data?: Record<string, unknown>;
 };
 
-// @public (undocumented)
+// @public
 export type TimingMap = {
     tempos: TempoEvent[];
     startPositionMs: number;
 };
 
-// @public (undocumented)
+// @public
 export type TimingMapV1 = {
     tempos: TempoEventV1[];
     offsetMs: number;
@@ -899,7 +867,7 @@ export type TimingMapV1 = {
 // @public
 export const toggleStep: (project: SequenceProject, trackId: string, stepIndex: number) => SequenceProject;
 
-// @public (undocumented)
+// @public
 export type Track = {
     id: string;
     name: string;
@@ -910,7 +878,7 @@ export type Track = {
 // @public
 export const unionTrackIds: (arrangement: ArrangementProject) => string[];
 
-// @public (undocumented)
+// @public
 export type Unsubscribe = () => void;
 
 // @public
@@ -919,22 +887,22 @@ export const updateTimelineEvent: <TEvent extends TimelineEvent>(project: Timeli
 // @public
 export const validateArrangement: (input: unknown) => ValidationResult;
 
-// @public (undocumented)
+// @public
 export const validateProject: (input: unknown) => ValidationResult;
 
-// @public (undocumented)
+// @public
 export const validateTimelineProject: (input: unknown, eventValidator?: TimelineEventValidator) => ValidationResult;
 
 // @public
 export const validateTimingMap: (timing: TimingMap) => void;
 
-// @public (undocumented)
+// @public
 export type ValidationIssue = {
     path: string;
     message: string;
 };
 
-// @public (undocumented)
+// @public
 export type ValidationResult = {
     ok: true;
     errors: [];

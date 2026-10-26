@@ -9,10 +9,19 @@ import {
 } from "./playbackTransport";
 import type { PlaybackClock, Unsubscribe } from "./types";
 
+/**
+ * Options for {@link createMediaElementTransport}. Pass the `audioContext`
+ * that processes the element's audio (for example through a
+ * `MediaElementAudioSourceNode`) so that `play()` resumes it.
+ */
 export type MediaElementTransportOptions = PlaybackTransportBaseOptions & {
   audioContext?: AudioContext;
 };
 
+/**
+ * Options for {@link createAudioBufferTransport}: the node to connect to
+ * (default `audioContext.destination`) and whether to start looping.
+ */
 export type AudioBufferTransportOptions = PlaybackTransportBaseOptions & {
   destination?: AudioNode;
   loop?: boolean;

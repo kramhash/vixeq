@@ -3,8 +3,19 @@ import { type ChannelSource, type EasingFunction, type Envelope } from "@vixeq/c
 import type { ReadonlyRef } from "./readonlyRef";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 
+/**
+ * Whether {@link useAnimatedChannels} animates every frame: `"system"` follows
+ * the user's `prefers-reduced-motion` setting, `"no-preference"` always
+ * animates, and `"reduce"` runs no frame loop and samples only after a seek,
+ * stop, or project change.
+ */
 export type MotionPreference = "system" | "reduce" | "no-preference";
 
+/**
+ * Options for {@link useAnimatedChannels}. With `envelopes`, each channel is
+ * driven by its envelope, triggered on every step; without them, the hook
+ * interpolates the engine's step values.
+ */
 export type AnimatedChannelsOptions = {
   /**
    * Map of trackId `->` Envelope. Envelope trigger/sample positions use the

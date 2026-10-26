@@ -1,3 +1,4 @@
+/** Options for {@link bindChannelsToElement}. */
 export type BindChannelsOptions = {
   /** Number of decimal places for CSS value strings. Default 4. */
   precision?: number;

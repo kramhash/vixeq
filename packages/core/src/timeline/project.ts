@@ -83,6 +83,13 @@ export const toJsonCompatible = (value: unknown): JsonValue | undefined => {
   return undefined;
 };
 
+/**
+ * Returns the events sorted by beat. The sort is stable: events on the same
+ * beat keep their order.
+ *
+ * @param events - Events to sort; not modified.
+ * @returns A new sorted array.
+ */
 export const sortTimelineEvents = <TEvent extends TimelineEvent>(events: readonly TEvent[]): TEvent[] =>
   // Stable sort by beat only: Timeline imposes no secondary sort key, so
   // same-beat events must keep their original relative (array) order.
@@ -124,6 +131,14 @@ export const normalizeTimelineEvent = (event: Partial<TimelineEvent> = {}, index
   ...buildEventFields(event, index),
 });
 
+/**
+ * Creates a valid {@link TimelineProject}. Omitted or invalid fields are
+ * repaired as by {@link normalizeTimelineProject}; the default length is 4
+ * beats at the default tempo.
+ *
+ * @param options - Timing, length, tracks, and events.
+ * @returns A new project.
+ */
 export const createTimelineProject = (options: CreateTimelineProjectOptions = {}): TimelineProject =>
   normalizeTimelineProject({
     version: 2,
@@ -133,6 +148,16 @@ export const createTimelineProject = (options: CreateTimelineProjectOptions = {}
     events: options.events ?? [],
   });
 
+/**
+ * Repairs `input` into a valid {@link TimelineProject} instead of rejecting it:
+ * missing or duplicate ids are replaced with the first unused `track-N` /
+ * `event-N`, invalid fields are defaulted, events are sorted, and a negative
+ * `startPositionMs` that would leave nothing to play is reset to 0. Anything
+ * that is not an object becomes an empty project.
+ *
+ * @param input - Data to repair, typically parsed JSON.
+ * @returns A new valid project; `input` is not modified.
+ */
 export const normalizeTimelineProject = (input: unknown): TimelineProject => {
   const source = isRecord(input) ? input : {};
 
@@ -172,6 +197,17 @@ export const normalizeTimelineProject = (input: unknown): TimelineProject => {
   };
 };
 
+/**
+ * Checks that `input` is a valid {@link TimelineProject} without changing it:
+ * the timing map, a positive `durationBeats`, unique non-empty ids, existing
+ * `trackId` references, beats within `[0, durationBeats)` and sorted, and
+ * JSON-compatible `data`. Engines and the update helpers run the same check.
+ *
+ * @param input - Data to check.
+ * @param eventValidator - Runs once per event after the structural checks;
+ *   throw to reject an event.
+ * @returns Every problem found, or `ok: true`.
+ */
 export const validateTimelineProject = (
   input: unknown,
   eventValidator?: TimelineEventValidator,
@@ -391,6 +427,12 @@ export const addTimelineTrack = <TEvent extends TimelineEvent>(
   });
 };
 
+/**
+ * Removes a track and every event on it.
+ *
+ * @returns A new project.
+ * @throws TypeError if the result is not a valid project.
+ */
 export const removeTimelineTrack = <TEvent extends TimelineEvent>(
   project: TimelineProject<TEvent>,
   trackId: string,
@@ -401,6 +443,13 @@ export const removeTimelineTrack = <TEvent extends TimelineEvent>(
     events: project.events.filter((event) => event.trackId !== trackId),
   });
 
+/**
+ * Enables or disables a track; a disabled track's events are not dispatched.
+ *
+ * @returns A new project.
+ * @throws TypeError if the result is not a valid project, for example when
+ *   `enabled` is not a boolean.
+ */
 export const setTimelineTrackEnabled = <TEvent extends TimelineEvent>(
   project: TimelineProject<TEvent>,
   trackId: string,
@@ -451,6 +500,12 @@ export const updateTimelineEvent = <TEvent extends TimelineEvent>(
     eventValidator,
   );
 
+/**
+ * Removes an event.
+ *
+ * @returns A new project; unchanged contents if no event has `eventId`.
+ * @throws TypeError if the result is not a valid project.
+ */
 export const removeTimelineEvent = <TEvent extends TimelineEvent>(
   project: TimelineProject<TEvent>,
   eventId: string,

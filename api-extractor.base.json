@@ -17,6 +17,10 @@
     "extractorMessageReporting": {
       "ae-missing-release-tag": {
         "logLevel": "none"
+      },
+      "ae-undocumented": {
+        "logLevel": "error",
+        "addToApiReportFile": false
       }
     }
   }

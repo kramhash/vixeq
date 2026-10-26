@@ -34,6 +34,10 @@ export type ArrangementProject = {
   sections: ArrangementSection[];
 };
 
+/**
+ * Options for {@link createArrangement}. Patterns and sections are taken as
+ * given; check the result with {@link validateArrangement}.
+ */
 export type CreateArrangementOptions = {
   timing?: CreateTimingMapOptions | TimingMap;
   durationBeats?: number;
@@ -41,6 +45,10 @@ export type CreateArrangementOptions = {
   sections?: ArrangementSection[];
 };
 
+/**
+ * A v1 arrangement (before 0.8), the input of {@link migrateArrangementProject}.
+ * Its single `bpm` becomes a one-tempo `timing` in v2.
+ */
 export type ArrangementProjectV1 = {
   version: 1;
   bpm: number;
@@ -48,20 +56,36 @@ export type ArrangementProjectV1 = {
   sections: ArrangementSection[];
 };
 
+/**
+ * Options for {@link migrateArrangementProject}. v1 has no length, so
+ * `durationBeats` is required for a successful migration and must cover the
+ * last section's `endBeat`.
+ */
 export type ArrangementMigrationOptions = {
   durationBeats?: number;
 };
 
+/** Result of {@link migrateArrangementProject}. */
 export type ArrangementMigrationResult = MigrationResult<ArrangementProject>;
 
+/**
+ * An {@link ArrangementEngine} playback snapshot; adds the active `section`,
+ * or `null` in a gap.
+ */
 export type ArrangementPlaybackSnapshot = EnginePlaybackSnapshot & {
   section: ArrangementSection | null;
 };
 
+/** An {@link EnginePlaybackEvent} whose snapshot carries the active section. */
 export type ArrangementPlaybackEvent = Omit<EnginePlaybackEvent, "snapshot"> & {
   snapshot: ArrangementPlaybackSnapshot;
 };
 
+/**
+ * Emitted as `"project"` by {@link ArrangementEngine.setProject}: the new and
+ * previous project, the preserved position, and the channels whose output
+ * changed there.
+ */
 export type ArrangementProjectEvent = {
   project: ArrangementProject;
   previousProject: ArrangementProject;
@@ -82,6 +106,7 @@ export type ArrangementSectionEvent = {
   cause: StepEventCause;
 };
 
+/** Payload type of each {@link ArrangementEngine} event, keyed by event name. */
 export type ArrangementEventMap = {
   step: StepEvent;
   playback: ArrangementPlaybackEvent;
@@ -89,8 +114,10 @@ export type ArrangementEventMap = {
   section: ArrangementSectionEvent;
 };
 
+/** Event names accepted by {@link ArrangementEngine.on}. */
 export type ArrangementEventName = keyof ArrangementEventMap;
 
+/** Listener for one {@link ArrangementEngine} event. */
 export type ArrangementEventHandler<TEventName extends ArrangementEventName> = (
   event: ArrangementEventMap[TEventName],
 ) => void;

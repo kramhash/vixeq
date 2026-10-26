@@ -4,8 +4,11 @@ description: How Vixeq's three playback engines — sequencer, arrangement, and 
 ---
 
 Vixeq ships three playback engines in `@vixeq/core`. They share the same
-`ChannelSource` shape (`play`/`pause`/`stop`, `on(...)`, `sampleChannels()`,
-`getPosition()`, `dispose()`) but answer different questions about time.
+controls (`play`/`pause`/`stop`, `on(...)`, `getPosition()`,
+`getPlaybackState()`, `dispose()`) but answer different questions about time.
+`SequencerEngine` and `ArrangementEngine` also produce channel values, so
+both satisfy the `ChannelSource` type that the animation helpers accept;
+`TimelineEngine` dispatches cues instead.
 
 ## Steps and channels
 

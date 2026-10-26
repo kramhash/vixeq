@@ -12,6 +12,7 @@ export type Envelope = {
   reset(): void;
 };
 
+/** Options for {@link createEnvelope}. */
 export type CreateEnvelopeOptions = {
   /** Attack duration in ms (0 = instant snap to peak). Default 0. */
   attack?: number;

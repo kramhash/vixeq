@@ -8,6 +8,10 @@ const getHighResolutionNow = (): number => {
   return Date.now();
 };
 
+/**
+ * The default {@link PlaybackClock}: `performance.now()` (falling back to
+ * `Date.now()`) with `setTimeout` timers.
+ */
 export const browserClock: PlaybackClock = {
   now: getHighResolutionNow,
   setTimer(callback, delayMs) {

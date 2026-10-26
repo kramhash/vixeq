@@ -48,6 +48,14 @@ export const normalizeTempos = (tempos: Partial<TempoEvent>[] | undefined): Temp
   return deduped;
 };
 
+/**
+ * Creates a valid {@link TimingMap} from one tempo or a tempo list. Tempos are
+ * sorted, deduplicated, and clamped, a beat-0 tempo is added if missing, and a
+ * missing or non-finite `startPositionMs` becomes 0. It never throws.
+ *
+ * @param options - Defaults to the default tempo with `startPositionMs` 0.
+ * @returns A new timing map.
+ */
 export const createTimingMap = (options: CreateTimingMapOptions = { bpm: SEQUENCER_LIMITS.defaultBpm }): TimingMap => {
   const tempos = "tempos" in options ? options.tempos : [{ beat: 0, bpm: options.bpm }];
   return {
@@ -56,6 +64,13 @@ export const createTimingMap = (options: CreateTimingMapOptions = { bpm: SEQUENC
   };
 };
 
+/**
+ * Repairs a timing map, or builds one from {@link CreateTimingMapOptions},
+ * the same way as {@link createTimingMap}. It never throws.
+ *
+ * @param input - A possibly invalid timing map, creation options, or `undefined`.
+ * @returns A new valid timing map.
+ */
 export const normalizeTimingMap = (input: Partial<TimingMap> | CreateTimingMapOptions | undefined): TimingMap => {
   if (!input) {
     return createTimingMap();

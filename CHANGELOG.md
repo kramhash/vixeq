@@ -8,6 +8,24 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
 14-day observation period. The renames are collected in the
 [rc.1 → rc.2 naming guide](./docs/migrations/1.0-rc2-naming.md).
 
+### Upgrading from 1.0.0-rc.1
+
+1. Install `@vixeq/core` next to `@vixeq/react`, and `@vixeq/core` and
+   `@vixeq/react` next to `@vixeq/player-react`: they are now peer
+   dependencies.
+2. Apply the renames in the
+   [naming guide](./docs/migrations/1.0-rc2-naming.md): transport
+   `seekPositionMs`, Arrangement `getProject` / `setProject` / `project`,
+   `useSequencer`, and `ReadonlyRef`. TypeScript reports each call site.
+3. Replace removed exports (listed under Breaking) with the alternatives
+   given there.
+4. Pass every required field to `addTimelineEvent` / `addTimelineTrack`, and
+   change a union event's `type` and `data` together in
+   `updateTimelineEvent`. Calls that now fail to compile already threw at
+   runtime, except a `type`-only or `data`-only patch on a union event.
+5. Check saved Sequence projects with `validateProject`: one without
+   `stepsPerBeat` is now rejected; repair it with `normalizeProject`.
+
 ### Breaking
 
 - Removed exports that the 1.0 contract does not promise
@@ -112,6 +130,10 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
   it fits `TimelineEngine<MyEvent>` and `useTimeline<MyEvent>` without a
   cast, and the event validator receives `MyEvent`
   ([#18](https://github.com/kramhash/vixeq/issues/18)).
+- Every public export has TSDoc, and API Extractor's `ae-undocumented` is an
+  error, so a new undocumented export fails `api:check`. The core README and
+  guide have a Timeline section, and the code examples in the READMEs and
+  guides were checked against the rc.2 API (RC5).
 
 ### Fixed
 
