@@ -1,12 +1,33 @@
 # Changelog
 
-## Unreleased
+## 1.0.0-rc.2 - 2026-10-26
 
-Fixes from the pre-1.0 API audit
+Second release candidate for `1.0.0`, with the fixes from the pre-1.0 API
+audit
 ([`docs/reviews/rc2-api-audit-claude.md`](docs/reviews/rc2-api-audit-claude.md)).
-They change the public API, so they ship as `1.0.0-rc.2` and restart the
-14-day observation period. The renames are collected in the
+They change the public API, so the 14-day observation period restarts from
+this release; `1.0.0` follows it unless a blocker needs another RC. The
+renames are collected in the
 [rc.1 → rc.2 naming guide](./docs/migrations/1.0-rc2-naming.md).
+
+### Published
+
+- Published `@vixeq/core`, `@vixeq/react`, and `@vixeq/player-react` at
+  `1.0.0-rc.2` under the `next` dist-tag, with npm provenance attestations.
+  `latest` stays on `0.9.0`; install the RC with `@next` or the exact
+  version.
+  - [`@vixeq/core@1.0.0-rc.2`](https://www.npmjs.com/package/@vixeq/core/v/1.0.0-rc.2)
+  - [`@vixeq/react@1.0.0-rc.2`](https://www.npmjs.com/package/@vixeq/react/v/1.0.0-rc.2)
+  - [`@vixeq/player-react@1.0.0-rc.2`](https://www.npmjs.com/package/@vixeq/player-react/v/1.0.0-rc.2)
+
+### Known caveats
+
+- Browser support follows the locked Playwright browser set recorded in
+  [`SUPPORT.md`](./SUPPORT.md).
+- WebKit and CI Firefox browser E2E do not assert real WebAudio playback
+  start/progression when Linux headless Playwright cannot start or advance
+  `AudioContext.currentTime`.
+- Node.js 20 is not supported for the 1.0 line.
 
 ### Upgrading from 1.0.0-rc.1
 
