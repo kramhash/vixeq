@@ -43,10 +43,6 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
   disposal errors. Install the packages side by side
   (`npm install @vixeq/core @vixeq/react @vixeq/player-react`)
   ([#20](https://github.com/kramhash/vixeq/issues/20)).
-- `addTimelineEvent` and `addTimelineTrack` take every field except `id`
-  (TypeScript only). Calls that omitted another field compiled but always
-  threw a `TypeError`; they now fail to compile
-  ([#18](https://github.com/kramhash/vixeq/issues/18)).
 - Timeline update helper inputs are narrower (TypeScript only;
   [#18](https://github.com/kramhash/vixeq/issues/18)):
   - `addTimelineEvent` and `addTimelineTrack` take every required field
