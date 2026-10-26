@@ -1,3 +1,7 @@
+/**
+ * Maps progress `t` from 0 to 1 onto an eased value. The sampling methods use
+ * it to interpolate between a step's value and the next step's.
+ */
 export type EasingFunction = (t: number) => number;
 
 const clampT = (t: number): number => {

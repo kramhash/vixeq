@@ -1,7 +1,17 @@
 import type { PlaybackClock, Unsubscribe } from "./types";
 
+/**
+ * Where playback stands. `stopped` is always at position 0; `paused` keeps its
+ * position for a later resume; `ended` keeps the finite end position, and
+ * `play()` from it starts again at 0. A buffering transport stays `playing`.
+ */
 export type PlaybackState = "stopped" | "playing" | "paused" | "ended";
 
+/**
+ * A transport's state at one moment. `durationMs` is `null` when unknown or
+ * unbounded; `buffering` is `true` while a `playing` transport is waiting for
+ * media.
+ */
 export type PlaybackSnapshot = {
   state: PlaybackState;
   positionMs: number;
@@ -11,6 +21,11 @@ export type PlaybackSnapshot = {
   buffering: boolean;
 };
 
+/**
+ * Emitted to {@link PlaybackTransport.subscribe} listeners, each with the
+ * snapshot after the change. New event types may be added in a minor release;
+ * handle unknown ones with a default branch.
+ */
 export type PlaybackTransportEvent =
   | { type: "play"; snapshot: PlaybackSnapshot }
   | { type: "pause"; snapshot: PlaybackSnapshot }
@@ -25,25 +40,55 @@ export type PlaybackTransportEvent =
   | { type: "error"; error: unknown; snapshot: PlaybackSnapshot }
   | { type: "dispose"; snapshot: PlaybackSnapshot };
 
+/**
+ * Where a listener error came from: the event name, and whether a transport
+ * or an engine was dispatching it.
+ */
 export type ListenerErrorContext = {
   source: "transport" | "engine";
   eventName: string;
 };
 
+/**
+ * Options shared by the built-in transports.
+ *
+ * `onListenerError` receives errors thrown by `subscribe` listeners. If it is
+ * omitted or throws, the error goes to `globalThis.reportError` when
+ * available, otherwise `console.error`.
+ */
 export type PlaybackTransportBaseOptions = {
   onListenerError?: (error: unknown, context: ListenerErrorContext) => void;
 };
 
+/**
+ * Options for {@link createClockTransport}. `durationMs` (finite, greater than
+ * 0) makes playback end there; `loop: true` requires it.
+ */
 export type ClockTransportOptions = PlaybackTransportBaseOptions & {
   durationMs?: number;
   loop?: boolean;
 };
 
+/**
+ * {@link PlaybackError} codes: `TRANSPORT_DISPOSED` for a command on a disposed
+ * transport, `DURATION_UNAVAILABLE` for looping without a known duration.
+ */
 export type PlaybackErrorCode = "TRANSPORT_DISPOSED" | "DURATION_UNAVAILABLE";
 
+/**
+ * An error from a transport or engine command that is not an invalid
+ * argument (those throw `TypeError` or `RangeError`). Check `code` rather than
+ * `instanceof`: with two copies of `@vixeq/core` installed, `instanceof`
+ * fails, while `name === "PlaybackError"` and `code` still match.
+ */
 export class PlaybackError extends Error {
+  /** What went wrong; stable across releases. */
   readonly code: PlaybackErrorCode;
 
+  /**
+   * @param code - The error code.
+   * @param message - Overrides the default message for `code`.
+   */
   constructor(code: PlaybackErrorCode, message?: string) {
     super(message ?? defaultPlaybackErrorMessage(code));
     this.name = "PlaybackError";
@@ -51,6 +96,15 @@ export class PlaybackError extends Error {
   }
 }
 
+/**
+ * The clock an engine follows: an audio file, a media element, or a plain
+ * clock. Its position is authoritative; engines map it to beats and steps.
+ *
+ * Commands return promises; invalid arguments throw synchronously. After
+ * `dispose()`, every getter, command, and subscription fails with
+ * {@link PlaybackError} (`TRANSPORT_DISPOSED`). Implement it to drive engines
+ * from another source. In 1.x it gains only optional members.
+ */
 export type PlaybackTransport = {
   getSnapshot(): PlaybackSnapshot;
   getPlaybackState(): PlaybackState;
@@ -114,6 +168,16 @@ const reportListenerError = (
   }
 };
 
+/**
+ * Creates a {@link PlaybackTransport} driven by `clock` alone, with no media.
+ * Without `durationMs` it plays on indefinitely.
+ *
+ * @param clock - The time source, usually {@link browserClock}.
+ * @param options - Duration, initial loop, and listener-error handling.
+ * @returns A stopped transport at position 0.
+ * @throws RangeError if `durationMs` is not finite and greater than 0.
+ * @throws PlaybackError (`DURATION_UNAVAILABLE`) if `loop` is set without `durationMs`.
+ */
 export function createClockTransport(
   clock: PlaybackClock,
   options: ClockTransportOptions = {},

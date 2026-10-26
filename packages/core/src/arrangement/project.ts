@@ -16,6 +16,14 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const isFiniteNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
+/**
+ * Creates an {@link ArrangementProject}. The timing map is repaired as by
+ * {@link normalizeTimingMap}, and a missing or invalid `durationBeats`
+ * becomes 4; patterns and sections are used as given.
+ *
+ * @param options - Timing, length, patterns, and sections.
+ * @returns A new arrangement; check it with {@link validateArrangement}.
+ */
 export const createArrangement = (options: CreateArrangementOptions = {}): ArrangementProject => {
   const durationBeats = isFiniteNumber(options.durationBeats) && options.durationBeats > 0
     ? options.durationBeats

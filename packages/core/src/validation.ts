@@ -5,6 +5,15 @@ import type { SequenceProject, Track, ValidationIssue, ValidationResult } from "
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+/**
+ * Checks that `input` is a valid {@link SequenceProject} without changing it:
+ * version 1, `bpm`, `stepCount`, and `stepsPerBeat` within
+ * {@link SEQUENCER_LIMITS}, and tracks with unique non-empty ids and one value
+ * from 0 to 1 per step. Engines run the same check and throw when it fails.
+ *
+ * @param input - Data to check, typically parsed JSON.
+ * @returns Every problem found, or `ok: true`.
+ */
 export const validateProject = (input: unknown): ValidationResult => {
   const errors: ValidationIssue[] = [];
 
@@ -90,6 +99,16 @@ export const validateProject = (input: unknown): ValidationResult => {
   return errors.length === 0 ? { ok: true, errors: [] } : { ok: false, errors };
 };
 
+/**
+ * Repairs `input` into a valid {@link SequenceProject} instead of rejecting
+ * it: missing or out-of-range numbers are defaulted or clamped, steps are
+ * padded, cut, and clamped to 0–1, and duplicate track ids are renamed. Use it
+ * on saved data from an older version (for example, before `stepsPerBeat`
+ * existed). Anything that is not an object becomes a default project.
+ *
+ * @param input - Data to repair, typically parsed JSON.
+ * @returns A new valid project; `input` is not modified.
+ */
 export const normalizeProject = (input: unknown): SequenceProject => {
   if (!isRecord(input)) {
     return createProject();

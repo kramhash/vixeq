@@ -149,6 +149,13 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
   // no longer owes the `ended` announcement.
   private endedExits = 0;
 
+  /**
+   * @param project - The project to play. Validated eagerly, with
+   *   `options.eventValidator` when given.
+   * @param options - Transport, loop, scheduling, validation, and listener options.
+   * @throws TypeError if `project` is invalid or an option has the wrong type.
+   * @throws RangeError if `lookaheadMs` is negative or not finite.
+   */
   constructor(project: TimelineProject<TEvent>, options: TimelineEngineOptions<TEvent> = {}) {
     if (!isRecord(options)) {
       throw new TypeError("TimelineEngine options must be an object.");
@@ -195,6 +202,13 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     this.rescheduleIfPlaying();
   }
 
+  /**
+   * Subscribe to an engine event: `"cue"`, `"playback"`, or `"project"`.
+   *
+   * @param eventName - The event to listen for.
+   * @param handler - Called with that event's payload.
+   * @returns A function that removes the listener.
+   */
   on<TEventName extends TimelineEventName>(
     eventName: TEventName,
     handler: TimelineEventHandler<TEventName, TEvent>,
@@ -207,6 +221,14 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     };
   }
 
+  /**
+   * Start or resume playback. From `stopped` or `ended` it starts at beat 0 and
+   * dispatches the cues there.
+   *
+   * @returns A promise that resolves once the transport has started.
+   * @throws {@link PlaybackError} (`TRANSPORT_DISPOSED`) if the transport or the
+   *   engine has been disposed.
+   */
   play(): Promise<void> {
     this.assertLive();
     if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
@@ -232,18 +254,41 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     return this.runTransportCommands(["play"], () => this.transport.play());
   }
 
+  /**
+   * Pause playback, keeping the position.
+   *
+   * @returns A promise that resolves once the transport has paused.
+   * @throws {@link PlaybackError} (`TRANSPORT_DISPOSED`) if the transport or the
+   *   engine has been disposed.
+   */
   pause(): Promise<void> {
     this.assertLive();
     if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
     return this.runTransportCommands(["pause"], () => this.transport.pause());
   }
 
+  /**
+   * Stop playback and return to position 0.
+   *
+   * @returns A promise that resolves once the transport has stopped.
+   * @throws {@link PlaybackError} (`TRANSPORT_DISPOSED`) if the transport or the
+   *   engine has been disposed.
+   */
   stop(): Promise<void> {
     this.assertLive();
     if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
     return this.runTransportCommands(["stop"], () => this.transport.stop());
   }
 
+  /**
+   * Seek to a beat of the timeline, mapped through its timing map. A seek
+   * dispatches no cues; a beat before transport position 0 (with a negative
+   * `startPositionMs`) seeks to 0.
+   *
+   * @param beat - From 0 to `durationBeats`.
+   * @returns A promise that resolves once the seek completes.
+   * @throws RangeError if `beat` is outside that range or not finite.
+   */
   seekBeat(beat: number): Promise<void> {
     this.assertLive();
     if (!Number.isFinite(beat) || beat < 0 || beat > this.project.durationBeats) {
@@ -255,6 +300,15 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     return this.runTransportCommands(["seek"], () => this.transport.seekPositionMs(positionMs));
   }
 
+  /**
+   * Seek the transport to a transport-relative position. The transport checks
+   * the upper bound, so a position past the local end behaves as a direct
+   * transport seek there.
+   *
+   * @param positionMs - Finite and non-negative.
+   * @returns A promise that resolves once the seek completes.
+   * @throws RangeError if `positionMs` is negative or not finite.
+   */
   seekPositionMs(positionMs: number): Promise<void> {
     this.assertLive();
     assertFiniteNonNegative(positionMs, "positionMs");
@@ -264,6 +318,14 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     return this.runTransportCommands(["seek"], () => this.transport.seekPositionMs(positionMs));
   }
 
+  /**
+   * Turn the engine's own loop on or off: when on, playback repeats from beat 0
+   * at `durationBeats`, independently of the transport's loop. A change emits a
+   * `loopchange` playback event; setting the current value does nothing.
+   *
+   * @param loop - Whether to loop.
+   * @throws TypeError if `loop` is not a boolean.
+   */
   setLoop(loop: boolean): void {
     this.assertLive();
     if (typeof loop !== "boolean") {
@@ -289,11 +351,21 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     this.rescheduleIfPlaying();
   }
 
+  /** Returns the loaded project. */
   getProject(): TimelineProject<TEvent> {
     this.assertLive();
     return this.project;
   }
 
+  /**
+   * Replace the project while keeping the current fractional beat, without
+   * seeking the transport. Emits `"project"`. Events added at or before the
+   * current beat are not dispatched retroactively. Does nothing if `project` is
+   * the loaded object.
+   *
+   * @param project - The new project. Validated eagerly.
+   * @throws TypeError if `project` is invalid; the engine keeps the old one.
+   */
   setProject(project: TimelineProject<TEvent>): void {
     this.assertLive();
     assertValidTimelineProject(project, this.options);
@@ -337,11 +409,16 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     this.rescheduleIfPlaying();
   }
 
+  /** Returns the engine's playback state. */
   getPlaybackState(): PlaybackState {
     this.assertLive();
     return this.playbackState;
   }
 
+  /**
+   * Returns the engine's logical position, frozen while paused, stopped,
+   * buffering, or ended.
+   */
   getPosition(): ChannelPosition {
     this.assertLive();
     const positionMs = this.getLogicalPositionMs();
@@ -351,6 +428,12 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     };
   }
 
+  /**
+   * Tear down the engine: clears timers and listeners and unsubscribes from the
+   * transport. A transport the engine created is disposed too; one you supplied
+   * is left as it is. Calling it again does nothing; afterwards, other methods
+   * throw.
+   */
   dispose(): void {
     if (this.disposed) {
       return;

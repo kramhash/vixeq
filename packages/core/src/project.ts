@@ -2,6 +2,10 @@ import { nextAvailableId } from "./ids";
 import { SEQUENCER_LIMITS } from "./limits";
 import type { SequenceProject, StepValue, Track } from "./types";
 
+/**
+ * Options for {@link createTrack}. Values are normalized: `steps` is clamped to
+ * 0–1 and padded or cut to `stepCount`.
+ */
 export type CreateTrackOptions = {
   /** Track id; trimmed. Blank or omitted means "generate one". */
   id?: string;
@@ -11,6 +15,10 @@ export type CreateTrackOptions = {
   enabled?: boolean;
 };
 
+/**
+ * Options for {@link createProject}. Numbers are clamped to
+ * {@link SEQUENCER_LIMITS}; omitted ones take its defaults.
+ */
 export type CreateProjectOptions = {
   bpm?: number;
   stepCount?: number;
@@ -26,6 +34,7 @@ export type CreateProjectOptions = {
   tracks?: Omit<CreateTrackOptions, "stepCount">[];
 };
 
+/** Options for {@link randomizeTrack}. */
 export type RandomizeTrackOptions = {
   probability?: number;
   min?: number;
@@ -41,6 +50,7 @@ export const clamp = (value: number, min: number, max: number): number => {
   return Math.min(max, Math.max(min, value));
 };
 
+/** Clamps a number to a valid {@link StepValue} (0–1); `NaN` becomes 0. */
 export const clampStepValue = (value: number): StepValue => clamp(value, 0, 1);
 
 const requestedTrackId = (id: unknown): string | undefined =>
@@ -241,6 +251,13 @@ export const toggleStep = (project: SequenceProject, trackId: string, stepIndex:
   return setStepValue(project, trackId, stepIndex, track.steps[stepIndex] > 0 ? 0 : 1);
 };
 
+/**
+ * Sets every step of a track to 0.
+ *
+ * @param project - The project to update.
+ * @param trackId - Id of the track to clear.
+ * @returns A new project, or the original `project` if the track doesn't exist.
+ */
 export const clearTrack = (project: SequenceProject, trackId: string): SequenceProject => {
   if (!project.tracks.some((track) => track.id === trackId)) {
     return project;
@@ -363,6 +380,14 @@ export const addTrack = (project: SequenceProject, name?: string): SequenceProje
   };
 };
 
+/**
+ * Removes a track.
+ *
+ * @param project - The project to update.
+ * @param trackId - Id of the track to remove.
+ * @returns A new project, or the original `project` if the track doesn't exist
+ *   or it is the last track (`SEQUENCER_LIMITS.minTracks`).
+ */
 export const removeTrack = (project: SequenceProject, trackId: string): SequenceProject => {
   if (project.tracks.length <= SEQUENCER_LIMITS.minTracks) {
     return project;
@@ -372,18 +397,42 @@ export const removeTrack = (project: SequenceProject, trackId: string): Sequence
   return tracks.length === project.tracks.length ? project : { ...project, tracks };
 };
 
+/**
+ * Renames a track. The name is trimmed; a blank name keeps the old one.
+ *
+ * @param project - The project to update.
+ * @param trackId - Id of the track to rename.
+ * @param name - The new name.
+ * @returns A new project.
+ */
 export const renameTrack = (project: SequenceProject, trackId: string, name: string): SequenceProject =>
   updateTrack(project, trackId, (track) => ({
     ...track,
     name: name.trim() || track.name,
   }));
 
+/**
+ * Enables or disables a track. A disabled track keeps its steps but outputs 0.
+ *
+ * @param project - The project to update.
+ * @param trackId - Id of the track.
+ * @param enabled - Whether the track plays.
+ * @returns A new project.
+ */
 export const setTrackEnabled = (project: SequenceProject, trackId: string, enabled: boolean): SequenceProject =>
   updateTrack(project, trackId, (track) => ({
     ...track,
     enabled,
   }));
 
+/**
+ * Sets the tempo, clamped to `SEQUENCER_LIMITS.minBpm`–`maxBpm`. Pass the
+ * result to {@link SequencerEngine.setProject} to change tempo while playing.
+ *
+ * @param project - The project to update.
+ * @param bpm - The new tempo.
+ * @returns A new project.
+ */
 export const setProjectBpm = (project: SequenceProject, bpm: number): SequenceProject => ({
   ...project,
   bpm: clamp(bpm, SEQUENCER_LIMITS.minBpm, SEQUENCER_LIMITS.maxBpm),

@@ -14,6 +14,15 @@ export const getEventsInBeatRange = (
 ): TimelineEvent[] =>
   createTimelineEventIndex(project).getEventsInBeatRange(fromBeat, toBeat, options);
 
+/**
+ * Returns the events within `toleranceBeats` of `beat`, inclusive, in order.
+ *
+ * @param project - The project to query.
+ * @param beat - The beat to look at; a non-finite beat returns no events.
+ * @param toleranceBeats - How far either side of `beat` counts (default 0).
+ * @param options - Track, type, and global-event filters.
+ * @returns Matching events.
+ */
 export const getEventsAtBeat = (
   project: TimelineProject,
   beat: number,
@@ -22,6 +31,15 @@ export const getEventsAtBeat = (
 ): TimelineEvent[] =>
   createTimelineEventIndex(project).getEventsAtBeat(beat, toleranceBeats, options);
 
+/**
+ * Returns up to `count` events at or after `beat`, in order.
+ *
+ * @param project - The project to query.
+ * @param beat - Where to start; a non-finite beat returns no events.
+ * @param count - The maximum number of events.
+ * @param options - Track, type, and global-event filters.
+ * @returns Matching events.
+ */
 export const getNextEvents = (
   project: TimelineProject,
   beat: number,

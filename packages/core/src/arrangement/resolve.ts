@@ -18,9 +18,14 @@ export const unionTrackIds = (arrangement: ArrangementProject): string[] => {
   return ids;
 };
 
+/** Returns the arrangement's length in beats (`durationBeats`). */
 export const arrangementDurationBeats = (arrangement: ArrangementProject): number =>
   arrangement.durationBeats;
 
+/**
+ * The section active at a beat, and the beat measured from that section's
+ * start.
+ */
 export type SectionLookup = {
   section: ArrangementSection;
   /** Beat position relative to the section's own start (always `>= 0`). */
@@ -44,6 +49,7 @@ export const sectionAtBeat = (arrangement: ArrangementProject, beat: number): Se
   return { section, localBeat: beat - section.startBeat };
 };
 
+/** The section and pattern step active at a beat, as resolved by the engine. */
 export type ResolvedArrangementStep = {
   section: ArrangementSection;
   /** Step index within the active pattern, wrapped modulo the pattern's stepCount (loop-fill). */

@@ -75,6 +75,12 @@ type LocalEndPause = {
   endedExits: number;
 };
 
+/**
+ * Options for the {@link ArrangementEngine} constructor. `transport`,
+ * `missedStepPolicy`, `onStep`, and `onListenerError` work as in
+ * {@link SequencerEngineOptions}; `onSection` is shorthand for
+ * `engine.on("section", onSection)`.
+ */
 export type ArrangementEngineOptions = {
   transport?: PlaybackTransport;
   /** Max ms between polls while playing. Default 25. */
@@ -190,6 +196,13 @@ export class ArrangementEngine {
   // announces `ended`.
   private endedExits = 0;
 
+  /**
+   * @param arrangement - The project to play. Validated eagerly.
+   * @param options - Transport, loop, scheduling, and listener options.
+   * @throws TypeError if `arrangement` fails {@link validateArrangement} or an
+   *   option has the wrong type.
+   * @throws RangeError if `lookaheadMs` is negative or not finite.
+   */
   constructor(arrangement: ArrangementProject, options: ArrangementEngineOptions = {}) {
     if (!isRecord(options)) {
       throw new TypeError("ArrangementEngine options must be an object.");
@@ -236,6 +249,14 @@ export class ArrangementEngine {
     this.rescheduleIfPlaying();
   }
 
+  /**
+   * Subscribe to an engine event: `"step"`, `"section"`, `"playback"`, or
+   * `"project"`.
+   *
+   * @param eventName - The event to listen for.
+   * @param handler - Called with that event's payload.
+   * @returns A function that removes the listener.
+   */
   on<TEventName extends ArrangementEventName>(
     eventName: TEventName,
     handler: ArrangementEventHandler<TEventName>,
@@ -248,6 +269,14 @@ export class ArrangementEngine {
     };
   }
 
+  /**
+   * Start or resume playback. From `stopped` or `ended` it starts at beat 0 and
+   * emits the section and step there (`cause: "play"`).
+   *
+   * @returns A promise that resolves once the transport has started.
+   * @throws {@link PlaybackError} (`TRANSPORT_DISPOSED`) if the transport or the
+   *   engine has been disposed.
+   */
   play(): Promise<void> {
     this.assertLive();
     if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
@@ -273,18 +302,40 @@ export class ArrangementEngine {
     return this.runTransportCommands(["play"], () => this.transport.play());
   }
 
+  /**
+   * Pause playback, keeping the position.
+   *
+   * @returns A promise that resolves once the transport has paused.
+   * @throws {@link PlaybackError} (`TRANSPORT_DISPOSED`) if the transport or the
+   *   engine has been disposed.
+   */
   pause(): Promise<void> {
     this.assertLive();
     if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
     return this.runTransportCommands(["pause"], () => this.transport.pause());
   }
 
+  /**
+   * Stop playback and return to position 0.
+   *
+   * @returns A promise that resolves once the transport has stopped.
+   * @throws {@link PlaybackError} (`TRANSPORT_DISPOSED`) if the transport or the
+   *   engine has been disposed.
+   */
   stop(): Promise<void> {
     this.assertLive();
     if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
     return this.runTransportCommands(["stop"], () => this.transport.stop());
   }
 
+  /**
+   * Seek to a beat of the arrangement, mapped through its timing map. A beat
+   * before transport position 0 (with a negative `startPositionMs`) seeks to 0.
+   *
+   * @param beat - From 0 to `durationBeats`.
+   * @returns A promise that resolves once the seek completes.
+   * @throws RangeError if `beat` is outside that range or not finite.
+   */
   seekBeat(beat: number): Promise<void> {
     this.assertLive();
     const durationBeats = this.getDurationBeats();
@@ -297,6 +348,15 @@ export class ArrangementEngine {
     return this.runTransportCommands(["seek"], () => this.transport.seekPositionMs(positionMs));
   }
 
+  /**
+   * Seek the transport to a transport-relative position. The transport checks
+   * the upper bound, so a position past the local end behaves as a direct
+   * transport seek there.
+   *
+   * @param positionMs - Finite and non-negative.
+   * @returns A promise that resolves once the seek completes.
+   * @throws RangeError if `positionMs` is negative or not finite.
+   */
   seekPositionMs(positionMs: number): Promise<void> {
     this.assertLive();
     assertFiniteNonNegative(positionMs, "positionMs");
@@ -306,6 +366,14 @@ export class ArrangementEngine {
     return this.runTransportCommands(["seek"], () => this.transport.seekPositionMs(positionMs));
   }
 
+  /**
+   * Turn the engine's own loop on or off: when on, playback repeats from beat 0
+   * at `durationBeats`, independently of the transport's loop. A change emits a
+   * `loopchange` playback event; setting the current value does nothing.
+   *
+   * @param loop - Whether to loop.
+   * @throws TypeError if `loop` is not a boolean.
+   */
   setLoop(loop: boolean): void {
     this.assertLive();
     if (typeof loop !== "boolean") {
@@ -338,6 +406,12 @@ export class ArrangementEngine {
     this.rescheduleIfPlaying();
   }
 
+  /**
+   * Tear down the engine: clears timers and listeners and unsubscribes from the
+   * transport. A transport the engine created is disposed too; one you supplied
+   * is left as it is. Calling it again does nothing; afterwards, other methods
+   * throw.
+   */
   dispose(): void {
     if (this.disposed) {
       return;
@@ -356,6 +430,7 @@ export class ArrangementEngine {
     }
   }
 
+  /** Returns the loaded project. */
   getProject(): ArrangementProject {
     this.assertLive();
     return this.arrangement;
@@ -419,16 +494,25 @@ export class ArrangementEngine {
     this.rescheduleIfPlaying();
   }
 
+  /**
+   * Returns the active section, or `null` in a gap or before playback reaches a
+   * section.
+   */
   getCurrentSection(): ArrangementSection | null {
     this.assertLive();
     return this.currentSection;
   }
 
+  /** Returns the engine's playback state. */
   getPlaybackState(): PlaybackState {
     this.assertLive();
     return this.playbackState;
   }
 
+  /**
+   * Returns the engine's logical position, frozen while paused, stopped,
+   * buffering, or ended.
+   */
   getPosition(): ChannelPosition {
     this.assertLive();
     const positionMs = this.getLogicalPositionMs();
@@ -438,11 +522,28 @@ export class ArrangementEngine {
     };
   }
 
+  /**
+   * Sample every channel at the engine's current position, interpolating
+   * between the active step and the next. Channels are the union of all
+   * patterns' track ids, so the key set stays the same across sections.
+   *
+   * @param easing - Easing for the interpolation. Defaults to {@link linear}.
+   * @returns A record of channel id to 0–1 value; 0 in gaps.
+   */
   sampleChannels(easing: EasingFunction = linear): Record<string, number> {
     this.assertLive();
     return this.sampleArrangementChannels(this.arrangement, this.getLogicalPositionMs(), easing);
   }
 
+  /**
+   * Sample every channel at any transport-relative position, without affecting
+   * playback.
+   *
+   * @param positionMs - Finite and non-negative.
+   * @param easing - Easing for the interpolation. Defaults to {@link linear}.
+   * @returns A record of channel id to 0–1 value.
+   * @throws RangeError if `positionMs` is negative or not finite.
+   */
   sampleChannelsAt(positionMs: number, easing: EasingFunction = linear): Record<string, number> {
     this.assertLive();
     assertFiniteNonNegative(positionMs, "positionMs");

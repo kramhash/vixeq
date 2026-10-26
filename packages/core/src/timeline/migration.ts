@@ -12,9 +12,16 @@ import type { JsonObject, TimelineEvent, TimelineProject, TimelineTrack } from "
 // `TimelineProjectV1` parameter type below, so callers can type their
 // pre-migration data.
 
+/** A tempo in a v1 timeline (before 0.8), for typing data you migrate. */
 export type TempoEventV1 = { beat: number; bpm: number };
+/** A v1 timing map; `offsetMs` became `startPositionMs` in v2. */
 export type TimingMapV1 = { tempos: TempoEventV1[]; offsetMs: number };
+/** A v1 timeline track; v2 drops `type`. */
 export type TimelineTrackV1 = { id: string; name: string; enabled: boolean; type?: string; data?: Record<string, unknown> };
+/**
+ * A v1 timeline event. `trackId: "global"` became `null` in v2, and
+ * `durationBeats` and `value` were removed.
+ */
 export type TimelineEventV1 = {
   id: string;
   trackId: string;
@@ -25,6 +32,7 @@ export type TimelineEventV1 = {
   data?: Record<string, unknown>;
 };
 
+/** A v1 timeline project, the input of {@link migrateTimelineProject}. */
 export type TimelineProjectV1 = {
   version: 1;
   timing: TimingMapV1;
@@ -32,6 +40,7 @@ export type TimelineProjectV1 = {
   events: TimelineEventV1[];
 };
 
+/** Options for {@link migrateTimelineProject}. */
 export type TimelineMigrationOptions = {
   /**
    * Required for a successful migration: v1 has no durationBeats field, so it

@@ -1,3 +1,7 @@
+/**
+ * Bounds that {@link validateProject} enforces, and the defaults that
+ * {@link createProject} uses.
+ */
 export const SEQUENCER_LIMITS = {
   minBpm: 20,
   maxBpm: 300,

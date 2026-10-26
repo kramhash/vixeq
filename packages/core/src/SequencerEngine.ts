@@ -185,6 +185,13 @@ export class SequencerEngine {
     this.rescheduleIfPlaying();
   }
 
+  /**
+   * Subscribe to an engine event: `"step"`, `"playback"`, or `"project"`.
+   *
+   * @param eventName - The event to listen for.
+   * @param handler - Called with that event's payload.
+   * @returns A function that removes the listener.
+   */
   on<TEventName extends SequencerEventName>(
     eventName: TEventName,
     handler: SequencerEventHandler<TEventName>,
@@ -349,21 +356,28 @@ export class SequencerEngine {
     this.rescheduleIfPlaying();
   }
 
+  /** Returns the loaded project. */
   getProject(): SequenceProject {
     this.assertLive();
     return this.project;
   }
 
+  /** Returns the index of the step at the engine's position. */
   getCurrentStepIndex(): number {
     this.assertLive();
     return this.currentStepIndex;
   }
 
+  /** Returns the engine's playback state. */
   getPlaybackState(): PlaybackState {
     this.assertLive();
     return this.playbackState;
   }
 
+  /**
+   * Returns the engine's logical position, frozen while paused, stopped,
+   * buffering, or ended.
+   */
   getPosition(): ChannelPosition {
     this.assertLive();
     const positionMs = this.getLogicalPositionMs();

@@ -30,7 +30,7 @@ import { TimelinePlaybackEvent } from '@vixeq/core';
 import { TimelineProject } from '@vixeq/core';
 import { TimelineProjectEvent } from '@vixeq/core';
 
-// @public (undocumented)
+// @public
 export type AnimatedChannelsOptions = {
     envelopes?: Record<string, Envelope>;
     easing?: EasingFunction;
@@ -44,7 +44,7 @@ export type ArrangementLatestEvent = StepEvent | ArrangementPlaybackEvent | Arra
 // @public
 export type ArrangementPendingOperation = "play" | "pause" | "stop" | "toggle" | "seekPositionMs" | "seekBeat" | "setPlaybackRate" | "setTransportLoop" | "setLoop";
 
-// @public (undocumented)
+// @public
 export type MotionPreference = "system" | "reduce" | "no-preference";
 
 // @public
