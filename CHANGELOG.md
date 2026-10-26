@@ -43,6 +43,15 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
   disposal errors. Install the packages side by side
   (`npm install @vixeq/core @vixeq/react @vixeq/player-react`)
   ([#20](https://github.com/kramhash/vixeq/issues/20)).
+- Timeline update helper inputs are narrower (TypeScript only;
+  [#18](https://github.com/kramhash/vixeq/issues/18)):
+  - `addTimelineEvent` and `addTimelineTrack` take every required field
+    except `id` (`TimelineEventInput`). Calls that omitted one compiled but
+    always threw a `TypeError`; they now fail to compile.
+  - `updateTimelineEvent` takes a `TimelineEventPatch`, which excludes `id`
+    (it was ignored). When the event type is a union, `type` and `data`
+    change only together, as a pair from one member, so a patch can no
+    longer give a `"flash"` event `"fade"` data.
 
 ### Added
 
@@ -53,6 +62,9 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
   (`>=22`), and declare `sideEffects` (`false`, except
   `@vixeq/player-react/styles.css`)
   ([#20](https://github.com/kramhash/vixeq/issues/20)).
+- `@vixeq/core` exports `TimelineEventInput` and `TimelineEventPatch`, the
+  argument types of `addTimelineEvent` and `updateTimelineEvent`
+  ([#18](https://github.com/kramhash/vixeq/issues/18)).
 
 ### Changed
 
@@ -82,6 +94,13 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
   move to `ended`) instead of throwing `RangeError`. Negative and non-finite
   positions still throw
   ([#24](https://github.com/kramhash/vixeq/issues/24)).
+- The Timeline update helpers (`addTimelineEvent`, `updateTimelineEvent`,
+  `removeTimelineEvent`, `addTimelineTrack`, `removeTimelineTrack`,
+  `setTimelineTrackEnabled`) and `sortTimelineEvents` are generic over the
+  event type. A `TimelineProject<MyEvent>` keeps its type through them, so
+  it fits `TimelineEngine<MyEvent>` and `useTimeline<MyEvent>` without a
+  cast, and the event validator receives `MyEvent`
+  ([#18](https://github.com/kramhash/vixeq/issues/18)).
 
 ### Fixed
 

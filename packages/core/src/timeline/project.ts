@@ -6,6 +6,8 @@ import type {
   JsonObject,
   JsonValue,
   TimelineEvent,
+  TimelineEventInput,
+  TimelineEventPatch,
   TimelineEventValidator,
   TimelineProject,
   TimelineTrack,
@@ -81,7 +83,7 @@ export const toJsonCompatible = (value: unknown): JsonValue | undefined => {
   return undefined;
 };
 
-export const sortTimelineEvents = (events: TimelineEvent[]): TimelineEvent[] =>
+export const sortTimelineEvents = <TEvent extends TimelineEvent>(events: readonly TEvent[]): TEvent[] =>
   // Stable sort by beat only: Timeline imposes no secondary sort key, so
   // same-beat events must keep their original relative (array) order.
   [...events].sort((a, b) => a.beat - b.beat);
@@ -353,20 +355,31 @@ export const validateTimelineProject = (
 // defect (duplicate id, dangling trackId, out-of-range beat, non-JSON data,
 // removed fields, ...) is rejected by `validateTimelineProject`.
 
-const assertValidTimelineProject = (
-  candidate: unknown,
-  eventValidator?: TimelineEventValidator,
-): TimelineProject => {
-  const result = validateTimelineProject(candidate, eventValidator);
+const assertValidTimelineProject = <TEvent extends TimelineEvent>(
+  candidate: TimelineProject<TEvent>,
+  eventValidator?: TimelineEventValidator<TEvent>,
+): TimelineProject<TEvent> => {
+  const result = validateTimelineProject(
+    candidate,
+    // validateTimelineProject only calls it with this project's events.
+    eventValidator as TimelineEventValidator | undefined,
+  );
   if (!result.ok) {
     throw new TypeError(
       `Invalid TimelineProject: ${result.errors[0]?.path ?? "$"} ${result.errors[0]?.message ?? ""}`.trim(),
     );
   }
-  return candidate as TimelineProject;
+  return candidate;
 };
 
-export const addTimelineTrack = (project: TimelineProject, track: Partial<TimelineTrack>): TimelineProject => {
+/**
+ * Appends a track. Every required field except `id` must be given; a missing
+ * `id` gets the first unused `track-N`.
+ */
+export const addTimelineTrack = <TEvent extends TimelineEvent>(
+  project: TimelineProject<TEvent>,
+  track: Omit<TimelineTrack, "id"> & { id?: string },
+): TimelineProject<TEvent> => {
   const id =
     typeof track.id === "string" && track.id.trim().length > 0
       ? track.id.trim()
@@ -378,28 +391,32 @@ export const addTimelineTrack = (project: TimelineProject, track: Partial<Timeli
   });
 };
 
-export const removeTimelineTrack = (project: TimelineProject, trackId: string): TimelineProject =>
+export const removeTimelineTrack = <TEvent extends TimelineEvent>(
+  project: TimelineProject<TEvent>,
+  trackId: string,
+): TimelineProject<TEvent> =>
   assertValidTimelineProject({
     ...project,
     tracks: project.tracks.filter((track) => track.id !== trackId),
     events: project.events.filter((event) => event.trackId !== trackId),
   });
 
-export const setTimelineTrackEnabled = (
-  project: TimelineProject,
+export const setTimelineTrackEnabled = <TEvent extends TimelineEvent>(
+  project: TimelineProject<TEvent>,
   trackId: string,
   enabled: boolean,
-): TimelineProject =>
+): TimelineProject<TEvent> =>
   assertValidTimelineProject({
     ...project,
     tracks: project.tracks.map((track) => (track.id === trackId ? { ...track, enabled } : track)),
   });
 
-export const addTimelineEvent = (
-  project: TimelineProject,
-  event: Partial<TimelineEvent>,
-  eventValidator?: TimelineEventValidator,
-): TimelineProject => {
+/** Appends an event (see {@link TimelineEventInput}) and re-sorts by beat. */
+export const addTimelineEvent = <TEvent extends TimelineEvent>(
+  project: TimelineProject<TEvent>,
+  event: TimelineEventInput<TEvent>,
+  eventValidator?: TimelineEventValidator<TEvent>,
+): TimelineProject<TEvent> => {
   const id =
     typeof event.id === "string" && event.id.trim().length > 0
       ? event.id.trim()
@@ -410,18 +427,19 @@ export const addTimelineEvent = (
       ...project,
       // Re-sort: validateTimelineProject requires non-decreasing beat order,
       // and the new event is appended, not inserted in beat order.
-      events: sortTimelineEvents([...project.events, { ...event, id } as TimelineEvent]),
+      events: sortTimelineEvents([...project.events, { ...event, id } as unknown as TEvent]),
     },
     eventValidator,
   );
 };
 
-export const updateTimelineEvent = (
-  project: TimelineProject,
+/** Patches an event (see {@link TimelineEventPatch}) and re-sorts by beat. */
+export const updateTimelineEvent = <TEvent extends TimelineEvent>(
+  project: TimelineProject<TEvent>,
   eventId: string,
-  patch: Partial<TimelineEvent>,
-  eventValidator?: TimelineEventValidator,
-): TimelineProject =>
+  patch: TimelineEventPatch<TEvent>,
+  eventValidator?: TimelineEventValidator<TEvent>,
+): TimelineProject<TEvent> =>
   assertValidTimelineProject(
     {
       ...project,
@@ -433,7 +451,10 @@ export const updateTimelineEvent = (
     eventValidator,
   );
 
-export const removeTimelineEvent = (project: TimelineProject, eventId: string): TimelineProject =>
+export const removeTimelineEvent = <TEvent extends TimelineEvent>(
+  project: TimelineProject<TEvent>,
+  eventId: string,
+): TimelineProject<TEvent> =>
   assertValidTimelineProject({
     ...project,
     events: project.events.filter((event) => event.id !== eventId),
