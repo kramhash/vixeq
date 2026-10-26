@@ -604,7 +604,7 @@ Default is `"system"`. Under reduced motion:
 
 ## 7. React contract
 
-`useSequencerEngine` and `useArrangement` return, where applicable:
+`useSequencer` and `useArrangement` return, where applicable:
 
 ```ts
 {

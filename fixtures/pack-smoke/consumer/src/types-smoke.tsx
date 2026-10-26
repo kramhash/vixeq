@@ -12,8 +12,8 @@ import {
   type TimelineProjectV1,
 } from "@vixeq/core";
 import {
-  useSequencerEngine,
-  type SequencerEngineHookState,
+  useSequencer,
+  type UseSequencerState,
 } from "@vixeq/react";
 import {
   SequencePlayer,
@@ -63,7 +63,7 @@ const props: SequencePlayerProps = {
 };
 
 export function HookSmoke(): PlaybackState {
-  const state: SequencerEngineHookState = useSequencerEngine({ project });
+  const state: UseSequencerState = useSequencer({ project });
   return state.playbackState;
 }
 

@@ -15,7 +15,7 @@ import {
   type SequencerPlaybackEvent,
   type StepEvent,
 } from "@vixeq/core";
-import { useSequencePlayer } from "@vixeq/react";
+import { useSequencer } from "@vixeq/react";
 import {
   forwardRef,
   useCallback,
@@ -69,7 +69,7 @@ export type SequencePlayerProjectChange = {
 /**
  * Imperative handle exposed via `ref` on {@link SequencePlayer} / {@link StandaloneSequencePlayer}.
  * Every method proxies to the underlying `SequencerEngine`/`PlaybackTransport` through the
- * `useSequencePlayer` command queue, so calls made in quick succession are serialized rather than
+ * `useSequencer` command queue, so calls made in quick succession are serialized rather than
  * racing each other.
  */
 export type SequencePlayerRef = {
@@ -200,7 +200,7 @@ const readPointerValue = (event: PointerEvent<HTMLElement>): number => {
 /**
  * Editable, controlled React GUI for a {@link @vixeq/core#SequenceProject}: a per-track step grid, a value
  * inspector for the selected step, and (optionally) a built-in transport bar (Play/Pause, Stop,
- * BPM). Playback is driven by the `useSequencePlayer` hook from `@vixeq/react`, so scheduling,
+ * BPM). Playback is driven by the `useSequencer` hook from `@vixeq/react`, so scheduling,
  * position tracking, and the step/playback event stream all come from a real `SequencerEngine`
  * rather than being simulated in the UI.
  *
@@ -264,7 +264,7 @@ export const SequencePlayer = forwardRef<SequencePlayerRef, SequencePlayerProps>
     },
     [onPlaybackChange],
   );
-  const player = useSequencePlayer({ project, onStep: handleStep, onPlaybackChange: handlePlaybackChange, transport });
+  const player = useSequencer({ project, onStep: handleStep, onPlaybackChange: handlePlaybackChange, transport });
   const currentStep = deriveCurrentStep(project, latestStep, player.positionRef.current);
   const isPlaying = player.playbackState === "playing";
   const primaryLabel = player.pendingOperation

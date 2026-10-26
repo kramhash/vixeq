@@ -13,7 +13,8 @@ import {
   type TimelineProject,
   type TimelineProjectEvent,
 } from "@vixeq/core";
-import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { ReadonlyRef } from "./readonlyRef";
 
 /**
  * Name of a `useTimeline` command while it sits at the head of the internal
@@ -116,7 +117,7 @@ export type UseTimelineState<TEvent extends TimelineEvent = TimelineEvent> = {
    * re-render — read it inside animation callbacks instead of depending on
    * hook state for continuous progress.
    */
-  positionRef: MutableRefObject<ChannelPosition>;
+  positionRef: ReadonlyRef<ChannelPosition>;
   /**
    * Ref holding the most recent cue, playback, or project event emitted by
    * the engine. Updated on every cue (not just once per frame), without
@@ -125,7 +126,7 @@ export type UseTimelineState<TEvent extends TimelineEvent = TimelineEvent> = {
    * `onCue` into their own state instead, since a ref mutation does not
    * itself schedule a render.
    */
-  latestEventRef: MutableRefObject<TimelineLatestEvent<TEvent> | null>;
+  latestEventRef: ReadonlyRef<TimelineLatestEvent<TEvent> | null>;
   /**
    * Error from the most recent engine construction or `setProject` call, or
    * `null` if it succeeded. Construction/hot-swap failures are captured here

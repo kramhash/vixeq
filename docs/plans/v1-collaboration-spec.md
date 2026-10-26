@@ -335,7 +335,7 @@ the ref and callback once, then freeze. Do not continue discrete step updates.
 
 ## 4. React v2 contract
 
-`useSequencerEngine`, `useArrangement`, and `useTimeline` share this shape
+`useSequencer`, `useArrangement`, and `useTimeline` share this shape
 where applicable:
 
 - `engine`

@@ -1,12 +1,10 @@
 export {
-  useSequencePlayer,
-  useSequencerEngine,
-  type SequencePlayerHookState,
-  type SequencerEngineLatestEvent,
-  type SequencerEngineHookOptions,
-  type SequencerEngineHookState,
-  type SequencerEnginePendingOperation,
-} from "./useSequencerEngine";
+  useSequencer,
+  type SequencerLatestEvent,
+  type UseSequencerOptions,
+  type UseSequencerState,
+  type SequencerPendingOperation,
+} from "./useSequencer";
 export { useAnimatedChannels, type AnimatedChannelsOptions, type MotionPreference } from "./useAnimatedChannels";
 export {
   useArrangement,
@@ -23,3 +21,4 @@ export {
   type UseTimelineState,
 } from "./useTimeline";
 export { usePrefersReducedMotion } from "./usePrefersReducedMotion";
+export type { ReadonlyRef } from "./readonlyRef";

@@ -2,7 +2,7 @@ import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { createArrangement, createProject } from "@vixeq/core";
 import { useArrangement } from "./useArrangement";
-import { useSequencerEngine } from "./useSequencerEngine";
+import { useSequencer } from "./useSequencer";
 
 describe("React hooks SSR", () => {
   it("PB-SSR-001 PB-SSR-002 renders without browser APIs", () => {
@@ -14,7 +14,7 @@ describe("React hooks SSR", () => {
     });
 
     const SequencerProbe = () => {
-      const player = useSequencerEngine({ project });
+      const player = useSequencer({ project });
       return <span>{player.playbackState}</span>;
     };
     const ArrangementProbe = () => {

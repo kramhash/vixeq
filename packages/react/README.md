@@ -16,9 +16,9 @@ policy are documented in the repository
 `@vixeq/react` supports React `>=18 <20`.
 
 ```tsx
-import { useSequencerEngine } from "@vixeq/react";
+import { useSequencer } from "@vixeq/react";
 
-const player = useSequencerEngine({ project, onStep });
+const player = useSequencer({ project, onStep });
 await player.play();
 ```
 
@@ -26,12 +26,12 @@ await player.play();
 
 ```tsx
 import { createProject, toggleStep, type SequenceProject } from "@vixeq/core";
-import { useSequencerEngine } from "@vixeq/react";
+import { useSequencer } from "@vixeq/react";
 import { useState } from "react";
 
 function Sequencer() {
   const [project, setProject] = useState<SequenceProject>(() => createProject());
-  const player = useSequencerEngine({ project });
+  const player = useSequencer({ project });
   const trackId = project.tracks[0].id;
 
   return (
@@ -61,7 +61,7 @@ Audio is optional. When you want a sequencer to follow an `HTMLAudioElement`, pa
 
 ```tsx
 import { createMediaElementTransport, createProject } from "@vixeq/core";
-import { useSequencerEngine } from "@vixeq/react";
+import { useSequencer } from "@vixeq/react";
 import { useMemo, useState } from "react";
 
 function AudioSequencer() {
@@ -71,7 +71,7 @@ function AudioSequencer() {
     audio.loop = true;
     return createMediaElementTransport(audio);
   }, []);
-  const player = useSequencerEngine({ project, transport });
+  const player = useSequencer({ project, transport });
 
   return (
     <button type="button" disabled={player.isBusy} onClick={() => void player.toggle()}>
@@ -83,7 +83,7 @@ function AudioSequencer() {
 
 ## Arrangement Usage
 
-`useArrangement` mirrors `useSequencerEngine`'s lifecycle (create on mount,
+`useArrangement` mirrors `useSequencer`'s lifecycle (create on mount,
 dispose on unmount, hot-swap on prop change) for an `ArrangementProject` — a
 song-level structure with tempo-mapped timing, an explicit duration, and
 multiple patterns placed on a shared beat timeline.
@@ -133,7 +133,7 @@ Pass a map of `trackId → Envelope` to trigger and sample beat-driven decay ani
 ```tsx
 import { createDecayEnvelope } from "@vixeq/core";
 import { bindChannelsToElement } from "@vixeq/core/dom";
-import { useAnimatedChannels, useSequencerEngine } from "@vixeq/react";
+import { useAnimatedChannels, useSequencer } from "@vixeq/react";
 import { useMemo, useRef } from "react";
 
 const ENVELOPES = {
@@ -148,7 +148,7 @@ const CSS_MAPPING = {
 
 function PulseScene() {
   const rootRef = useRef<HTMLDivElement>(null);
-  const { engine } = useSequencerEngine({ project });
+  const { engine } = useSequencer({ project });
   const envelopes = useMemo(() => ENVELOPES, []);
 
   useAnimatedChannels(engine, {
@@ -168,10 +168,10 @@ Without `envelopes`, the hook calls `engine.sampleChannels(easing)` each frame f
 
 ```tsx
 import { easeOutCubic } from "@vixeq/core";
-import { useAnimatedChannels, useSequencerEngine } from "@vixeq/react";
+import { useAnimatedChannels, useSequencer } from "@vixeq/react";
 
 function MorphScene() {
-  const { engine } = useSequencerEngine({ project });
+  const { engine } = useSequencer({ project });
   const valuesRef = useAnimatedChannels(engine, {
     easing: easeOutCubic,
     onFrame: (values) => { /* write to DOM */ },
