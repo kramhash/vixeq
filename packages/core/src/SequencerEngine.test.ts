@@ -9,7 +9,7 @@ import {
 } from "./playbackTransport";
 import { createProject, renameTrack, setProjectBpm, setStepValue, setTrackEnabled } from "./project";
 import { easeOutQuad } from "./easing";
-import type { EnginePlaybackEvent, PlaybackClock, ProjectEvent, StepEvent } from "./types";
+import type { EnginePlaybackEvent, PlaybackClock, ProjectEvent, SequenceProject, StepEvent } from "./types";
 
 class FakeClock implements PlaybackClock {
   currentTime = 0;
@@ -441,6 +441,8 @@ describe("SequencerEngine — Playback v2", () => {
   it("PB-EN-013A rejects invalid constructor and hot-swap projects", () => {
     const project = createProject();
     expect(() => new SequencerEngine({ ...project, bpm: 0 })).toThrow(TypeError);
+    const { stepsPerBeat: _omitted, ...withoutStepsPerBeat } = project;
+    expect(() => new SequencerEngine(withoutStepsPerBeat as SequenceProject)).toThrow(TypeError);
     expect(() => new SequencerEngine(project, { lookaheadMs: -1 })).toThrow(RangeError);
 
     const engine = new SequencerEngine(project);

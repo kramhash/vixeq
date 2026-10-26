@@ -30,6 +30,20 @@ const validV1 = (): ArrangementProjectV1 => ({
 });
 
 describe("migrateArrangementProject", () => {
+  it("reports a v1 pattern without stepsPerBeat instead of repairing it", () => {
+    const { stepsPerBeat: _omitted, ...intro } = createProject({ stepCount: 4, trackCount: 1 });
+    const result = migrateArrangementProject(
+      { ...validV1(), patterns: { intro: intro as ArrangementProjectV1["patterns"][string] } },
+      { durationBeats: 8 },
+    );
+
+    expect(result.ok).toBe(false);
+    expect(
+      !result.ok &&
+        result.errors.some((issue) => issue.code === "ARRANGEMENT_PATTERN" && issue.path === "patterns.intro.stepsPerBeat"),
+    ).toBe(true);
+  });
+
   it("MIG-006 MIG-008 maps v1 bpm to TimingMap and uses explicit durationBeats", () => {
     const result = migrateArrangementProject(validV1(), { durationBeats: 8 });
 

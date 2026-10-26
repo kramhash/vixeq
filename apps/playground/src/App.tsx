@@ -3,7 +3,7 @@ import { createProject, normalizeProject, presets, validateProject, type Sequenc
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Visualizer, type VisualizerHandle } from "./Visualizer";
 import { VixeqLogo } from "./VixeqLogo";
-import { loadStoredProject, saveStoredProject, type ProjectStorageLoadResult } from "./projectStorage";
+import { loadStoredProject, saveStoredProject, upgradeLegacyProject, type ProjectStorageLoadResult } from "./projectStorage";
 import { createVisualizerState } from "./visualizerState";
 
 const DEFAULT_TRACK_NAMES = ["Kick / Energy", "Depth / Motion", "Glow / Accent", "Color Shift"];
@@ -93,7 +93,7 @@ export function App() {
 
   const importJson = () => {
     try {
-      const parsed = JSON.parse(jsonText) as unknown;
+      const parsed = upgradeLegacyProject(JSON.parse(jsonText) as unknown);
       const result = validateProject(parsed);
       if (!result.ok) {
         setImportError(result.errors.map((error) => `${error.path}: ${error.message}`).join("\n"));

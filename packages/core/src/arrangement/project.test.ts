@@ -44,6 +44,20 @@ describe("validateArrangement", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("rejects a pattern without stepsPerBeat", () => {
+    const { stepsPerBeat: _omitted, ...intro } = validPattern();
+    const result = validateArrangement({
+      version: 2,
+      timing: { tempos: [{ beat: 0, bpm: 120 }], startPositionMs: 0 },
+      durationBeats: 4,
+      patterns: { intro },
+      sections: [{ id: "s1", patternId: "intro", startBeat: 0, endBeat: 4 }],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errors.some((issue) => issue.path === "patterns.intro.stepsPerBeat")).toBe(true);
+  });
+
   it("AR-002 rejects a legacy bpm field instead of migrating it", () => {
     const result = validateArrangement({
       version: 2,
