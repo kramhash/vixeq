@@ -52,7 +52,8 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
 - The playback contract lists `"loop"` in `StepEventCause` and no longer
   promises an `iteration` field on Arrangement and Timeline snapshots, which
   was never implemented. `useTimeline` documents that a new
-  `eventValidator` reference rebuilds the engine
+  `eventValidator` reference recreates the engine, and the hooks document
+  that their `setLoop` is queued behind earlier commands
   ([#25](https://github.com/kramhash/vixeq/issues/25)).
 
 ### Fixed

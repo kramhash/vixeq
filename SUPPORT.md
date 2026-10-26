@@ -112,6 +112,7 @@ Unions and payloads that Vixeq emits can grow in a minor release. Handle
 unknown values with a default branch instead of an exhaustive `switch` that
 fails to compile when a value is added. This covers, among others:
 
+- `PlaybackState`
 - `EnginePlaybackEvent.type` and `EnginePlaybackCause`
 - `StepEventCause`
 - `PlaybackErrorCode`

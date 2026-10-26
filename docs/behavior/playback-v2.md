@@ -342,7 +342,8 @@ export type EnginePlaybackEvent = {
 };
 ```
 
-Sequence snapshots additionally expose `stepIndex`. Engine events use the event name
+Sequence snapshots additionally expose `stepIndex`, and Arrangement snapshots
+`section`. Engine events use the event name
 `"playback"`; transport events are not exposed as Engine `"transport"`
 events.
 

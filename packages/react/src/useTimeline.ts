@@ -72,8 +72,9 @@ export type UseTimelineOptions<TEvent extends TimelineEvent = TimelineEvent> = {
    * Optional domain validator invoked once per event after Core's
    * structural checks; throw inside it to reject a domain-invalid event.
    * Keep the reference stable (define it outside the component or wrap it in
-   * `useCallback`): unlike the event callbacks, a new validator rebuilds the
-   * engine, which resets playback.
+   * `useCallback`): unlike the event callbacks, a new validator disposes and
+   * recreates the engine (with the default transport, playback restarts
+   * from 0).
    */
   eventValidator?: TimelineEventValidator<TEvent>;
   /** Called with every `TimelineCueEvent` the engine schedules. */
