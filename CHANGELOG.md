@@ -35,12 +35,24 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
 
   The pure functions (`createArrangement`, `normalizeArrangement`,
   `validateArrangement`, ...) keep their names.
+- `@vixeq/react` takes `@vixeq/core` as a peer dependency, and
+  `@vixeq/player-react` takes both `@vixeq/core` and `@vixeq/react`, each at
+  `^1.0.0-rc.2`. They used to be exact-pinned dependencies, so a core of a
+  different version in the app installed a second copy: the hooks' engine
+  types no longer matched the app's, and `useAnimatedChannels` rethrew
+  disposal errors. Install the packages side by side
+  (`npm install @vixeq/core @vixeq/react @vixeq/player-react`)
+  ([#20](https://github.com/kramhash/vixeq/issues/20)).
 
 ### Added
 
 - `@vixeq/core` exports `MigrationIssue`, the element type of
   `MigrationResult` warnings and errors
   ([#17](https://github.com/kramhash/vixeq/issues/17)).
+- All three packages export `./package.json`, declare `engines.node`
+  (`>=22`), and declare `sideEffects` (`false`, except
+  `@vixeq/player-react/styles.css`)
+  ([#20](https://github.com/kramhash/vixeq/issues/20)).
 
 ### Changed
 
@@ -65,6 +77,10 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
   `migrateArrangementProject`. A missing `durationBeats` returns `ok: false`
   with `TIMELINE_DURATION_BEATS_REQUIRED` instead of throwing a `TypeError`
   ([#19](https://github.com/kramhash/vixeq/issues/19)).
+- `useAnimatedChannels` recognizes a disposal error by its name and code
+  instead of `instanceof`, so an error from another copy of `@vixeq/core`
+  no longer escapes the animation frame loop
+  ([#20](https://github.com/kramhash/vixeq/issues/20)).
 
 ## 1.0.0-rc.1 - 2026-10-21
 

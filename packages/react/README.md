@@ -2,6 +2,12 @@
 
 React hooks for `@vixeq/core`.
 
+```sh
+npm install @vixeq/core @vixeq/react
+```
+
+`@vixeq/core` is a peer dependency, so the app and the hooks share one copy.
+
 ## Support
 
 The current React peer range, TypeScript range, SSR expectations, and semver

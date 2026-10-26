@@ -23,6 +23,7 @@ The 1.0 support target is:
 | --- | --- |
 | Node.js | `22`, `24`, and `26` |
 | React | `>=18 <20` for `@vixeq/react` and `@vixeq/player-react` peers |
+| Vixeq peers | `@vixeq/react` peers on `@vixeq/core`; `@vixeq/player-react` peers on both, each at `^` the same version. Install them alongside |
 | TypeScript | `>=5.5` (verified on `5.5`, `6.0`, and `7.0`) |
 | Module formats | ESM and CJS consumers |
 | SSR | Package imports must not require browser globals at module evaluation |

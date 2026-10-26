@@ -25,13 +25,20 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
-    "./styles.css": "./dist/styles.css"
+    "./styles.css": "./dist/styles.css",
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
     "README.md",
     "LICENSE"
   ],
+  "sideEffects": [
+    "./dist/styles.css"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "keywords": [
     "sequencer",
     "step-sequencer",
@@ -40,11 +47,9 @@
     "daw"
   ],
   "peerDependencies": {
+    "@vixeq/core": "workspace:^",
+    "@vixeq/react": "workspace:^",
     "react": ">=18.0.0 <20.0.0"
-  },
-  "dependencies": {
-    "@vixeq/core": "workspace:*",
-    "@vixeq/react": "workspace:*"
   },
   "publishConfig": {
     "access": "public"
@@ -58,6 +63,8 @@
     "api:update": "api-extractor run --local --verbose"
   },
   "devDependencies": {
+    "@vixeq/core": "workspace:*",
+    "@vixeq/react": "workspace:*",
     "@types/react": "^19.1.8",
     "tsup": "^8.5.0",
     "typescript": "^6.0.3"
