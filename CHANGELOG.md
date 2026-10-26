@@ -77,6 +77,11 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
   `eventValidator` reference recreates the engine, and the hooks document
   that their `setLoop` is queued behind earlier commands
   ([#25](https://github.com/kramhash/vixeq/issues/25)).
+- Arrangement and Timeline `seekPositionMs` accept a position past the local
+  end and behave as a direct transport seek there (without local loop, they
+  move to `ended`) instead of throwing `RangeError`. Negative and non-finite
+  positions still throw
+  ([#24](https://github.com/kramhash/vixeq/issues/24)).
 
 ### Fixed
 

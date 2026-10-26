@@ -266,7 +266,36 @@ describe("ArrangementEngine — Playback v2", () => {
     expect(engine.getPosition()).toMatchObject({ positionMs: BEAT_MS * 2, beat: 2 });
     expect(playback.at(-1)).toMatchObject({ type: "seek", cause: "command" });
     expect(() => engine.seekPositionMs(-1)).toThrow(RangeError);
-    expect(() => engine.seekPositionMs(BEAT_MS * 7)).toThrow(RangeError);
+    expect(() => engine.seekPositionMs(Number.NaN)).toThrow(RangeError);
+  });
+
+  it("PB-EN-031 seekPositionMs past local end on a longer transport matches a direct transport seek", async () => {
+    const record = async (seek: (engine: ArrangementEngine, transport: PlaybackTransport) => Promise<void>) => {
+      const { transport } = buildTransport();
+      const engine = new ArrangementEngine(buildArrangement(), { transport });
+      const events: string[] = [];
+      // `cause` differs by design ("command" vs "transport"), so it is left out.
+      engine.on("playback", (event) => events.push(`${event.type}:${event.snapshot.state}`));
+      engine.on("step", (event) => events.push(`step:${event.stepIndex}`));
+      engine.on("section", (event) => events.push(`section:${event.section?.id ?? "gap"}`));
+      await seek(engine, transport);
+      const result = {
+        events,
+        state: engine.getPlaybackState(),
+        position: engine.getPosition(),
+        transportPositionMs: transport.getPositionMs(),
+      };
+      engine.dispose();
+      return result;
+    };
+    const target = BEAT_MS * 20;
+
+    const viaEngine = await record((engine) => engine.seekPositionMs(target));
+    const viaTransport = await record((_engine, transport) => transport.seekPositionMs(target));
+
+    expect(viaEngine).toEqual(viaTransport);
+    expect(viaEngine.state).toBe("ended");
+    expect(viaEngine.transportPositionMs).toBe(target);
   });
 
   it("AR-007 AR-008 uses Arrangement TimingMap for seek and step scheduling, ignoring pattern bpm", async () => {

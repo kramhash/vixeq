@@ -291,7 +291,10 @@ TimelineEngine.seekBeat(beat: number): Promise<void>;
 - Sequence step index is an integer in `[0, stepCount)`.
 - Arrangement/Timeline beat is in `[0, durationBeats]`.
 - `seekPositionMs` uses transport-relative milliseconds and delegates range
-  validation to the transport.
+  validation to the transport. A position past an Arrangement or Timeline
+  local end is accepted whenever the transport accepts it, and the Engine
+  then behaves exactly as when the transport is sought there directly
+  (without local loop, it enters `ended`).
 
 In 0.7, Arrangement exposes:
 
