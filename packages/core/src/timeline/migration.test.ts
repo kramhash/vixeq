@@ -169,14 +169,20 @@ describe("migrateTimelineProject", () => {
     expect(result.ok && result.project.tracks[0]).not.toHaveProperty("type");
   });
 
-  it("durationBeats is required and cannot be derived from v1 data", () => {
-    // @ts-expect-error durationBeats is deliberately omitted to test the required-option guard.
+  it("MIG-011 durationBeats is required and cannot be derived from v1 data", () => {
     const result = migrateTimelineProject(v1Project(), {});
 
     expect(result.ok).toBe(false);
     expect(!result.ok && result.errors.some((issue) => issue.code === "TIMELINE_DURATION_BEATS_REQUIRED")).toBe(
       true,
     );
+  });
+
+  it("MIG-011 reports a missing durationBeats as a migration error when options are omitted", () => {
+    const result = migrateTimelineProject(v1Project());
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errors.map((issue) => issue.code)).toEqual(["TIMELINE_DURATION_BEATS_REQUIRED"]);
   });
 
   it("treats omitted tracks and events as empty migration collections", () => {

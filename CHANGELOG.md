@@ -60,6 +60,11 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
   reject such a project or pattern; run data saved before 0.3 (when
   `stepsPerBeat` was added) through `normalizeProject`, which fills in 4
   ([#16](https://github.com/kramhash/vixeq/issues/16)).
+- `migrateTimelineProject` accepts a call without options, and
+  `TimelineMigrationOptions.durationBeats` is optional, as in
+  `migrateArrangementProject`. A missing `durationBeats` returns `ok: false`
+  with `TIMELINE_DURATION_BEATS_REQUIRED` instead of throwing a `TypeError`
+  ([#19](https://github.com/kramhash/vixeq/issues/19)).
 
 ## 1.0.0-rc.1 - 2026-10-21
 
