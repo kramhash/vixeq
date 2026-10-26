@@ -63,8 +63,8 @@ export type ArrangementPlaybackEvent = Omit<EnginePlaybackEvent, "snapshot"> & {
 };
 
 export type ArrangementProjectEvent = {
-  arrangement: ArrangementProject;
-  previousArrangement: ArrangementProject;
+  project: ArrangementProject;
+  previousProject: ArrangementProject;
   changedChannelIds: string[];
   previousChannels: Record<string, number>;
   channels: Record<string, number>;

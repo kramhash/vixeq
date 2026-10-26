@@ -22,13 +22,13 @@ export class ArrangementEngine {
     // (undocumented)
     dispose(): void;
     // (undocumented)
-    getArrangement(): ArrangementProject;
-    // (undocumented)
     getCurrentSection(): ArrangementSection | null;
     // (undocumented)
     getPlaybackState(): PlaybackState;
     // (undocumented)
     getPosition(): ChannelPosition;
+    // (undocumented)
+    getProject(): ArrangementProject;
     // (undocumented)
     on<TEventName extends ArrangementEventName>(eventName: TEventName, handler: ArrangementEventHandler<TEventName>): Unsubscribe;
     // (undocumented)
@@ -43,9 +43,9 @@ export class ArrangementEngine {
     seekBeat(beat: number): Promise<void>;
     // (undocumented)
     seekPositionMs(positionMs: number): Promise<void>;
-    setArrangement(arrangement: ArrangementProject): void;
     // (undocumented)
     setLoop(loop: boolean): void;
+    setProject(project: ArrangementProject): void;
     // (undocumented)
     stop(): Promise<void>;
 }
@@ -104,8 +104,8 @@ export type ArrangementProject = {
 
 // @public (undocumented)
 export type ArrangementProjectEvent = {
-    arrangement: ArrangementProject;
-    previousArrangement: ArrangementProject;
+    project: ArrangementProject;
+    previousProject: ArrangementProject;
     changedChannelIds: string[];
     previousChannels: Record<string, number>;
     channels: Record<string, number>;

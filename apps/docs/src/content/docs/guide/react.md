@@ -53,7 +53,7 @@ import { createArrangement, createTimingMap } from "@vixeq/core";
 import { useArrangement } from "@vixeq/react";
 
 const player = useArrangement({
-  arrangement: createArrangement({
+  project: createArrangement({
     timing: createTimingMap({ bpm: 120 }),
     durationBeats: 32,
     patterns,

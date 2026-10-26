@@ -104,7 +104,7 @@ export function useArrangement(options: UseArrangementOptions): UseArrangementSt
 
 // @public
 export type UseArrangementOptions = {
-    arrangement: ArrangementProject;
+    project: ArrangementProject;
     transport?: PlaybackTransport;
     lookaheadMs?: number;
     loop?: boolean;

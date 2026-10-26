@@ -95,7 +95,7 @@ function Song() {
       sections,
     }),
   );
-  const player = useArrangement({ arrangement });
+  const player = useArrangement({ project: arrangement });
 
   // engine satisfies ChannelSource, so it composes directly with useAnimatedChannels
   useAnimatedChannels(player.engine, {

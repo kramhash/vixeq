@@ -18,7 +18,7 @@ describe("React hooks SSR", () => {
       return <span>{player.playbackState}</span>;
     };
     const ArrangementProbe = () => {
-      const player = useArrangement({ arrangement });
+      const player = useArrangement({ project: arrangement });
       return <span>{player.playbackState}</span>;
     };
 

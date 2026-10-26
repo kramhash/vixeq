@@ -411,7 +411,7 @@ describe("ArrangementEngine — Playback v2", () => {
     expect(sections.at(-1)).toMatchObject({ section: null, cause: "tick" });
   });
 
-  it("PB-EN-011 PB-EN-025 setArrangement preserves fractional beat without seeking transport", async () => {
+  it("PB-EN-011 PB-EN-025 setProject preserves fractional beat without seeking transport", async () => {
     const { clock, transport } = buildTransport();
     const arrangement = buildArrangement();
     const engine = new ArrangementEngine(arrangement, { transport });
@@ -426,12 +426,16 @@ describe("ArrangementEngine — Playback v2", () => {
       patterns: arrangement.patterns,
       sections: arrangement.sections,
     });
-    engine.setArrangement(nextArrangement);
+    engine.setProject(nextArrangement);
 
     expect(transport.getPositionMs()).toBe(BEAT_MS * 1.5);
     expect(engine.getPosition()).toMatchObject({ beat: 1.5, positionMs: 1500 });
     expect(projects).toHaveLength(1);
     expect(projects[0]).toMatchObject({ beat: 1.5, positionMs: 1500 });
+    expect(projects[0].project).toBe(nextArrangement);
+    expect(projects[0].previousProject).toBe(arrangement);
+    expect(projects[0]).not.toHaveProperty("arrangement");
+    expect(projects[0]).not.toHaveProperty("previousArrangement");
   });
 
   it("PB-EN-014 AR-009 shortens a non-looping project to local ended", async () => {
@@ -441,7 +445,7 @@ describe("ArrangementEngine — Playback v2", () => {
 
     await engine.play();
     clock.advance(BEAT_MS * 5);
-    engine.setArrangement(createArrangement({
+    engine.setProject(createArrangement({
       timing: { bpm: 120 },
       durationBeats: 2,
       patterns: arrangement.patterns,
@@ -461,7 +465,7 @@ describe("ArrangementEngine — Playback v2", () => {
 
     await engine.play();
     clock.advance(BEAT_MS * 5);
-    engine.setArrangement(createArrangement({
+    engine.setProject(createArrangement({
       timing: { bpm: 120 },
       durationBeats: 2,
       patterns: arrangement.patterns,
@@ -488,11 +492,11 @@ describe("ArrangementEngine — Playback v2", () => {
     const previousPosition = engine.getPosition();
     const previousState = engine.getPlaybackState();
 
-    expect(() => engine.setArrangement({
+    expect(() => engine.setProject({
       ...buildArrangement(),
       timing: { tempos: [{ beat: 1, bpm: 120 }], startPositionMs: 0 },
     })).toThrow(TypeError);
-    expect(engine.getArrangement()).toBe(arrangement);
+    expect(engine.getProject()).toBe(arrangement);
     expect(engine.getPlaybackState()).toBe(previousState);
     expect(engine.getPosition()).toEqual(previousPosition);
   });
@@ -695,13 +699,13 @@ describe("ArrangementEngine — RC1C branch coverage", () => {
     ]);
   });
 
-  it("ignores setArrangement with the already-loaded arrangement", () => {
+  it("ignores setProject with the already-loaded arrangement", () => {
     const arrangement = buildArrangement();
     const engine = new ArrangementEngine(arrangement, { transport: buildTransport().transport });
     const projects: ArrangementProjectEvent[] = [];
     engine.on("project", (event) => projects.push(event));
 
-    engine.setArrangement(arrangement);
+    engine.setProject(arrangement);
 
     expect(projects).toEqual([]);
   });
@@ -896,8 +900,8 @@ describe("ArrangementEngine — RC1C branch coverage", () => {
     const steps: StepEvent[] = [];
     engine.on("step", (event) => {
       steps.push(event);
-      if (event.cause === "tick" && engine.getArrangement() === arrangement) {
-        engine.setArrangement(replacement);
+      if (event.cause === "tick" && engine.getProject() === arrangement) {
+        engine.setProject(replacement);
       }
     });
     await engine.play();
@@ -977,7 +981,7 @@ describe("ArrangementEngine — RC1C branch coverage", () => {
     clock.advance(BEAT_MS);
     transport.dispose();
 
-    engine.setArrangement({ ...arrangement, timing: { ...arrangement.timing, tempos: [{ beat: 0, bpm: 60 }] } });
+    engine.setProject({ ...arrangement, timing: { ...arrangement.timing, tempos: [{ beat: 0, bpm: 60 }] } });
 
     expect(engine.getPosition()).toEqual({ positionMs: BEAT_MS * 2, beat: 1 });
 
@@ -1088,7 +1092,7 @@ describe("ArrangementEngine — RC1G re-entrancy", () => {
     const playback: string[] = [];
     engine.on("playback", (event) => playback.push(`${event.type}:${event.snapshot.state}`));
     engine.on("section", (event) => {
-      if (event.cause === "tick" && engine.getArrangement() === shorter) engine.setArrangement(longer);
+      if (event.cause === "tick" && engine.getProject() === shorter) engine.setProject(longer);
     });
 
     await engine.play();
@@ -1421,7 +1425,7 @@ describe("ArrangementEngine — RC1H catch-up", () => {
     const { transport, engine, log } = await start(whole(4), { loop: true });
     const replacement = whole(4);
     engine.on("step", (event) => {
-      if (event.cause === "tick" && event.scheduledPositionMs === -2500) engine.setArrangement(replacement);
+      if (event.cause === "tick" && event.scheduledPositionMs === -2500) engine.setProject(replacement);
     });
 
     await tickAt(transport, 600);
@@ -1577,7 +1581,7 @@ describe("ArrangementEngine — RC1H catch-up", () => {
     engine.on("playback", (event) => {
       if (event.type !== "pause") return;
       void engine.seekPositionMs(500);
-      engine.setArrangement(whole(1));
+      engine.setProject(whole(1));
     });
 
     await tickAt(transport, 600);
@@ -1906,7 +1910,7 @@ describe("ArrangementEngine — negative startPositionMs (RC1K)", () => {
     engine.on("project", (event) => projectEvents.push({ positionMs: event.positionMs, beat: event.beat }));
 
     transport.snapshot = { ...transport.snapshot, positionMs: 100 };
-    engine.setArrangement(earlyArrangement());
+    engine.setProject(earlyArrangement());
 
     expect(projectEvents).toEqual([{ positionMs: 0, beat: 0.5 }]);
     transport.snapshot = { ...transport.snapshot, positionMs: 200 };

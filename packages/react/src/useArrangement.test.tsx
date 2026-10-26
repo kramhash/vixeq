@@ -67,7 +67,7 @@ describe("useArrangement", () => {
     const transport = createClockTransport(new FakeClock(), { durationMs: 4000 });
     const wrapper = ({ children }: { children: ReactNode }) => <StrictMode>{children}</StrictMode>;
     const onPlaybackChange = vi.fn();
-    const { result, unmount } = renderHook(() => useArrangement({ arrangement, transport, onPlaybackChange }), { wrapper });
+    const { result, unmount } = renderHook(() => useArrangement({ project: arrangement, transport, onPlaybackChange }), { wrapper });
 
     expect(result.current.engine).not.toBeNull();
     expect(result.current.currentSection?.id).toBe("one");
@@ -115,7 +115,7 @@ describe("useArrangement", () => {
       sections: [{ ...arrangement.sections[0]!, patternId: "missing" }],
     };
     const { result, rerender } = renderHook(
-      ({ value }) => useArrangement({ arrangement: value }),
+      ({ value }) => useArrangement({ project: value }),
       { initialProps: { value: invalidArrangement } },
     );
 
@@ -134,7 +134,7 @@ describe("useArrangement", () => {
     const transport = createClockTransport(new FakeClock());
     const onProjectError = vi.fn();
     const { result, rerender } = renderHook(
-      ({ value }) => useArrangement({ arrangement: value, transport, onProjectError }),
+      ({ value }) => useArrangement({ project: value, transport, onProjectError }),
       { initialProps: { value: arrangement } },
     );
     const engine = result.current.engine;
@@ -151,7 +151,7 @@ describe("useArrangement", () => {
     });
     rerender({ value: replacement });
     expect(result.current.engine).toBe(engine);
-    expect(engine?.getArrangement().timing.tempos[0].bpm).toBe(60);
+    expect(engine?.getProject().timing.tempos[0].bpm).toBe(60);
     expect(transport.getPositionMs()).toBe(1000);
     expect(result.current.positionRef.current).toMatchObject({ beat: 2, positionMs: 2000 });
     expect(result.current.projectError).toBeNull();
@@ -159,7 +159,7 @@ describe("useArrangement", () => {
     rerender({ value: { ...replacement, sections: [{ ...replacement.sections[0]!, patternId: "missing" }] } });
     expect(result.current.projectError).toBeInstanceOf(Error);
     expect(onProjectError).toHaveBeenCalledOnce();
-    expect(engine?.getArrangement().timing.tempos[0].bpm).toBe(60);
+    expect(engine?.getProject().timing.tempos[0].bpm).toBe(60);
   });
 
   it("seekBeat updates position and section synchronously", async () => {
@@ -169,7 +169,7 @@ describe("useArrangement", () => {
       patterns: { pattern },
       sections: [{ id: "later", patternId: "pattern", startBeat: 4, endBeat: 8 }],
     });
-    const { result } = renderHook(() => useArrangement({ arrangement: withGap, transport }));
+    const { result } = renderHook(() => useArrangement({ project: withGap, transport }));
 
     await act(async () => {
       await result.current.seekBeat(4);
@@ -188,7 +188,7 @@ describe("useArrangement", () => {
       let renders = 0;
       const { result } = renderHook(() => {
         renders += 1;
-        return useArrangement({ arrangement, transport, lookaheadMs: 1000 });
+        return useArrangement({ project: arrangement, transport, lookaheadMs: 1000 });
       });
 
       await act(async () => {

@@ -93,7 +93,7 @@ Status values: `planned`, `covered`, `blocked`.
 | PB-EN-022 | Arrangement setLoop changes value | projectLoop updates and one command loopchange emits | covered |
 | PB-EN-023 | Arrangement setLoop gets non-boolean | synchronous TypeError and no event | covered |
 | PB-EN-024 | Arrangement setLoop gets current value | no-op and no event | covered |
-| PB-EN-025 | Arrangement setArrangement succeeds | one strict atomic Project event | covered |
+| PB-EN-025 | Arrangement setProject succeeds | one strict atomic Project event | covered |
 | PB-EN-026 | two Engines share one transport | both adopt and receive the ordered transport state stream | covered |
 | PB-EN-027 | Engine attaches to an already-playing transport | snapshot adopted immediately; no synthetic step events for time already elapsed | covered |
 | PB-EN-028 | external (non-command) transport events | mapped to Engine playback events with cause transport | covered |

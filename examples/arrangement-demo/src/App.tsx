@@ -52,7 +52,7 @@ export const App = () => {
   }, []);
 
   const player = useArrangement({
-    arrangement,
+    project: arrangement,
     transport: transport ?? undefined,
     loop: true,
   });

@@ -25,6 +25,16 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
   Engine, hook, and player ref already uses. Custom transports rename the
   method, and code that seeks a transport directly renames the call
   ([#21](https://github.com/kramhash/vixeq/issues/21)).
+- Arrangement uses the same "project" vocabulary as Sequencer and Timeline
+  ([#22](https://github.com/kramhash/vixeq/issues/22)):
+  - `ArrangementEngine.getArrangement()` / `setArrangement()` are now
+    `getProject()` / `setProject()`.
+  - The `"project"` event (`ArrangementProjectEvent`) carries `project` /
+    `previousProject` instead of `arrangement` / `previousArrangement`.
+  - `useArrangement` takes `project` instead of `arrangement`.
+
+  The pure functions (`createArrangement`, `normalizeArrangement`,
+  `validateArrangement`, ...) keep their names.
 
 ### Added
 

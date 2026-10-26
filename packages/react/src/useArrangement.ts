@@ -35,7 +35,7 @@ export type ArrangementPendingOperation =
  * Union of the engine events that can be surfaced through
  * {@link UseArrangementState.latestEventRef}: a scheduled `StepEvent`, an
  * `ArrangementPlaybackEvent` (play/pause/stop/seek/error transitions), an
- * `ArrangementProjectEvent` emitted after a `setArrangement` hot-swap, or an
+ * `ArrangementProjectEvent` emitted after a `setProject` hot-swap, or an
  * `ArrangementSectionEvent` emitted whenever the active section changes.
  */
 export type ArrangementLatestEvent =
@@ -48,11 +48,11 @@ export type ArrangementLatestEvent =
 export type UseArrangementOptions = {
   /**
    * The arrangement project to play. Passing a new reference hot-swaps the
-   * running engine's arrangement via `setArrangement` instead of recreating
+   * running engine's project via `setProject` instead of recreating
    * the engine, unless construction previously failed for this exact
    * object.
    */
-  arrangement: ArrangementProject;
+  project: ArrangementProject;
   /**
    * Playback transport to drive the engine's clock. Defaults to
    * `createClockTransport(browserClock)`, which the hook creates and
@@ -80,14 +80,14 @@ export type UseArrangementOptions = {
   onPlaybackChange?: (event: ArrangementPlaybackEvent) => void;
   /**
    * Called with the engine's current `ChannelPosition` on every rAF tick
-   * while playing, and after seeks/arrangement swaps. Use this (or
+   * while playing, and after seeks/project swaps. Use this (or
    * {@link UseArrangementState.positionRef}) instead of `latestEventRef` for
    * continuous progress UI, since position updates do not trigger a React
    * re-render on their own.
    */
   onPosition?: (position: ChannelPosition) => void;
   /**
-   * Called when constructing the engine, or hot-swapping its arrangement,
+   * Called when constructing the engine, or hot-swapping its project,
    * throws. The error is also captured on
    * {@link UseArrangementState.projectError} without throwing during
    * render.
@@ -112,7 +112,7 @@ export type UseArrangementState = {
   playbackState: PlaybackState;
   /**
    * Ref holding the engine's current `ChannelPosition`. Updated on every rAF
-   * tick while playing and after seeks/arrangement swaps, without forcing a
+   * tick while playing and after seeks/project swaps, without forcing a
    * re-render — read it inside animation callbacks instead of depending on
    * hook state for continuous progress.
    */
@@ -127,7 +127,7 @@ export type UseArrangementState = {
    */
   latestEventRef: MutableRefObject<ArrangementLatestEvent | null>;
   /**
-   * Error from the most recent engine construction or `setArrangement`
+   * Error from the most recent engine construction or `setProject`
    * call, or `null` if it succeeded. Construction/hot-swap failures are
    * captured here rather than thrown during render.
    */
@@ -193,14 +193,14 @@ const cancelScheduledFrame = (frameId: ReturnType<typeof setTimeout> | number): 
 /**
  * Owns an `ArrangementEngine` lifecycle: constructs it from an
  * `ArrangementProject` (patterns played across ordered, beat-timed
- * sections), hot-swaps the arrangement when a new reference is passed, and
+ * sections), hot-swaps the project when a new reference is passed, and
  * disposes the engine (and any transport the hook created) on unmount.
  * Commands are serialized through an internal queue, so calling several in a
  * row runs them one after another in order rather than racing. The returned
  * `engine` satisfies the `ChannelSource` contract, so it can be passed
  * directly to `useAnimatedChannels`.
  *
- * Construction and arrangement-hot-swap failures are captured on
+ * Construction and project hot-swap failures are captured on
  * `projectError`/`onProjectError` instead of throwing during render.
  * Continuous playback position is exposed both as `positionRef` (read
  * without a re-render) and via the `onPosition` callback, since it changes
@@ -211,9 +211,9 @@ const cancelScheduledFrame = (frameId: ReturnType<typeof setTimeout> | number): 
  *
  * @example
  * ```tsx
- * function ArrangementPlayer({ arrangement }: { arrangement: ArrangementProject }) {
+ * function ArrangementPlayer({ project }: { project: ArrangementProject }) {
  *   const { currentSection, playbackState, play, pause } = useArrangement({
- *     arrangement,
+ *     project,
  *     loop: true,
  *     onSection: (event) => console.log("entered section", event.section?.id),
  *   });
@@ -230,7 +230,7 @@ const cancelScheduledFrame = (frameId: ReturnType<typeof setTimeout> | number): 
  * ```
  */
 export function useArrangement(options: UseArrangementOptions): UseArrangementState {
-  const { arrangement, transport, lookaheadMs, loop, missedStepPolicy } = options;
+  const { project, transport, lookaheadMs, loop, missedStepPolicy } = options;
   const onStepRef = useLatestRef(options.onStep);
   const onSectionRef = useLatestRef(options.onSection);
   const onPlaybackChangeRef = useLatestRef(options.onPlaybackChange);
@@ -328,7 +328,7 @@ export function useArrangement(options: UseArrangementOptions): UseArrangementSt
     const activeTransport = transport ?? createClockTransport(browserClock);
     const ownsTransport = transport === undefined;
     try {
-      newEngine = new ArrangementEngine(arrangement, {
+      newEngine = new ArrangementEngine(project, {
         transport: activeTransport,
         lookaheadMs,
         loop,
@@ -336,7 +336,7 @@ export function useArrangement(options: UseArrangementOptions): UseArrangementSt
       });
     } catch (cause) {
       const nextError = toError(cause);
-      failedConstructionArrangementRef.current = arrangement;
+      failedConstructionArrangementRef.current = project;
       if (ownsTransport) {
         activeTransport.dispose();
       }
@@ -410,13 +410,13 @@ export function useArrangement(options: UseArrangementOptions): UseArrangementSt
   useEffect(() => {
     const currentEngine = engineRef.current;
     if (!currentEngine) {
-      if (failedConstructionArrangementRef.current !== arrangement) {
+      if (failedConstructionArrangementRef.current !== project) {
         setConstructionAttempt((attempt) => attempt + 1);
       }
       return;
     }
     try {
-      currentEngine.setArrangement(arrangement);
+      currentEngine.setProject(project);
       setProjectError(null);
       setCurrentSection(currentEngine.getCurrentSection());
       syncPosition();
@@ -425,7 +425,7 @@ export function useArrangement(options: UseArrangementOptions): UseArrangementSt
       setProjectError(nextError);
       onProjectErrorRef.current?.(nextError);
     }
-  }, [arrangement, onProjectErrorRef, syncPosition]);
+  }, [project, onProjectErrorRef, syncPosition]);
 
   useEffect(() => {
     const currentEngine = engineRef.current;
