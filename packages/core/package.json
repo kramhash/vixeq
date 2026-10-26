@@ -32,13 +32,18 @@
       },
       "import": "./dist/dom.js",
       "require": "./dist/dom.cjs"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
     "README.md",
     "LICENSE"
   ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
   "keywords": [
     "sequencer",
     "step-sequencer",

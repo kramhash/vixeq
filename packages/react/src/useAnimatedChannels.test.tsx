@@ -317,4 +317,38 @@ describe("useAnimatedChannels", () => {
     act(() => rafCallback?.(0));
     expect(cancelAnimationFrame).not.toHaveBeenCalled();
   });
+
+  it("PB-LC-003 treats a disposal error from another copy of core as disposal", () => {
+    // A PlaybackError class from a second @vixeq/core install fails instanceof.
+    class ForeignPlaybackError extends Error {
+      readonly code = "TRANSPORT_DISPOSED";
+      constructor() {
+        super("Transport disposed");
+        this.name = "PlaybackError";
+      }
+    }
+    const engine = new FakeChannelSource();
+    vi.spyOn(engine, "on").mockImplementation(() => {
+      throw new ForeignPlaybackError();
+    });
+    engine.sampleChannels.mockImplementation(() => {
+      throw new ForeignPlaybackError();
+    });
+
+    expect(() => {
+      renderHook(() => useAnimatedChannels(engine));
+    }).not.toThrow();
+    expect(() => act(() => rafCallback?.(0))).not.toThrow();
+  });
+
+  it("rethrows a non-disposal error from the source", () => {
+    const engine = new FakeChannelSource();
+    engine.sampleChannels.mockImplementation(() => {
+      throw new PlaybackError("DURATION_UNAVAILABLE");
+    });
+
+    renderHook(() => useAnimatedChannels(engine));
+
+    expect(() => act(() => rafCallback?.(0))).toThrow(PlaybackError);
+  });
 });

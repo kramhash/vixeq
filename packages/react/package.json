@@ -24,13 +24,18 @@
       },
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
     "README.md",
     "LICENSE"
   ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
   "keywords": [
     "sequencer",
     "step-sequencer",
@@ -38,10 +43,8 @@
     "hooks"
   ],
   "peerDependencies": {
+    "@vixeq/core": "workspace:^",
     "react": ">=18.0.0 <20.0.0"
-  },
-  "dependencies": {
-    "@vixeq/core": "workspace:*"
   },
   "publishConfig": {
     "access": "public"
@@ -55,6 +58,7 @@
     "api:update": "api-extractor run --local --verbose"
   },
   "devDependencies": {
+    "@vixeq/core": "workspace:*",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.2.3",
     "react-dom": "^19.2.7",

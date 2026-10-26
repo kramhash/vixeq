@@ -2,6 +2,13 @@
 
 Embeddable React sequence player GUI for `@vixeq/core` projects.
 
+```sh
+npm install @vixeq/core @vixeq/react @vixeq/player-react
+```
+
+`@vixeq/core` and `@vixeq/react` are peer dependencies, so the app and the
+player share one copy of each.
+
 ## Support
 
 The current React peer range, TypeScript range, CSS export checks, SSR

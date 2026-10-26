@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
-import {
-  PlaybackError,
-  type ChannelSource,
-  type EasingFunction,
-  type Envelope,
-} from "@vixeq/core";
+import { type ChannelSource, type EasingFunction, type Envelope } from "@vixeq/core";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 
 export type MotionPreference = "system" | "reduce" | "no-preference";
@@ -41,8 +36,12 @@ const resetAll = (envelopes: Record<string, Envelope> | undefined): void => {
   }
 };
 
+// Matches by name and code, not instanceof, so an error from another copy of
+// @vixeq/core still counts as disposal.
 const isDisposedSourceError = (error: unknown): boolean =>
-  error instanceof PlaybackError && error.code === "TRANSPORT_DISPOSED";
+  error instanceof Error &&
+  error.name === "PlaybackError" &&
+  (error as Error & { code?: unknown }).code === "TRANSPORT_DISPOSED";
 
 /**
  * Runs a requestAnimationFrame loop that samples channel values without React
