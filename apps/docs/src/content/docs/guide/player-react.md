@@ -121,10 +121,10 @@ function PlayerWithVisual({ project, onProjectChange }) {
 }
 ```
 
-`onPlaybackChange` reports the same Playback v2 snapshots
-(`playbackState`, `positionRef`, `pendingOperation`, ...) exposed by
-`useSequencer` in `@vixeq/react`, for hosts that want to mirror
-transport state without holding their own ref.
+`onPlaybackChange` receives the same `SequencerPlaybackEvent` (`type`,
+`cause`, `previousState`, and a `snapshot` with `state`, `positionMs`,
+`stepIndex`, ...) that `useSequencer` in `@vixeq/react` reports, for hosts
+that want to mirror transport state without holding their own ref.
 
 ## Next steps
 

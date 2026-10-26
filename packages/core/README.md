@@ -144,7 +144,7 @@ Use `validateProject` when you need errors for user-facing import flows. Use `no
 Stateful envelope primitives for beat-driven visual effects.
 
 ```ts
-import { createEnvelope, createDecayEnvelope } from "@vixeq/core";
+import { createDecayEnvelope, createEnvelope, easeOutCubic } from "@vixeq/core";
 
 // Time-based: attack (0→peak) then decay (peak→0) in milliseconds
 const env = createEnvelope({ attack: 5, decay: 200, curve: easeOutCubic });
@@ -221,6 +221,56 @@ converts v1 arrangement data by mapping the old top-level `bpm` into a v2
 duration field. The pure functions behind the engine (`resolveArrangementStep`,
 `sampleArrangement`, `sectionAtBeat`, `arrangementDurationBeats`,
 `unionTrackIds`) are also exported for custom playback loops.
+
+## Timeline
+
+A `TimelineProject` holds sparse point events (cues) on a tempo-mapped beat
+timeline, for things like lighting cues, lyrics, or scene changes.
+`TimelineEngine` dispatches each event as a `cue` when playback reaches its
+beat, following the transport like the other engines.
+
+```ts
+import {
+  TimelineEngine,
+  addTimelineEvent,
+  addTimelineTrack,
+  createTimelineProject,
+  type TimelineEvent,
+  type TimelineProject,
+} from "@vixeq/core";
+
+type CueEvent =
+  | TimelineEvent<"flash", { strength: number }>
+  | TimelineEvent<"fade", { from: number; to: number }>;
+
+let project: TimelineProject<CueEvent> = {
+  ...createTimelineProject({ timing: { bpm: 120 }, durationBeats: 16 }),
+  events: [],
+};
+project = addTimelineTrack(project, { id: "lights", name: "Lights", enabled: true });
+project = addTimelineEvent(project, { trackId: "lights", beat: 4, type: "flash", data: { strength: 1 } });
+project = addTimelineEvent(project, { trackId: null, beat: 8, type: "fade", data: { from: 0, to: 1 } });
+
+const engine = new TimelineEngine(project, { loop: true });
+engine.on("cue", ({ event, iteration }) => {
+  if (event.type === "flash") console.log("flash", event.data?.strength, iteration);
+});
+
+await engine.play();
+await engine.seekBeat(8); // a seek dispatches no cues
+```
+
+- `trackId: null` is a global event. Events on a disabled track are not
+  dispatched.
+- The update helpers (`addTimelineEvent`, `updateTimelineEvent`,
+  `removeTimelineEvent`, `addTimelineTrack`, ...) are strict: they return a new
+  project and throw `TypeError` for a result that fails
+  `validateTimelineProject`. They keep your event type, so a
+  `TimelineProject<CueEvent>` stays one.
+- `getEventsInBeatRange`, `getEventsAtBeat`, and `getNextEvents` query a
+  project without an engine.
+- `migrateTimelineProject(v1, { durationBeats })` converts pre-0.8 timeline
+  data.
 
 ## Package Status
 

@@ -122,6 +122,29 @@ preserves the current fractional beat, and does not seek a supplied
 transport — its local `loop` state is independent of the transport's own
 loop flag.
 
+## Timeline
+
+Dispatch sparse point events (cues) on a tempo-mapped beat timeline:
+
+```ts
+import { TimelineEngine, addTimelineEvent, createTimelineProject } from "@vixeq/core";
+
+const project = addTimelineEvent(createTimelineProject({ durationBeats: 16 }), {
+  trackId: null, // a global event
+  beat: 4,
+  type: "flash",
+  data: { strength: 1 },
+});
+
+const engine = new TimelineEngine(project, { loop: true });
+engine.on("cue", ({ event }) => console.log(event.type, event.data));
+await engine.play();
+```
+
+The update helpers return a new project and throw `TypeError` for an invalid
+result. Type your events with a `TimelineEvent<"flash" | ...>` union, and
+the helpers and the engine keep that type.
+
 ## DOM bindings
 
 Write channel values straight to CSS custom properties, without React
