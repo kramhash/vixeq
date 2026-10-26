@@ -3,11 +3,10 @@ import {
   beatToMs,
   createTimingMap,
   msToBeat,
-  normalizeTempoEvent,
-  normalizeTempos,
   normalizeTimingMap,
   validateTimingMap,
 } from "./index";
+import { normalizeTempoEvent, normalizeTempos } from "./timing";
 import type { TimingMap } from "./types";
 
 describe("TimingMap v2", () => {

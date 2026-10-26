@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+Fixes from the pre-1.0 API audit
+([`docs/reviews/rc2-api-audit-claude.md`](docs/reviews/rc2-api-audit-claude.md)).
+They change the public API, so they ship as `1.0.0-rc.2` and restart the
+14-day observation period.
+
+### Breaking
+
+- Removed exports that the 1.0 contract does not promise
+  ([#17](https://github.com/kramhash/vixeq/issues/17)):
+  - `@vixeq/core`: `SequencerTransport` and `TransportEvent` (pre-0.7 types,
+    replaced by `PlaybackTransport` and `EnginePlaybackEvent`), the
+    never-assigned `StepEvent.timestamp` and `ProjectEvent.timestamp`,
+    `PlaybackOperation` (referenced by no signature), `clamp` and `clamp01`
+    (generic arithmetic; `clamp01` also mapped `NaN` to 0, so inline
+    `Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0))`), and
+    `normalizeTempoEvent` / `normalizeTempos` (use `normalizeTimingMap`).
+  - `@vixeq/player-react`: `SequencePlayerTransportState` (an unused mirror of
+    the hook state; use the `@vixeq/react` hook types) and
+    `SequencePlayerBaseProps` (identical to `SequencePlayerProps`).
+
+### Added
+
+- `@vixeq/core` exports `MigrationIssue`, the element type of
+  `MigrationResult` warnings and errors
+  ([#17](https://github.com/kramhash/vixeq/issues/17)).
+
 ## 1.0.0-rc.1 - 2026-10-21
 
 First release candidate for `1.0.0`. The public API is frozen for the 14-day

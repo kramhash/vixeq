@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import {
-  clamp01,
   decaySmoothedValue,
   easeInOutCubic,
   exciteSmoothedValue,
@@ -8,6 +7,8 @@ import {
   type SequencerEngine,
   type StepEvent,
 } from "@vixeq/core";
+
+const clamp01 = (value: number): number => Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
 
 type Channels = {
   ring: number;

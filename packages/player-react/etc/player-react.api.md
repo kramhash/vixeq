@@ -4,16 +4,11 @@
 
 ```ts
 
-import { ChannelPosition } from '@vixeq/core';
 import { CSSProperties } from 'react';
-import { MutableRefObject } from 'react';
-import { PlaybackState } from '@vixeq/core';
 import { PlaybackTransport } from '@vixeq/core';
 import * as react from 'react';
 import { SequenceProject } from '@vixeq/core';
 import { SequencerEngine } from '@vixeq/core';
-import { SequencerEngineLatestEvent } from '@vixeq/react';
-import { SequencerEnginePendingOperation } from '@vixeq/react';
 import { SequencerPlaybackEvent } from '@vixeq/core';
 import { StepEvent } from '@vixeq/core';
 
@@ -24,21 +19,7 @@ export type SelectedStep = {
 };
 
 // @public
-export const SequencePlayer: react.ForwardRefExoticComponent<SequencePlayerBaseProps & react.RefAttributes<SequencePlayerRef>>;
-
-// @public
-export type SequencePlayerBaseProps = {
-    project: SequenceProject;
-    onProjectChange: (change: SequencePlayerProjectChange) => void;
-    onStep?: (event: StepEvent) => void;
-    onPlaybackChange?: (event: SequencerPlaybackEvent) => void;
-    onSelectedStepChange?: (selectedStep: SelectedStep | null) => void;
-    onEngineChange?: (engine: SequencerEngine | null) => void;
-    transport?: PlaybackTransport;
-    showTransportControls?: boolean;
-    className?: string;
-    style?: CSSProperties;
-};
+export const SequencePlayer: react.ForwardRefExoticComponent<SequencePlayerProps & react.RefAttributes<SequencePlayerRef>>;
 
 // @public
 export type SequencePlayerChangeReason = "bpm" | "track:add" | "track:remove" | "track:rename" | "track:enabled" | "step:toggle" | "step:value" | "project:replace";
@@ -52,7 +33,18 @@ export type SequencePlayerProjectChange = {
 };
 
 // @public
-export type SequencePlayerProps = SequencePlayerBaseProps;
+export type SequencePlayerProps = {
+    project: SequenceProject;
+    onProjectChange: (change: SequencePlayerProjectChange) => void;
+    onStep?: (event: StepEvent) => void;
+    onPlaybackChange?: (event: SequencerPlaybackEvent) => void;
+    onSelectedStepChange?: (selectedStep: SelectedStep | null) => void;
+    onEngineChange?: (engine: SequencerEngine | null) => void;
+    transport?: PlaybackTransport;
+    showTransportControls?: boolean;
+    className?: string;
+    style?: CSSProperties;
+};
 
 // @public
 export type SequencePlayerRef = {
@@ -67,24 +59,13 @@ export type SequencePlayerRef = {
 };
 
 // @public
-export type SequencePlayerTransportState = {
-    playbackState: PlaybackState;
-    positionRef: MutableRefObject<ChannelPosition>;
-    pendingOperation: SequencerEnginePendingOperation | null;
-    isBusy: boolean;
-    latestEventRef: MutableRefObject<SequencerEngineLatestEvent | null>;
-    projectError: Error | null;
-    transportError: unknown | null;
-};
-
-// @public
-export const StandaloneSequencePlayer: react.ForwardRefExoticComponent<Omit<SequencePlayerBaseProps, "project" | "onProjectChange"> & {
+export const StandaloneSequencePlayer: react.ForwardRefExoticComponent<Omit<SequencePlayerProps, "project" | "onProjectChange"> & {
     defaultProject?: SequenceProject;
     onProjectChange?: (change: SequencePlayerProjectChange) => void;
 } & react.RefAttributes<SequencePlayerRef>>;
 
 // @public
-export type StandaloneSequencePlayerProps = Omit<SequencePlayerBaseProps, "project" | "onProjectChange"> & {
+export type StandaloneSequencePlayerProps = Omit<SequencePlayerProps, "project" | "onProjectChange"> & {
     defaultProject?: SequenceProject;
     onProjectChange?: (change: SequencePlayerProjectChange) => void;
 };

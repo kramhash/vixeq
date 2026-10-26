@@ -349,7 +349,7 @@ export type MigrationResult<T> =
   rather than silently clamping it (consistent with `startPositionMs`'s
   invalid-`offsetMs` handling above — migration rejects rather than repairs
   an out-of-range numeric v1 field with no caller-supplied conversion
-  option). `normalizeTempoEvent`'s clamping behavior remains correct for its
+  option). `normalizeTimingMap`'s tempo clamping remains correct for its
   own use — repairing already-v2-shaped data within one schema version — but
   does not apply at the migration boundary.
 - `ArrangementProject_v1` has no `durationBeats`. Migration requires an explicit
