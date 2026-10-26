@@ -1,6 +1,6 @@
 # Timing, Timeline, and Arrangement v2 Behavior Matrix
 
-- Status: 89 of 89 rows `covered` as of RC1K. CI
+- Status: 90 of 90 rows `covered` as of #19. CI
   (`pnpm behavior:check`) fails if a `covered` row's ID is not found in any
   test.
 - Normative contract: [`timeline-arrangement-v2.md`](timeline-arrangement-v2.md)
@@ -128,5 +128,5 @@ Status values: `planned`, `covered`, `blocked`.
 | MIG-007 | migrateArrangementProject without explicit durationBeats option | returns ok:false; no inferred value | covered |
 | MIG-008 | migrateArrangementProject with explicit durationBeats option | ok:true using the supplied value | covered |
 | MIG-009 | normalize*() called on already-v2 data | no version change; repairs stay within v2 schema | covered |
-| MIG-010 | migrateTimelineProject without options, or without durationBeats | returns ok:false with TIMELINE_DURATION_BEATS_REQUIRED; never throws | covered |
 | MIG-010 | migrate*() never invoked implicitly by Engine/Project construction | strict construction throws instead of migrating | covered |
+| MIG-011 | migrateTimelineProject without options, or without durationBeats | returns ok:false with TIMELINE_DURATION_BEATS_REQUIRED; never throws | covered |

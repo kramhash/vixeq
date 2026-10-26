@@ -169,7 +169,7 @@ describe("migrateTimelineProject", () => {
     expect(result.ok && result.project.tracks[0]).not.toHaveProperty("type");
   });
 
-  it("MIG-010 durationBeats is required and cannot be derived from v1 data", () => {
+  it("MIG-011 durationBeats is required and cannot be derived from v1 data", () => {
     const result = migrateTimelineProject(v1Project(), {});
 
     expect(result.ok).toBe(false);
@@ -178,7 +178,7 @@ describe("migrateTimelineProject", () => {
     );
   });
 
-  it("MIG-010 reports a missing durationBeats as a migration error when options are omitted", () => {
+  it("MIG-011 reports a missing durationBeats as a migration error when options are omitted", () => {
     const result = migrateTimelineProject(v1Project());
 
     expect(result.ok).toBe(false);
