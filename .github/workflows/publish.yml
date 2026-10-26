@@ -108,9 +108,13 @@ jobs:
 
       # A filtered `pnpm publish` skips a version that is already on the
       # registry, so re-running this job after a partial failure publishes
-      # only the remaining packages.
+      # only the remaining packages. It also drops `--provenance` from the
+      # `npm publish` call it makes (pnpm 10.12.1), so provenance is requested
+      # through the environment, which npm inherits.
       - name: Publish packages via OIDC-exchanged tokens
         if: needs.preflight.outputs.dry-run == 'false'
+        env:
+          NPM_CONFIG_PROVENANCE: "true"
         run: |
           set -euo pipefail
 
@@ -137,7 +141,7 @@ jobs:
             fi
             npm config set --location=user "//registry.npmjs.org/:_authToken" "$npm_token"
             trap 'npm config delete --location=user "//registry.npmjs.org/:_authToken"' RETURN
-            pnpm --filter "$name" publish --access public --no-git-checks --provenance --tag "$DIST_TAG"
+            pnpm --filter "$name" publish --access public --no-git-checks --tag "$DIST_TAG"
           }
 
           publish_pkg "@vixeq/core"
@@ -194,3 +198,23 @@ jobs:
             --title "$GITHUB_REF_NAME" \
             --notes-file "$RUNNER_TEMP/release-notes.md" \
             "${prerelease_flag[@]}"
+
+      # Runs after the Release step: a version published without provenance
+      # cannot be republished, so it still gets its Release, and the run fails.
+      - name: Verify provenance attestations
+        if: needs.preflight.outputs.dry-run == 'false'
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in "@vixeq/core" "@vixeq/react" "@vixeq/player-react"; do
+            # A registry error exits non-zero and fails the step (re-run it);
+            # a missing field prints nothing.
+            attestations=$(npm view "$name@$VERSION" dist.attestations --json)
+            if [ -z "$(printf '%s' "$attestations" | jq -r '.url // empty')" ]; then
+              echo "::error::$name@$VERSION has no provenance attestation" >&2
+              missing=1
+            else
+              echo "$name@$VERSION: $attestations"
+            fi
+          done
+          exit "$missing"

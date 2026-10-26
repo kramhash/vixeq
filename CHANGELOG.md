@@ -53,6 +53,12 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
 
 ### Fixed
 
+- The Publish workflow attaches npm provenance attestations, which no
+  release had so far (`1.0.0-rc.1` and `0.9.0` included). The filtered
+  `pnpm publish` dropped the `--provenance` flag before calling npm, so the
+  workflow now sets `NPM_CONFIG_PROVENANCE=true`, and fails the run when a
+  published version has no attestation
+  ([#14](https://github.com/kramhash/vixeq/issues/14)).
 - `validateProject` requires `stepsPerBeat`. A project without it used to pass
   validation, and `SequencerEngine` then reported `NaN` for the step index and
   every channel (an Arrangement pattern silently sampled 0). Engine
