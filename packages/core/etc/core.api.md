@@ -5,9 +5,7 @@
 ```ts
 
 // @public
-export const addTimelineEvent: <TEvent extends TimelineEvent>(project: TimelineProject<TEvent>, event: TEvent extends TimelineEvent ? Omit<TEvent, "id"> & {
-    id?: string;
-} : never, eventValidator?: TimelineEventValidator<TEvent>) => TimelineProject<TEvent>;
+export const addTimelineEvent: <TEvent extends TimelineEvent>(project: TimelineProject<TEvent>, event: TimelineEventInput<TEvent>, eventValidator?: TimelineEventValidator<TEvent>) => TimelineProject<TEvent>;
 
 // @public
 export const addTimelineTrack: <TEvent extends TimelineEvent>(project: TimelineProject<TEvent>, track: Omit<TimelineTrack, "id"> & {
@@ -784,6 +782,11 @@ export type TimelineEvent<TType extends string = string, TData extends JsonObjec
 // @public (undocumented)
 export type TimelineEventHandler<TEventName extends TimelineEventName, TEvent extends TimelineEvent = TimelineEvent> = (event: TimelineEventMap<TEvent>[TEventName]) => void;
 
+// @public
+export type TimelineEventInput<TEvent extends TimelineEvent = TimelineEvent> = TEvent extends TimelineEvent ? Omit<TEvent, "id"> & {
+    id?: string;
+} : never;
+
 // @public (undocumented)
 export type TimelineEventMap<TEvent extends TimelineEvent = TimelineEvent> = {
     cue: TimelineCueEvent<TEvent>;
@@ -793,6 +796,15 @@ export type TimelineEventMap<TEvent extends TimelineEvent = TimelineEvent> = {
 
 // @public (undocumented)
 export type TimelineEventName = keyof TimelineEventMap;
+
+// @public
+export type TimelineEventPatch<TEvent extends TimelineEvent = TimelineEvent, TUnion extends TimelineEvent = TEvent> = TEvent extends TimelineEvent ? [Exclude<TUnion, TEvent>] extends [never] ? Partial<Omit<TEvent, "id">> : Partial<Omit<TEvent, "id" | "type" | "data">> & ({
+    type?: undefined;
+    data?: undefined;
+} | {
+    type: TEvent["type"];
+    data: TEvent["data"];
+}) : never;
 
 // @public (undocumented)
 export type TimelineEventV1 = {
@@ -901,8 +913,8 @@ export const unionTrackIds: (arrangement: ArrangementProject) => string[];
 // @public (undocumented)
 export type Unsubscribe = () => void;
 
-// @public (undocumented)
-export const updateTimelineEvent: <TEvent extends TimelineEvent>(project: TimelineProject<TEvent>, eventId: string, patch: Partial<TEvent>, eventValidator?: TimelineEventValidator<TEvent>) => TimelineProject<TEvent>;
+// @public
+export const updateTimelineEvent: <TEvent extends TimelineEvent>(project: TimelineProject<TEvent>, eventId: string, patch: TimelineEventPatch<TEvent>, eventValidator?: TimelineEventValidator<TEvent>) => TimelineProject<TEvent>;
 
 // @public
 export const validateArrangement: (input: unknown) => ValidationResult;

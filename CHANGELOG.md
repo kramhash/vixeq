@@ -47,6 +47,15 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
   (TypeScript only). Calls that omitted another field compiled but always
   threw a `TypeError`; they now fail to compile
   ([#18](https://github.com/kramhash/vixeq/issues/18)).
+- Timeline update helper inputs are narrower (TypeScript only;
+  [#18](https://github.com/kramhash/vixeq/issues/18)):
+  - `addTimelineEvent` and `addTimelineTrack` take every required field
+    except `id` (`TimelineEventInput`). Calls that omitted one compiled but
+    always threw a `TypeError`; they now fail to compile.
+  - `updateTimelineEvent` takes a `TimelineEventPatch`, which excludes `id`
+    (it was ignored). When the event type is a union, `type` and `data`
+    change only together, as a pair from one member, so a patch can no
+    longer give a `"flash"` event `"fade"` data.
 
 ### Added
 
@@ -57,6 +66,9 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
   (`>=22`), and declare `sideEffects` (`false`, except
   `@vixeq/player-react/styles.css`)
   ([#20](https://github.com/kramhash/vixeq/issues/20)).
+- `@vixeq/core` exports `TimelineEventInput` and `TimelineEventPatch`, the
+  argument types of `addTimelineEvent` and `updateTimelineEvent`
+  ([#18](https://github.com/kramhash/vixeq/issues/18)).
 
 ### Changed
 

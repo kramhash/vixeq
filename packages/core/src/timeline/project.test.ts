@@ -556,4 +556,43 @@ describe("typed Timeline update helpers", () => {
     // @ts-expect-error "flash" does not carry fade data.
     addTimelineEvent(project, { trackId: null, beat: 1, type: "flash", data: { from: 0, to: 1 } });
   });
+
+  it("patches type and data of a union only as a matching pair", () => {
+    const project = addTimelineEvent(typedProject(), {
+      id: "f",
+      trackId: null,
+      beat: 1,
+      type: "flash",
+      data: { strength: 1 },
+    });
+
+    const moved = updateTimelineEvent(project, "f", { beat: 2 });
+    const faded = updateTimelineEvent(project, "f", { type: "fade", data: { from: 0, to: 1 } });
+    const dropped = updateTimelineEvent(project, "f", { type: "flash", data: undefined });
+
+    expect(moved.events[0]).toMatchObject({ beat: 2, type: "flash", data: { strength: 1 } });
+    expect(faded.events[0]).toMatchObject({ type: "fade", data: { from: 0, to: 1 } });
+    expect(dropped.events[0].data).toBeUndefined();
+
+    // @ts-expect-error changing type alone would keep the flash data.
+    updateTimelineEvent(project, "f", { type: "fade" });
+    // @ts-expect-error changing data alone could pair it with the wrong type.
+    updateTimelineEvent(project, "f", { data: { from: 0, to: 1 } });
+    // @ts-expect-error the pair must come from one member.
+    updateTimelineEvent(project, "f", { type: "flash", data: { from: 0, to: 1 } });
+    // @ts-expect-error id cannot be patched.
+    updateTimelineEvent(project, "f", { id: "other" });
+  });
+
+  it("patches type or data alone when the event type is not a union", () => {
+    const project = addTimelineEvent(createTimelineProject({ durationBeats: 4 }), {
+      id: "e",
+      trackId: null,
+      beat: 0,
+      type: "cue",
+    });
+
+    expect(updateTimelineEvent(project, "e", { type: "marker" }).events[0].type).toBe("marker");
+    expect(updateTimelineEvent(project, "e", { data: { n: 1 } }).events[0].data).toEqual({ n: 1 });
+  });
 });

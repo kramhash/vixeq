@@ -47,6 +47,34 @@ export type TimelineProject<TEvent extends TimelineEvent = TimelineEvent> = {
 };
 
 /**
+ * Input of `addTimelineEvent`: every required field except `id`, checked
+ * against each member when `TEvent` is a union. A missing `id` gets the first
+ * unused `event-N`.
+ */
+export type TimelineEventInput<TEvent extends TimelineEvent = TimelineEvent> = TEvent extends TimelineEvent
+  ? Omit<TEvent, "id"> & { id?: string }
+  : never;
+
+/**
+ * Patch of `updateTimelineEvent`: any field except `id`. When `TEvent` is a
+ * union of several members, `type` and `data` change only together, as a
+ * pair from one member, so a patch cannot leave an event with one member's
+ * `type` and another member's `data` (pass `data: undefined` to drop it).
+ * Other fields may be patched alone.
+ *
+ * @typeParam TUnion - Leave at its default.
+ */
+export type TimelineEventPatch<
+  TEvent extends TimelineEvent = TimelineEvent,
+  TUnion extends TimelineEvent = TEvent,
+> = TEvent extends TimelineEvent
+  ? [Exclude<TUnion, TEvent>] extends [never]
+    ? Partial<Omit<TEvent, "id">>
+    : Partial<Omit<TEvent, "id" | "type" | "data">> &
+        ({ type?: undefined; data?: undefined } | { type: TEvent["type"]; data: TEvent["data"] })
+  : never;
+
+/**
  * Optional domain-validation callback (spec §2.1). Runs once per event,
  * after Core's own structural/JSON-compatibility checks pass. Throws to
  * reject a domain-invalid event; a non-throwing call accepts it.

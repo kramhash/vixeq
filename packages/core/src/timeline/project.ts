@@ -6,6 +6,8 @@ import type {
   JsonObject,
   JsonValue,
   TimelineEvent,
+  TimelineEventInput,
+  TimelineEventPatch,
   TimelineEventValidator,
   TimelineProject,
   TimelineTrack,
@@ -371,8 +373,8 @@ const assertValidTimelineProject = <TEvent extends TimelineEvent>(
 };
 
 /**
- * Appends a track. Every field except `id` is required; a missing `id` gets
- * the first unused `track-N`.
+ * Appends a track. Every required field except `id` must be given; a missing
+ * `id` gets the first unused `track-N`.
  */
 export const addTimelineTrack = <TEvent extends TimelineEvent>(
   project: TimelineProject<TEvent>,
@@ -409,14 +411,10 @@ export const setTimelineTrackEnabled = <TEvent extends TimelineEvent>(
     tracks: project.tracks.map((track) => (track.id === trackId ? { ...track, enabled } : track)),
   });
 
-/**
- * Appends an event and re-sorts by beat. Every field except `id` is required
- * (checked per member when `TEvent` is a union); a missing `id` gets the
- * first unused `event-N`.
- */
+/** Appends an event (see {@link TimelineEventInput}) and re-sorts by beat. */
 export const addTimelineEvent = <TEvent extends TimelineEvent>(
   project: TimelineProject<TEvent>,
-  event: TEvent extends TimelineEvent ? Omit<TEvent, "id"> & { id?: string } : never,
+  event: TimelineEventInput<TEvent>,
   eventValidator?: TimelineEventValidator<TEvent>,
 ): TimelineProject<TEvent> => {
   const id =
@@ -435,10 +433,11 @@ export const addTimelineEvent = <TEvent extends TimelineEvent>(
   );
 };
 
+/** Patches an event (see {@link TimelineEventPatch}) and re-sorts by beat. */
 export const updateTimelineEvent = <TEvent extends TimelineEvent>(
   project: TimelineProject<TEvent>,
   eventId: string,
-  patch: Partial<TEvent>,
+  patch: TimelineEventPatch<TEvent>,
   eventValidator?: TimelineEventValidator<TEvent>,
 ): TimelineProject<TEvent> =>
   assertValidTimelineProject(
