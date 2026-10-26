@@ -207,8 +207,10 @@ jobs:
           set -euo pipefail
           missing=0
           for name in "@vixeq/core" "@vixeq/react" "@vixeq/player-react"; do
-            attestations=$(npm view "$name@$VERSION" dist.attestations --json 2>/dev/null || true)
-            if [ -z "$attestations" ] || [ "$attestations" = "null" ] || [ "$attestations" = "{}" ]; then
+            # A registry error exits non-zero and fails the step (re-run it);
+            # a missing field prints nothing.
+            attestations=$(npm view "$name@$VERSION" dist.attestations --json)
+            if [ -z "$(printf '%s' "$attestations" | jq -r '.url // empty')" ]; then
               echo "::error::$name@$VERSION has no provenance attestation" >&2
               missing=1
             else
