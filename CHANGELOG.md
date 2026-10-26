@@ -21,12 +21,25 @@ They change the public API, so they ship as `1.0.0-rc.2` and restart the
   - `@vixeq/player-react`: `SequencePlayerTransportState` (an unused mirror of
     the hook state; use the `@vixeq/react` hook types) and
     `SequencePlayerBaseProps` (identical to `SequencePlayerProps`).
+- `PlaybackTransport.seekMs` is renamed to `seekPositionMs`, the name every
+  Engine, hook, and player ref already uses. Custom transports rename the
+  method, and code that seeks a transport directly renames the call
+  ([#21](https://github.com/kramhash/vixeq/issues/21)).
 
 ### Added
 
 - `@vixeq/core` exports `MigrationIssue`, the element type of
   `MigrationResult` warnings and errors
   ([#17](https://github.com/kramhash/vixeq/issues/17)).
+
+### Changed
+
+- Naming aligned with the contract, without changing assignability
+  ([#21](https://github.com/kramhash/vixeq/issues/21)):
+  `PlaybackTransport.subscribe` returns `Unsubscribe`; `sampleChannelsAt` and
+  `Envelope.trigger`/`sample` name their argument `positionMs` (the
+  `RangeError` message says `positionMs`); `TimelineEngine.getPosition()`
+  returns `ChannelPosition`.
 
 ### Fixed
 

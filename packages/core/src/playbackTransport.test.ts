@@ -128,7 +128,7 @@ describe("createClockTransport", () => {
     const events: PlaybackTransportEvent[] = [];
     transport.subscribe((event) => events.push(event));
 
-    await transport.seekMs(0);
+    await transport.seekPositionMs(0);
 
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
@@ -142,19 +142,19 @@ describe("createClockTransport", () => {
     const transport = createClockTransport(new FakeClock(), { durationMs: 100 });
 
     await transport.play();
-    await transport.seekMs(40);
+    await transport.seekPositionMs(40);
     expect(transport.getPlaybackState()).toBe("playing");
     await transport.pause();
-    await transport.seekMs(60);
+    await transport.seekPositionMs(60);
     expect(transport.getPlaybackState()).toBe("paused");
   });
 
   it("PB-TR-009B transitions stopped seeks above zero to paused", async () => {
     const transport = createClockTransport(new FakeClock(), { durationMs: 100 });
 
-    await transport.seekMs(0);
+    await transport.seekPositionMs(0);
     expect(transport.getPlaybackState()).toBe("stopped");
-    await transport.seekMs(25);
+    await transport.seekPositionMs(25);
     expect(transport.getPlaybackState()).toBe("paused");
   });
 
@@ -165,18 +165,18 @@ describe("createClockTransport", () => {
     await transport.play();
     clock.advance(100);
     expect(transport.getPlaybackState()).toBe("ended");
-    await transport.seekMs(100);
+    await transport.seekPositionMs(100);
     expect(transport.getPlaybackState()).toBe("ended");
-    await transport.seekMs(50);
+    await transport.seekPositionMs(50);
     expect(transport.getPlaybackState()).toBe("paused");
   });
 
   it("PB-TR-010 rejects invalid seek arguments synchronously", () => {
     const transport = createClockTransport(new FakeClock(), { durationMs: 100 });
 
-    expect(() => transport.seekMs(-1)).toThrow(RangeError);
-    expect(() => transport.seekMs(Number.NaN)).toThrow(RangeError);
-    expect(() => transport.seekMs(101)).toThrow(RangeError);
+    expect(() => transport.seekPositionMs(-1)).toThrow(RangeError);
+    expect(() => transport.seekPositionMs(Number.NaN)).toThrow(RangeError);
+    expect(() => transport.seekPositionMs(101)).toThrow(RangeError);
   });
 
   it("PB-TR-011 adjusts finite scheduling when playback rate changes", async () => {

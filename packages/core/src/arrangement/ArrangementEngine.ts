@@ -256,9 +256,9 @@ export class ArrangementEngine {
       const mode = this.transport.getPlaybackState() === "playing" ? "seek-as-play" : "suppress-seek";
       this.endedReplaySeekMode = mode;
       const command = mode === "seek-as-play"
-        ? this.runTransportCommands(["seek"], () => this.transport.seekMs(0))
+        ? this.runTransportCommands(["seek"], () => this.transport.seekPositionMs(0))
         : this.runTransportCommands(["seek", "play"], async () => {
-          await this.transport.seekMs(0);
+          await this.transport.seekPositionMs(0);
           await this.transport.play();
         });
       return command.catch((error) => {
@@ -294,7 +294,7 @@ export class ArrangementEngine {
     if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
     // A beat before transport position 0 (negative startPositionMs) seeks to 0.
     const positionMs = Math.max(0, beatToMs(this.arrangement.timing, beat));
-    return this.runTransportCommands(["seek"], () => this.transport.seekMs(positionMs));
+    return this.runTransportCommands(["seek"], () => this.transport.seekPositionMs(positionMs));
   }
 
   seekPositionMs(positionMs: number): Promise<void> {
@@ -305,7 +305,7 @@ export class ArrangementEngine {
       throw new RangeError(`positionMs must be a finite number from 0 to ${durationMs}.`);
     }
     if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
-    return this.runTransportCommands(["seek"], () => this.transport.seekMs(positionMs));
+    return this.runTransportCommands(["seek"], () => this.transport.seekPositionMs(positionMs));
   }
 
   setLoop(loop: boolean): void {
@@ -445,10 +445,10 @@ export class ArrangementEngine {
     return this.sampleArrangementChannels(this.arrangement, this.getLogicalPositionMs(), easing);
   }
 
-  sampleChannelsAt(timeMs: number, easing: EasingFunction = linear): Record<string, number> {
+  sampleChannelsAt(positionMs: number, easing: EasingFunction = linear): Record<string, number> {
     this.assertLive();
-    assertFiniteNonNegative(timeMs, "timeMs");
-    return this.sampleArrangementChannels(this.arrangement, timeMs, easing);
+    assertFiniteNonNegative(positionMs, "positionMs");
+    return this.sampleArrangementChannels(this.arrangement, positionMs, easing);
   }
 
   private runTransportCommands(

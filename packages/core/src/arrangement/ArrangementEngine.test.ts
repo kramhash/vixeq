@@ -93,7 +93,7 @@ class ManualTransport implements PlaybackTransport {
   }
   async pause(): Promise<void> {}
   async stop(): Promise<void> {}
-  async seekMs(positionMs: number): Promise<void> {
+  async seekPositionMs(positionMs: number): Promise<void> {
     const state = this.snapshot.state === "playing" ? "playing" : "paused";
     this.emitEvent({
       type: "seek",
@@ -516,7 +516,7 @@ describe("ArrangementEngine — Playback v2", () => {
     const playback: string[] = [];
     engine.on("playback", (event) => playback.push(`${event.type}:${event.cause}:${event.snapshot.state}`));
 
-    await transport.seekMs(BEAT_MS);
+    await transport.seekPositionMs(BEAT_MS);
     await transport.setPlaybackRate(2);
     transport.dispose();
 
@@ -645,7 +645,7 @@ describe("ArrangementEngine — RC1C branch coverage", () => {
 
   it("starts in a section gap with no current section and adopts an already-playing transport", async () => {
     const { clock, transport } = buildTransport();
-    await transport.seekMs(BEAT_MS * 3);
+    await transport.seekPositionMs(BEAT_MS * 3);
     await transport.play();
     const engine = new ArrangementEngine(buildArrangement(), { transport });
     const sections: ArrangementSectionEvent[] = [];
@@ -737,7 +737,7 @@ describe("ArrangementEngine — RC1C branch coverage", () => {
     engine.on("playback", (event) => playback.push(event));
 
     expect(() => engine.seekBeat(4)).toThrow(RangeError);
-    await transport.seekMs(BEAT_MS);
+    await transport.seekPositionMs(BEAT_MS);
 
     expect(playback).toMatchObject([{ type: "seek", cause: "transport" }]);
   });
@@ -764,7 +764,7 @@ describe("ArrangementEngine — RC1C branch coverage", () => {
     const playback: EnginePlaybackEvent[] = [];
     engine.on("playback", (event) => playback.push(event));
 
-    await transport.seekMs(BEAT_MS * 7);
+    await transport.seekPositionMs(BEAT_MS * 7);
     await transport.play();
 
     expect(engine.getPlaybackState()).toBe("ended");

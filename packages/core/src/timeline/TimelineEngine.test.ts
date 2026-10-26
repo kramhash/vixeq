@@ -88,7 +88,7 @@ class ManualTransport implements PlaybackTransport {
   }
   async pause(): Promise<void> {}
   async stop(): Promise<void> {}
-  async seekMs(positionMs: number): Promise<void> {
+  async seekPositionMs(positionMs: number): Promise<void> {
     const state = this.snapshot.state === "playing" ? "playing" : "paused";
     this.emitEvent({
       type: "seek",
@@ -555,7 +555,7 @@ describe("TimelineEngine", () => {
     const playback: string[] = [];
     engine.on("playback", (event) => playback.push(`${event.type}:${event.cause}:${event.snapshot.state}`));
 
-    await transport.seekMs(500);
+    await transport.seekPositionMs(500);
     await transport.setPlaybackRate(2);
     transport.dispose();
 
@@ -815,7 +815,7 @@ describe("TimelineEngine — RC1D branch coverage", () => {
     engine.on("playback", (event) => playback.push(event));
 
     expect(() => engine.seekBeat(2)).toThrow(RangeError);
-    await transport.seekMs(BEAT_MS / 2);
+    await transport.seekPositionMs(BEAT_MS / 2);
 
     expect(playback).toMatchObject([{ type: "seek", cause: "transport" }]);
   });
@@ -842,7 +842,7 @@ describe("TimelineEngine — RC1D branch coverage", () => {
     const playback: TimelinePlaybackEvent[] = [];
     engine.on("playback", (event) => playback.push(event));
 
-    await transport.seekMs(BEAT_MS * 5);
+    await transport.seekPositionMs(BEAT_MS * 5);
     await transport.play();
 
     expect(engine.getPlaybackState()).toBe("ended");

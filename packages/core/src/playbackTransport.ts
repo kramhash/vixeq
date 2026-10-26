@@ -1,4 +1,4 @@
-import type { PlaybackClock } from "./types";
+import type { PlaybackClock, Unsubscribe } from "./types";
 
 export type PlaybackState = "stopped" | "playing" | "paused" | "ended";
 
@@ -61,10 +61,10 @@ export type PlaybackTransport = {
   play(): Promise<void>;
   pause(): Promise<void>;
   stop(): Promise<void>;
-  seekMs(positionMs: number): Promise<void>;
+  seekPositionMs(positionMs: number): Promise<void>;
   setPlaybackRate(rate: number): Promise<void>;
   setLoop(loop: boolean): Promise<void>;
-  subscribe(listener: (event: PlaybackTransportEvent) => void): () => void;
+  subscribe(listener: (event: PlaybackTransportEvent) => void): Unsubscribe;
   dispose(): void;
 };
 
@@ -305,7 +305,7 @@ export function createClockTransport(
       });
     },
 
-    seekMs(nextPositionMs: number): Promise<void> {
+    seekPositionMs(nextPositionMs: number): Promise<void> {
       assertActive();
       if (!Number.isFinite(nextPositionMs) || nextPositionMs < 0) {
         throw new RangeError("positionMs must be a finite, non-negative number.");
@@ -361,7 +361,7 @@ export function createClockTransport(
       });
     },
 
-    subscribe(listener: (event: PlaybackTransportEvent) => void): () => void {
+    subscribe(listener: (event: PlaybackTransportEvent) => void): Unsubscribe {
       assertActive();
       listeners.add(listener);
       return () => {

@@ -137,7 +137,7 @@ describe("createMediaElementTransport", () => {
     const events: PlaybackTransportEvent[] = [];
     transport.subscribe((event) => events.push(event));
 
-    await transport.seekMs(500);
+    await transport.seekPositionMs(500);
     media.dispatch("seeked");
 
     expect(eventTypes(events)).toEqual(["seek"]);
@@ -419,7 +419,7 @@ describe("createAudioBufferTransport", () => {
       new FakeAudioBuffer() as unknown as AudioBuffer,
     );
     await transport.play();
-    await transport.seekMs(1250);
+    await transport.seekPositionMs(1250);
 
     expect(context.sources).toHaveLength(2);
     expect(context.sources[0]?.disconnect).toHaveBeenCalledOnce();
@@ -469,8 +469,8 @@ describe("createAudioBufferTransport", () => {
     await transport.stop();
     await transport.setPlaybackRate(1);
     await transport.setLoop(false);
-    expect(() => transport.seekMs(-1)).toThrow(RangeError);
-    expect(() => transport.seekMs(3000)).toThrow(RangeError);
+    expect(() => transport.seekPositionMs(-1)).toThrow(RangeError);
+    expect(() => transport.seekPositionMs(3000)).toThrow(RangeError);
     expect(() => transport.setPlaybackRate(0)).toThrow(RangeError);
     expect(() => transport.setLoop("yes" as unknown as boolean)).toThrow(TypeError);
 

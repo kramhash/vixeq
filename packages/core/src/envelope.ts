@@ -5,9 +5,9 @@ import type { SmoothingConfig } from "./smoothing";
 /** Stateful envelope: trigger and sample at logical transport positions. */
 export type Envelope = {
   /** Excite the envelope at the given logical transport position (ms). value 0-1, default 1. */
-  trigger(timeMs: number, value?: number): void;
+  trigger(positionMs: number, value?: number): void;
   /** Return the current 0-1 envelope value at the given logical transport position (ms). */
-  sample(timeMs: number): number;
+  sample(positionMs: number): number;
   /** Clear any active trigger and return the envelope to rest. */
   reset(): void;
 };
@@ -37,14 +37,14 @@ export const createEnvelope = (options: CreateEnvelopeOptions = {}): Envelope =>
   let triggerPeak = peakScale;
 
   return {
-    trigger(timeMs: number, value?: number): void {
-      triggerTime = timeMs;
+    trigger(positionMs: number, value?: number): void {
+      triggerTime = positionMs;
       triggerPeak = value !== undefined ? clamp01(value) * peakScale : peakScale;
     },
 
-    sample(timeMs: number): number {
+    sample(positionMs: number): number {
       if (triggerTime === null) return 0;
-      const elapsed = timeMs - triggerTime;
+      const elapsed = positionMs - triggerTime;
       if (elapsed < 0) return 0;
 
       if (attack > 0 && elapsed < attack) {
@@ -76,23 +76,23 @@ export const createDecayEnvelope = (config: SmoothingConfig): Envelope => {
   let lastSampleTime: number | null = null;
 
   return {
-    trigger(_timeMs: number, value?: number): void {
+    trigger(positionMs: number, value?: number): void {
       const input = value !== undefined ? clamp01(value) : 1;
       current = exciteSmoothedValue(current, input, config);
-      lastSampleTime = _timeMs;
+      lastSampleTime = positionMs;
     },
 
-    sample(timeMs: number): number {
+    sample(positionMs: number): number {
       if (lastSampleTime !== null) {
-        const dt = (timeMs - lastSampleTime) / 1000;
+        const dt = (positionMs - lastSampleTime) / 1000;
         if (dt > 0) {
           current = decaySmoothedValue(current, dt, config);
-          lastSampleTime = timeMs;
+          lastSampleTime = positionMs;
         }
         // dt <= 0 (backwards or same time): skip decay and do not update
         // lastSampleTime, so forward progress resumes correctly afterward.
       } else {
-        lastSampleTime = timeMs;
+        lastSampleTime = positionMs;
       }
       return clamp01(current);
     },

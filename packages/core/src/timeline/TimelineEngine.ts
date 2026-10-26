@@ -9,6 +9,7 @@ import {
   type PlaybackTransportEvent,
 } from "../playbackTransport";
 import type {
+  ChannelPosition,
   EnginePlaybackEvent,
   EnginePlaybackSnapshot,
   MissedStepPolicy,
@@ -214,9 +215,9 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
       const mode = this.transport.getPlaybackState() === "playing" ? "seek-as-play" : "suppress-seek";
       this.endedReplaySeekMode = mode;
       const command = mode === "seek-as-play"
-        ? this.runTransportCommands(["seek"], () => this.transport.seekMs(0))
+        ? this.runTransportCommands(["seek"], () => this.transport.seekPositionMs(0))
         : this.runTransportCommands(["seek", "play"], async () => {
-          await this.transport.seekMs(0);
+          await this.transport.seekPositionMs(0);
           await this.transport.play();
         });
       return command.catch((error) => {
@@ -251,7 +252,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
     // A beat before transport position 0 (negative startPositionMs) seeks to 0.
     const positionMs = Math.max(0, beatToMs(this.project.timing, beat));
-    return this.runTransportCommands(["seek"], () => this.transport.seekMs(positionMs));
+    return this.runTransportCommands(["seek"], () => this.transport.seekPositionMs(positionMs));
   }
 
   seekPositionMs(positionMs: number): Promise<void> {
@@ -262,7 +263,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
       throw new RangeError(`positionMs must be a finite number from 0 to ${durationMs}.`);
     }
     if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
-    return this.runTransportCommands(["seek"], () => this.transport.seekMs(positionMs));
+    return this.runTransportCommands(["seek"], () => this.transport.seekPositionMs(positionMs));
   }
 
   setLoop(loop: boolean): void {
@@ -343,7 +344,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     return this.playbackState;
   }
 
-  getPosition(): { positionMs: number; beat: number } {
+  getPosition(): ChannelPosition {
     this.assertLive();
     const positionMs = this.getLogicalPositionMs();
     return {

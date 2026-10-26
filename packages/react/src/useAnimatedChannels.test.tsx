@@ -23,8 +23,8 @@ class FakeChannelSource implements ChannelSource {
     project: new Set<(event: ChannelProjectEvent) => void>(),
   };
 
-  sampleChannelsAt(timeMs: number): Record<string, number> {
-    return { value: timeMs };
+  sampleChannelsAt(positionMs: number): Record<string, number> {
+    return { value: positionMs };
   }
 
   getPosition(): { positionMs: number; beat: number } {
