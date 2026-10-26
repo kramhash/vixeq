@@ -11,10 +11,11 @@ release gates, and migration behavior.
   spec's task table) stays in that table until `1.0.0` ships.
 - **New work** (fixes, additions, and requests found after 0.9, including the
   frapx integration findings) is tracked as GitHub issues. Milestones give the
-  release: `1.0.0-rc.1` for items that must land before the RC (these also
-  have a reference row in the task table), `1.0.0` for items that must land
-  during the RC observation period, before the stable publish (S1), `1.1.0`
-  for additive follow-ups, and no milestone for later.
+  release: `1.0.0-rc.N` for items that must land before that RC (a row in the
+  task table references them), `1.0.0` for items found during the RC
+  observation period that must land before the stable publish (S1) without
+  changing public API, `1.1.0` for additive follow-ups, and no milestone for
+  later.
 - Issue bodies use the headings Problem / What exists / Proposed change /
   Tests / Release notes, plus Evidence and Depends on / Order when they apply.
   The cross-repository plan for the frapx integration issues is
