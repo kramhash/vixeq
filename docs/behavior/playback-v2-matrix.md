@@ -98,8 +98,8 @@ Status values: `planned`, `covered`, `blocked`.
 | PB-EN-027 | Engine attaches to an already-playing transport | snapshot adopted immediately; no synthetic step events for time already elapsed | covered |
 | PB-EN-028 | external (non-command) transport events | mapped to Engine playback events with cause transport | covered |
 | PB-EN-029 | attached transport wraps on a natural loop | SequencerEngine emits one cause:"loop" step at the wrapped position and resumes ordinary tick-caused step emission afterward (does not permanently stop) | covered |
-| PB-EN-031 | Arrangement/Timeline seekPositionMs past local end on a longer transport | resolves; same events, state (ended without local loop), and position as a direct transport seek | covered |
 | PB-EN-030 | pause lands at or past local finite end while playing | Timeline/Arrangement enter ended and emit pause, then what the local-end tick would dispatch, then one ended with cause local-end | covered |
+| PB-EN-031 | Arrangement/Timeline seekPositionMs past local end on a longer transport | resolves; same events, state (ended without local loop), and position as a direct transport seek | covered |
 
 ## Sampling, Project events, and Envelopes
 
