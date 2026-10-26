@@ -203,7 +203,7 @@ export type MigrationResult<T> =
 export type ChannelSource = {
   on(eventName: "step", handler: SequencerEventHandler<"step">): Unsubscribe;
   sampleChannels(easing?: EasingFunction): Record<string, number>;
-  sampleChannelsAt(timeMs: number, easing?: EasingFunction): Record<string, number>;
+  sampleChannelsAt(positionMs: number, easing?: EasingFunction): Record<string, number>;
   getPosition(): ChannelPosition;
   getPlaybackState(): PlaybackState;
   on(eventName: "playback", handler: (event: EnginePlaybackEvent) => void): Unsubscribe;

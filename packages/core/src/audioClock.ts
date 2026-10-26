@@ -7,7 +7,7 @@ import {
   type PlaybackTransportBaseOptions,
   type PlaybackTransportEvent,
 } from "./playbackTransport";
-import type { PlaybackClock } from "./types";
+import type { PlaybackClock, Unsubscribe } from "./types";
 
 export type MediaElementTransportOptions = PlaybackTransportBaseOptions & {
   audioContext?: AudioContext;
@@ -345,7 +345,7 @@ export function createMediaElementTransport(
         emit({ type: "stop", snapshot: createSnapshot() });
       });
     },
-    seekMs(positionMs: number): Promise<void> {
+    seekPositionMs(positionMs: number): Promise<void> {
       assertActive();
       if (!Number.isFinite(positionMs) || positionMs < 0) {
         throw new RangeError("positionMs must be a finite, non-negative number.");
@@ -388,7 +388,7 @@ export function createMediaElementTransport(
         emit({ type: "loopchange", previousLoop, snapshot: createSnapshot() });
       });
     },
-    subscribe(listener: (event: PlaybackTransportEvent) => void): () => void {
+    subscribe(listener: (event: PlaybackTransportEvent) => void): Unsubscribe {
       assertActive();
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -516,7 +516,7 @@ export function createAudioBufferTransport(
         await base.stop();
       });
     },
-    seekMs(positionMs: number): Promise<void> {
+    seekPositionMs(positionMs: number): Promise<void> {
       assertActive();
       if (!Number.isFinite(positionMs) || positionMs < 0 || positionMs > durationMs) {
         throw new RangeError("positionMs must be finite, non-negative, and within the buffer duration.");
@@ -524,7 +524,7 @@ export function createAudioBufferTransport(
       return enqueue(async () => {
         const playing = base.getPlaybackState() === "playing";
         if (playing) startSource(positionMs);
-        await base.seekMs(positionMs);
+        await base.seekPositionMs(positionMs);
       });
     },
     setPlaybackRate(rate: number): Promise<void> {

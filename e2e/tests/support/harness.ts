@@ -21,7 +21,7 @@ export type HarnessWindow = {
   play(): Promise<CallResult>;
   pause(): Promise<CallResult>;
   stop(): Promise<CallResult>;
-  seekMs(positionMs: number): Promise<CallResult>;
+  seekPositionMs(positionMs: number): Promise<CallResult>;
   setPlaybackRate(rate: number): Promise<CallResult>;
   setLoop(loop: boolean): Promise<CallResult>;
   dispose(): Promise<CallResult>;

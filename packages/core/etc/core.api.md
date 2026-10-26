@@ -38,7 +38,7 @@ export class ArrangementEngine {
     // (undocumented)
     sampleChannels(easing?: EasingFunction): Record<string, number>;
     // (undocumented)
-    sampleChannelsAt(timeMs: number, easing?: EasingFunction): Record<string, number>;
+    sampleChannelsAt(positionMs: number, easing?: EasingFunction): Record<string, number>;
     // (undocumented)
     seekBeat(beat: number): Promise<void>;
     // (undocumented)
@@ -170,7 +170,7 @@ export type ChannelProjectEvent = {
 export type ChannelSource = {
     on(eventName: "step", handler: SequencerEventHandler<"step">): Unsubscribe;
     sampleChannels(easing?: EasingFunction): Record<string, number>;
-    sampleChannelsAt(timeMs: number, easing?: EasingFunction): Record<string, number>;
+    sampleChannelsAt(positionMs: number, easing?: EasingFunction): Record<string, number>;
     getPosition(): ChannelPosition;
     getPlaybackState(): PlaybackState;
     on(eventName: "playback", handler: (event: EnginePlaybackEvent) => void): Unsubscribe;
@@ -320,8 +320,8 @@ export type EnginePlaybackSnapshot = {
 
 // @public
 export type Envelope = {
-    trigger(timeMs: number, value?: number): void;
-    sample(timeMs: number): number;
+    trigger(positionMs: number, value?: number): void;
+    sample(positionMs: number): number;
     reset(): void;
 };
 
@@ -453,10 +453,10 @@ export type PlaybackTransport = {
     play(): Promise<void>;
     pause(): Promise<void>;
     stop(): Promise<void>;
-    seekMs(positionMs: number): Promise<void>;
+    seekPositionMs(positionMs: number): Promise<void>;
     setPlaybackRate(rate: number): Promise<void>;
     setLoop(loop: boolean): Promise<void>;
-    subscribe(listener: (event: PlaybackTransportEvent) => void): () => void;
+    subscribe(listener: (event: PlaybackTransportEvent) => void): Unsubscribe;
     dispose(): void;
 };
 
@@ -617,7 +617,7 @@ export class SequencerEngine {
     pause(): Promise<void>;
     play(): Promise<void>;
     sampleChannels(easing?: EasingFunction): Record<string, number>;
-    sampleChannelsAt(timeMs: number, easing?: EasingFunction): Record<string, number>;
+    sampleChannelsAt(positionMs: number, easing?: EasingFunction): Record<string, number>;
     seekPositionMs(positionMs: number): Promise<void>;
     seekStep(stepIndex: number): Promise<void>;
     setProject(project: SequenceProject): void;
@@ -736,10 +736,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     // (undocumented)
     getPlaybackState(): PlaybackState;
     // (undocumented)
-    getPosition(): {
-        positionMs: number;
-        beat: number;
-    };
+    getPosition(): ChannelPosition;
     // (undocumented)
     getProject(): TimelineProject<TEvent>;
     // (undocumented)

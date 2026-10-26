@@ -84,7 +84,7 @@ const harness = {
   play: () => safeCall(() => transport.play()),
   pause: () => safeCall(() => transport.pause()),
   stop: () => safeCall(() => transport.stop()),
-  seekMs: (positionMs: number) => safeCall(() => transport.seekMs(positionMs)),
+  seekPositionMs: (positionMs: number) => safeCall(() => transport.seekPositionMs(positionMs)),
   setPlaybackRate: (rate: number) => safeCall(() => transport.setPlaybackRate(rate)),
   setLoop: (loop: boolean) => safeCall(() => transport.setLoop(loop)),
   dispose: () => safeCall(() => transport.dispose()),

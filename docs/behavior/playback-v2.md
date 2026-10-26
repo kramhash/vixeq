@@ -83,10 +83,10 @@ export type PlaybackTransport = {
   play(): Promise<void>;
   pause(): Promise<void>;
   stop(): Promise<void>;
-  seekMs(positionMs: number): Promise<void>;
+  seekPositionMs(positionMs: number): Promise<void>;
   setPlaybackRate(rate: number): Promise<void>;
   setLoop(loop: boolean): Promise<void>;
-  subscribe(listener: (event: PlaybackTransportEvent) => void): () => void;
+  subscribe(listener: (event: PlaybackTransportEvent) => void): Unsubscribe;
   dispose(): void;
 };
 ```
@@ -162,7 +162,7 @@ position, and paused/ended state when constructed.
 
 Invalid public arguments throw synchronously before an operation is queued:
 
-- `seekMs`: finite, non-negative, and not beyond known duration.
+- `seekPositionMs`: finite, non-negative, and not beyond known duration.
 - `setPlaybackRate`: finite and greater than zero.
 - `setLoop`: argument must be a boolean.
 
@@ -195,7 +195,7 @@ Use standard `TypeError` and `RangeError` for invalid arguments. Use
   event synchronously, then resolves its Promise.
 - One successful command emits at most its one corresponding public event.
   Media-element DOM events caused by that command are suppressed: `stop()`
-  exposes only `stop`, `seekMs()` only `seek`, `setPlaybackRate()` only
+  exposes only `stop`, `seekPositionMs()` only `seek`, `setPlaybackRate()` only
   `ratechange`, and `setLoop()` only `loopchange`. Events caused by external
   media-element manipulation remain observable as their normal matching
   public events.
@@ -388,7 +388,7 @@ State-preserving operations are no-ops except explicit seek.
   external media.
 - `setProject()` is the only Sequencer Project mutation entry point and emits
   one atomic Project event.
-- A later external `seekMs` discards that temporary live-edit anchor and
+- A later external `seekPositionMs` discards that temporary live-edit anchor and
   evaluates the current Project from transport position 0.
 - A failed hot-swap preserves old Project, position, state, and dispatch
   cursor.
@@ -452,7 +452,7 @@ export type ChannelProjectEvent = {
 
 export type ChannelSource = {
   sampleChannels(easing?: EasingFunction): Record<string, number>;
-  sampleChannelsAt(timeMs: number, easing?: EasingFunction): Record<string, number>;
+  sampleChannelsAt(positionMs: number, easing?: EasingFunction): Record<string, number>;
   getPosition(): ChannelPosition;
   getPlaybackState(): PlaybackState;
   on(event: "step", listener: (event: StepEvent) => void): Unsubscribe;

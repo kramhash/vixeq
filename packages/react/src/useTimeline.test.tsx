@@ -170,7 +170,7 @@ describe("useTimeline", () => {
     const engine = result.current.engine;
 
     await act(async () => {
-      await transport.seekMs(1000);
+      await transport.seekPositionMs(1000);
     });
 
     const replacement = createTimelineProject({

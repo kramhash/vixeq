@@ -61,7 +61,7 @@ test("stop resets position to zero", async ({ page }) => {
 });
 
 test("seek jumps position and emits a seek event", async ({ page }) => {
-  const result = await page.evaluate(() => window.__h.seekMs(1500));
+  const result = await page.evaluate(() => window.__h.seekPositionMs(1500));
   expect(result.ok).toBe(true);
 
   const snapshot = await page.evaluate(() => window.__h.getSnapshot());
@@ -119,7 +119,7 @@ test("operations after dispose reject with TRANSPORT_DISPOSED", async ({ page })
 
 test("seeking past duration rejects with a RangeError", async ({ page }) => {
   const result = await page.evaluate(
-    (overshootMs) => window.__h.seekMs(overshootMs),
+    (overshootMs) => window.__h.seekPositionMs(overshootMs),
     DURATION_MS + 1000,
   );
 

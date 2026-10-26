@@ -137,10 +137,10 @@ type PlaybackTransport = {
   play(): Promise<void>;
   pause(): Promise<void>;
   stop(): Promise<void>;
-  seekMs(positionMs: number): Promise<void>;
+  seekPositionMs(positionMs: number): Promise<void>;
   setPlaybackRate(rate: number): Promise<void>;
   setLoop(loop: boolean): Promise<void>;
-  subscribe(listener: (event: PlaybackTransportEvent) => void): () => void;
+  subscribe(listener: (event: PlaybackTransportEvent) => void): Unsubscribe;
   dispose(): void;
 };
 ```
@@ -205,7 +205,7 @@ Unit-specific seek names are mandatory:
 - `SequencerEngine.seekStep(stepIndex)`
 - `ArrangementEngine.seekBeat(beat)`
 - `TimelineEngine.seekBeat(beat)` (added in 0.8)
-- `PlaybackTransport.seekMs(positionMs)`
+- `PlaybackTransport.seekPositionMs(positionMs)`
 
 Seek inputs are strict and throw `RangeError`; do not clamp or modulo them.
 
@@ -224,7 +224,7 @@ the latest state when its queued operation executes.
 - `pause()` stores position; replay anchors from that position.
 - Project tempo changes preserve the current fractional beat without seeking
   external media.
-- A later external `seekMs` discards the temporary live-edit anchor and
+- A later external `seekPositionMs` discards the temporary live-edit anchor and
   recalculates from the current Project starting at position 0.
 - Delayed natural playback uses `missedStepPolicy`. Explicit seek never does.
 
@@ -240,7 +240,7 @@ with:
 
 ```ts
 sampleChannels(easing?)
-sampleChannelsAt(timeMs, easing?)
+sampleChannelsAt(positionMs, easing?)
 ```
 
 - `sampleChannels()` samples the Engine's current logical transport position.
@@ -254,8 +254,8 @@ sampleChannelsAt(timeMs, easing?)
 ```ts
 type ChannelSource = {
   sampleChannels(easing?: EasingFunction): Record<string, number>;
-  sampleChannelsAt(timeMs: number, easing?: EasingFunction): Record<string, number>;
-  getPosition(): { positionMs: number; beat: number };
+  sampleChannelsAt(positionMs: number, easing?: EasingFunction): Record<string, number>;
+  getPosition(): ChannelPosition;
   getPlaybackState(): PlaybackState;
   on(event: "step", listener: (event: StepEvent) => void): Unsubscribe;
   on(event: "playback", listener: (event: EnginePlaybackEvent) => void): Unsubscribe;

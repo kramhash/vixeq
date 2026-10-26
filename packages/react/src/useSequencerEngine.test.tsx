@@ -115,7 +115,7 @@ class DeferredTransport implements PlaybackTransport {
     this.emit({ type: "stop", snapshot: this.getSnapshot() });
   };
 
-  seekMs = async (positionMs: number) => {
+  seekPositionMs = async (positionMs: number) => {
     const previousPositionMs = this.positionMs;
     this.positionMs = positionMs;
     this.state = positionMs === 0 ? "stopped" : "paused";

@@ -255,7 +255,7 @@ export class SequencerEngine {
     this.assertLive();
     assertFiniteNonNegative(positionMs, "positionMs");
     if (this.transportDisposed) return Promise.reject(new PlaybackError("TRANSPORT_DISPOSED"));
-    return this.runTransportCommand("seek", () => this.transport.seekMs(positionMs));
+    return this.runTransportCommand("seek", () => this.transport.seekPositionMs(positionMs));
   }
 
   /**
@@ -390,17 +390,17 @@ export class SequencerEngine {
    * Sample every track's value at an arbitrary logical position, without
    * affecting playback state. Useful for scrubbing/preview UIs.
    *
-   * @param timeMs - Logical position, in ms, to sample at; must be finite
+   * @param positionMs - Logical position, in ms, to sample at; must be finite
    *   and non-negative.
    * @param easing - Easing curve applied to the interpolation phase between
    *   steps. Defaults to {@link linear}.
    * @returns A record of trackId → 0–1 value; disabled tracks sample to 0.
-   * @throws RangeError if `timeMs` is not finite or is negative.
+   * @throws RangeError if `positionMs` is not finite or is negative.
    */
-  sampleChannelsAt(timeMs: number, easing: EasingFunction = linear): Record<string, number> {
+  sampleChannelsAt(positionMs: number, easing: EasingFunction = linear): Record<string, number> {
     this.assertLive();
-    assertFiniteNonNegative(timeMs, "timeMs");
-    return this.sampleProjectChannels(this.project, timeMs, easing);
+    assertFiniteNonNegative(positionMs, "positionMs");
+    return this.sampleProjectChannels(this.project, positionMs, easing);
   }
 
   private runTransportCommand(

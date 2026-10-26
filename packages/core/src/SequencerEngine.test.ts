@@ -129,7 +129,7 @@ class ManualTransport implements PlaybackTransport {
   }
   async pause(): Promise<void> {}
   async stop(): Promise<void> {}
-  async seekMs(positionMs: number): Promise<void> {
+  async seekPositionMs(positionMs: number): Promise<void> {
     const state = this.snapshot.state === "playing" ? "playing" : "paused";
     this.emitEvent({
       type: "seek",
@@ -355,7 +355,7 @@ describe("SequencerEngine — Playback v2", () => {
     await engine.seekPositionMs(250);
     expect(engine.getCurrentStepIndex()).toBe(2);
     expect(() => engine.seekPositionMs(501)).toThrow(RangeError);
-    await transport.seekMs(100);
+    await transport.seekPositionMs(100);
     expect(playback.at(-1)).toMatchObject({ type: "seek", cause: "transport" });
   });
 
@@ -415,7 +415,7 @@ describe("SequencerEngine — Playback v2", () => {
     engine.setProject(setProjectBpm(project, 60));
     expect(engine.getPosition()).toEqual({ positionMs: 250, beat: 0.25 });
 
-    await transport.seekMs(0);
+    await transport.seekPositionMs(0);
 
     expect(engine.getPosition()).toEqual({ positionMs: 0, beat: 0 });
   });
@@ -681,7 +681,7 @@ describe("SequencerEngine — Playback v2", () => {
     const playback: EnginePlaybackEvent[] = [];
     engine.on("playback", (event) => playback.push(event));
 
-    await transport.seekMs(250);
+    await transport.seekPositionMs(250);
     await transport.setPlaybackRate(2);
 
     expect(playback).toMatchObject([
