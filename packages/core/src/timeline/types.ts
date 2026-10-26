@@ -71,7 +71,7 @@ export type TimelineEventPatch<
   ? [Exclude<TUnion, TEvent>] extends [never]
     ? Partial<Omit<TEvent, "id">>
     : Partial<Omit<TEvent, "id" | "type" | "data">> &
-        ({ type?: undefined; data?: undefined } | { type: TEvent["type"]; data: TEvent["data"] })
+        ({ type?: never; data?: undefined } | { type: TEvent["type"]; data: TEvent["data"] })
   : never;
 
 /**

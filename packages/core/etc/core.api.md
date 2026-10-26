@@ -799,7 +799,7 @@ export type TimelineEventName = keyof TimelineEventMap;
 
 // @public
 export type TimelineEventPatch<TEvent extends TimelineEvent = TimelineEvent, TUnion extends TimelineEvent = TEvent> = TEvent extends TimelineEvent ? [Exclude<TUnion, TEvent>] extends [never] ? Partial<Omit<TEvent, "id">> : Partial<Omit<TEvent, "id" | "type" | "data">> & ({
-    type?: undefined;
+    type?: never;
     data?: undefined;
 } | {
     type: TEvent["type"];
