@@ -154,7 +154,12 @@ export type UseArrangementState = {
   setPlaybackRate: (rate: number) => Promise<void>;
   /** Sets whether the transport loops at its known duration. */
   setTransportLoop: (loop: boolean) => Promise<void>;
-  /** Sets the engine-local loop flag (repeat from beat 0 at arrangement end), independent of transport looping. */
+  /**
+   * Sets the engine-local loop flag (repeat from beat 0 at arrangement end),
+   * independent of transport looping. Unlike the engine's synchronous
+   * `setLoop`, it runs after the hook's earlier commands, like every hook
+   * command, and resolves once applied.
+   */
   setLoop: (loop: boolean) => Promise<void>;
 };
 

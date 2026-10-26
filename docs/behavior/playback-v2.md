@@ -342,8 +342,7 @@ export type EnginePlaybackEvent = {
 };
 ```
 
-Sequence snapshots additionally expose `stepIndex`. Arrangement/Timeline
-snapshots additionally expose `iteration`. Engine events use the event name
+Sequence snapshots additionally expose `stepIndex`. Engine events use the event name
 `"playback"`; transport events are not exposed as Engine `"transport"`
 events.
 
@@ -482,7 +481,7 @@ Concrete Engine Project events extend `ChannelProjectEvent` with their typed
 ## 5. Step event contract
 
 ```ts
-export type StepEventCause = "play" | "tick" | "seek" | "project-change";
+export type StepEventCause = "play" | "tick" | "seek" | "project-change" | "loop";
 
 export type StepEvent = {
   stepIndex: number;
