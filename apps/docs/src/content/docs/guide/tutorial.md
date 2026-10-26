@@ -179,7 +179,7 @@ export function App() {
 ## Next steps
 
 - Full hook reference — [`@vixeq/react` guide](../react/) and
-  [`useSequencer` API](../../api/vixeq/react/functions/usesequencerengine/)
+  [`useSequencer` API](../../api/vixeq/react/functions/usesequencer/)
 - Prefer a ready-made, editable grid UI instead of a hand-rolled one? See the
   [`@vixeq/player-react` guide](../player-react/)
 - Turn the pulse into a playable timing challenge —

@@ -91,7 +91,7 @@ function MorphScene() {
 
 ## Next steps
 
-- Full API — [`useSequencer` reference](../../api/vixeq/react/functions/usesequencerengine/)
+- Full API — [`useSequencer` reference](../../api/vixeq/react/functions/usesequencer/)
 - Editable player GUI — [`@vixeq/player-react` guide](../player-react/)
 - Copyable example: `pnpm --filter vixeq-example-arrangement-demo dev`
   (see [`examples/arrangement-demo`](https://github.com/kramhash/vixeq/tree/main/examples/arrangement-demo))
