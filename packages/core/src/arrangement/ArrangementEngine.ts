@@ -151,7 +151,7 @@ export class ArrangementEngine {
   private transportDisposed = false;
   // Last transport-relative position reported before the transport was
   // disposed. Kept separate from cachedPositionMs, which is project-relative
-  // once setArrangement() has anchored a hot-swap.
+  // once setProject() has anchored a hot-swap.
   private disposedTransportPositionMs = 0;
   private transportTimerId: ReturnType<typeof setTimeout> | undefined;
   private playbackState: PlaybackState = "stopped";
@@ -173,7 +173,7 @@ export class ArrangementEngine {
   private pendingEndedReplayPlay = false;
   private readonly pendingCommandEvents: PlaybackTransportEvent["type"][] = [];
   // Bumped by every command or transport event that re-anchors or ends step
-  // dispatch (seek, stop, ended, play from stopped/ended, setArrangement,
+  // dispatch (seek, stop, ended, play from stopped/ended, setProject,
   // setLoop unless it keeps the Engine at local end, transport or Engine
   // disposal). Pause does not bump: it leaves the
   // cursor in place. A tick compares it
@@ -358,33 +358,33 @@ export class ArrangementEngine {
     }
   }
 
-  getArrangement(): ArrangementProject {
+  getProject(): ArrangementProject {
     this.assertLive();
     return this.arrangement;
   }
 
-  /** Atomically replaces arrangement data while preserving the current fractional beat. */
-  setArrangement(arrangement: ArrangementProject): void {
+  /** Atomically replaces the project while preserving the current fractional beat. */
+  setProject(project: ArrangementProject): void {
     this.assertLive();
-    assertValidArrangement(arrangement);
+    assertValidArrangement(project);
 
-    const previousArrangement = this.arrangement;
-    if (previousArrangement === arrangement) {
+    const previousProject = this.arrangement;
+    if (previousProject === project) {
       return;
     }
 
     const previousPositionMs = this.getLogicalPositionMs();
-    const previousBeat = msToBeat(previousArrangement.timing, previousPositionMs);
-    const previousChannels = this.sampleArrangementChannels(previousArrangement, previousPositionMs);
+    const previousBeat = msToBeat(previousProject.timing, previousPositionMs);
+    const previousChannels = this.sampleArrangementChannels(previousProject, previousPositionMs);
     const previousState = this.playbackState;
     const transportPositionMs = this.getTransportPositionMs();
 
     this.dispatchGeneration += 1;
-    this.arrangement = arrangement;
+    this.arrangement = project;
     this.trackIds = unionTrackIds(this.arrangement);
 
-    const nextBeat = this.normalizeBeatForArrangement(previousBeat, arrangement);
-    const nextPositionMs = Math.max(0, beatToMs(arrangement.timing, nextBeat));
+    const nextBeat = this.normalizeBeatForArrangement(previousBeat, project);
+    const nextPositionMs = Math.max(0, beatToMs(project.timing, nextBeat));
     this.projectAnchor = {
       transportPositionMs,
       projectPositionMs: nextPositionMs,
@@ -397,8 +397,8 @@ export class ArrangementEngine {
 
     const channels = this.sampleArrangementChannels(this.arrangement, this.cachedPositionMs);
     const event: ArrangementProjectEvent = {
-      arrangement,
-      previousArrangement,
+      project,
+      previousProject,
       changedChannelIds: this.getChangedChannelIds(previousChannels, channels),
       previousChannels,
       channels,
@@ -407,7 +407,7 @@ export class ArrangementEngine {
     };
     this.emit("project", event);
 
-    if (this.getStepKeyAtPosition(previousPositionMs, previousArrangement) !== this.getStepKeyAtPosition(this.cachedPositionMs)) {
+    if (this.getStepKeyAtPosition(previousPositionMs, previousProject) !== this.getStepKeyAtPosition(this.cachedPositionMs)) {
       this.emitStepForPosition(this.cachedPositionMs, "project-change");
     }
     this.emitSectionForPosition(this.cachedPositionMs, "project-change", true);

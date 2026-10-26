@@ -117,7 +117,7 @@ await engine.seekBeat(16); // jump to the chorus
 ```
 
 Gaps between sections (or past the end, when not looping) output `0` on
-every channel. `setArrangement(next)` validates the replacement atomically,
+every channel. `setProject(next)` validates the replacement atomically,
 preserves the current fractional beat, and does not seek a supplied
 transport — its local `loop` state is independent of the transport's own
 loop flag.
