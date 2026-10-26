@@ -369,7 +369,7 @@ export type MediaElementTransportOptions = PlaybackTransportBaseOptions & {
 export const migrateArrangementProject: (input: unknown, options?: ArrangementMigrationOptions) => ArrangementMigrationResult;
 
 // @public
-export const migrateTimelineProject: (project: TimelineProjectV1, options: TimelineMigrationOptions) => MigrationResult<TimelineProject>;
+export const migrateTimelineProject: (project: TimelineProjectV1, options?: TimelineMigrationOptions) => MigrationResult<TimelineProject>;
 
 // @public (undocumented)
 export type MigrationIssue = {
@@ -809,7 +809,7 @@ export type TimelineEventValidator<TEvent extends TimelineEvent = TimelineEvent>
 
 // @public (undocumented)
 export type TimelineMigrationOptions = {
-    durationBeats: number;
+    durationBeats?: number;
     onRemovedField?: (event: TimelineEventV1) => JsonObject | undefined;
 };
 

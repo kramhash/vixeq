@@ -33,8 +33,12 @@ export type TimelineProjectV1 = {
 };
 
 export type TimelineMigrationOptions = {
-  /** Required: v1 has no durationBeats field, so it can never be derived. */
-  durationBeats: number;
+  /**
+   * Required for a successful migration: v1 has no durationBeats field, so it
+   * can never be derived. Omitting it returns `ok: false` with
+   * `TIMELINE_DURATION_BEATS_REQUIRED`.
+   */
+  durationBeats?: number;
   /**
    * Called once per event that carries a removed field (`durationBeats`
    * and/or `value`). Return a `JsonObject` to fold that data into the
@@ -101,12 +105,14 @@ const migrateEvent = (
  */
 export const migrateTimelineProject = (
   project: TimelineProjectV1,
-  options: TimelineMigrationOptions,
+  options: TimelineMigrationOptions = {},
 ): MigrationResult<TimelineProject> => {
   const errors: MigrationIssue[] = [];
   const warnings: MigrationIssue[] = [];
+  const { durationBeats } = options;
+  const hasDurationBeats = typeof durationBeats === "number" && Number.isFinite(durationBeats) && durationBeats > 0;
 
-  if (!Number.isFinite(options.durationBeats) || options.durationBeats <= 0) {
+  if (!hasDurationBeats) {
     errors.push({
       code: "TIMELINE_DURATION_BEATS_REQUIRED",
       message: "options.durationBeats must be a finite number greater than 0; it cannot be derived from a v1 TimelineProject.",
@@ -127,7 +133,7 @@ export const migrateTimelineProject = (
     });
   }
 
-  if (startPositionMs !== undefined && Number.isFinite(options.durationBeats) && options.durationBeats > 0) {
+  if (startPositionMs !== undefined && hasDurationBeats) {
     const timing = { tempos: project.timing.tempos, startPositionMs };
     let timingValid = true;
     try {
@@ -136,7 +142,7 @@ export const migrateTimelineProject = (
       // Strict Project validation reports an invalid v1 tempo map.
       timingValid = false;
     }
-    if (timingValid && !endsAfterTransportStart(timing, options.durationBeats)) {
+    if (timingValid && !endsAfterTransportStart(timing, durationBeats)) {
       errors.push({
         code: "TIMELINE_INVALID_OFFSET_MS",
         message: "timing.offsetMs must leave local end (options.durationBeats) after transport position 0.",
@@ -183,7 +189,7 @@ export const migrateTimelineProject = (
   const migrated: TimelineProject = {
     version: 2,
     timing: { tempos: project.timing.tempos, startPositionMs: startPositionMs as number },
-    durationBeats: options.durationBeats,
+    durationBeats: durationBeats as number,
     tracks: migratedTracks,
     events: sortTimelineEvents(migratedEvents),
   };
