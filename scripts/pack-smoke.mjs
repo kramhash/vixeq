@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -168,7 +168,33 @@ const packPublicPackages = async () => {
 // modern Node.js/TypeScript moduleResolution, not the pre-`exports`-field
 // classic resolution algorithm; a subpath export like `@vixeq/core/dom` is
 // expected to fail node10 resolution and that failure is out of scope here.
+const readPackedManifest = (tarballPath) =>
+  JSON.parse(execFileSync("tar", ["-xOzf", tarballPath, "package/package.json"], { encoding: "utf8" }));
+
+// The consumers below install every tarball directly, so a peer range that
+// the packed versions do not satisfy would only warn. Check the ranges here:
+// each @vixeq/* peer must be exactly `^<version>` of the packed lockstep set.
+const verifyVixeqPeerRanges = (tarballs) => {
+  for (const publicPackage of publicPackages) {
+    const manifest = readPackedManifest(tarballs.get(publicPackage.name));
+    for (const [name, range] of Object.entries(manifest.peerDependencies ?? {})) {
+      if (!name.startsWith("@vixeq/")) continue;
+      const expected = `^${readPackedManifest(tarballs.get(name)).version}`;
+      if (range !== expected) {
+        throw new Error(`${publicPackage.name} peer ${name} is ${range}; expected ${expected}.`);
+      }
+    }
+    for (const section of ["dependencies", "optionalDependencies"]) {
+      const vixeqDependency = Object.keys(manifest[section] ?? {}).find((name) => name.startsWith("@vixeq/"));
+      if (vixeqDependency) {
+        throw new Error(`${publicPackage.name} lists ${vixeqDependency} in ${section}; it must be a peer.`);
+      }
+    }
+  }
+};
+
 const verifyPackedPackages = async (tarballs) => {
+  verifyVixeqPeerRanges(tarballs);
   for (const publicPackage of publicPackages) {
     const tarballPath = tarballs.get(publicPackage.name);
     console.log(`\nVerifying packed package: ${publicPackage.name}`);
