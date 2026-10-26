@@ -80,14 +80,14 @@ export type UseArrangementOptions = {
   onPlaybackChange?: (event: ArrangementPlaybackEvent) => void;
   /**
    * Called with the engine's current `ChannelPosition` on every rAF tick
-   * while playing, and after seeks/arrangement swaps. Use this (or
+   * while playing, and after seeks/project swaps. Use this (or
    * {@link UseArrangementState.positionRef}) instead of `latestEventRef` for
    * continuous progress UI, since position updates do not trigger a React
    * re-render on their own.
    */
   onPosition?: (position: ChannelPosition) => void;
   /**
-   * Called when constructing the engine, or hot-swapping its arrangement,
+   * Called when constructing the engine, or hot-swapping its project,
    * throws. The error is also captured on
    * {@link UseArrangementState.projectError} without throwing during
    * render.
@@ -112,7 +112,7 @@ export type UseArrangementState = {
   playbackState: PlaybackState;
   /**
    * Ref holding the engine's current `ChannelPosition`. Updated on every rAF
-   * tick while playing and after seeks/arrangement swaps, without forcing a
+   * tick while playing and after seeks/project swaps, without forcing a
    * re-render — read it inside animation callbacks instead of depending on
    * hook state for continuous progress.
    */
@@ -193,14 +193,14 @@ const cancelScheduledFrame = (frameId: ReturnType<typeof setTimeout> | number): 
 /**
  * Owns an `ArrangementEngine` lifecycle: constructs it from an
  * `ArrangementProject` (patterns played across ordered, beat-timed
- * sections), hot-swaps the arrangement when a new reference is passed, and
+ * sections), hot-swaps the project when a new reference is passed, and
  * disposes the engine (and any transport the hook created) on unmount.
  * Commands are serialized through an internal queue, so calling several in a
  * row runs them one after another in order rather than racing. The returned
  * `engine` satisfies the `ChannelSource` contract, so it can be passed
  * directly to `useAnimatedChannels`.
  *
- * Construction and arrangement-hot-swap failures are captured on
+ * Construction and project hot-swap failures are captured on
  * `projectError`/`onProjectError` instead of throwing during render.
  * Continuous playback position is exposed both as `positionRef` (read
  * without a re-render) and via the `onPosition` callback, since it changes
