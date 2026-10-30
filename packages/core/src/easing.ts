@@ -12,6 +12,13 @@ const clampT = (t: number): number => {
 /** No easing: passes `t` through unchanged (clamped to [0, 1]). */
 export const linear: EasingFunction = (t) => clampT(t);
 
+/**
+ * No interpolation: always 0, so sampling keeps each step's own value for the
+ * whole step instead of moving toward the next one. Use it for gate-like
+ * tracks.
+ */
+export const hold: EasingFunction = () => 0;
+
 /** Quadratic ease-in: slow start, accelerating toward t = 1 (t²). */
 export const easeInQuad: EasingFunction = (t) => {
   const c = clampT(t);

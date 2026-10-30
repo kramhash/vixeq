@@ -1,4 +1,6 @@
 import { lerp, linear, type EasingFunction } from "../easing";
+import { msToBeat } from "../timeline/timing";
+import type { TimeEvaluationOptions } from "../timeEvaluation";
 import type { ArrangementProject, ArrangementSection } from "./types";
 
 /** Every track id that appears in any pattern in the arrangement, in first-seen order. Used to keep sampleChannels' key set stable across section boundaries. */
@@ -84,25 +86,40 @@ export const resolveArrangementStep = (
   return { section: lookup.section, stepIndex, nextStepIndex, phase };
 };
 
+const loopBeat = (arrangement: ArrangementProject, beat: number): number => {
+  if (beat >= 0 && beat < arrangement.durationBeats) {
+    return beat;
+  }
+  const loopStartBeat = msToBeat(arrangement.timing, 0);
+  const loopBeats = arrangement.durationBeats - loopStartBeat;
+  return loopStartBeat + ((((beat - loopStartBeat) % loopBeats) + loopBeats) % loopBeats);
+};
+
 /**
  * Samples the interpolated 0-1 value for every track across the whole
  * arrangement at an arbitrary beat position. Always returns the full
  * union of track ids (see unionTrackIds) so consumers get a stable key
  * set across section boundaries — tracks not in the active pattern (or
  * positions in a gap / past the end) read 0.
+ *
+ * With `options.loop`, a beat past `durationBeats` or before 0 wraps into the
+ * local loop, which starts at transport position 0 (the beat
+ * `msToBeat(timing, 0)`) and ends at `durationBeats`, as in `ArrangementEngine`
+ * with local loop on.
  */
 export const sampleArrangement = (
   arrangement: ArrangementProject,
   beat: number,
   easing: EasingFunction = linear,
   trackIds: string[] = unionTrackIds(arrangement),
+  options: TimeEvaluationOptions = {},
 ): Record<string, number> => {
   const result: Record<string, number> = {};
   for (const id of trackIds) {
     result[id] = 0;
   }
 
-  const resolved = resolveArrangementStep(arrangement, beat);
+  const resolved = resolveArrangementStep(arrangement, options.loop ? loopBeat(arrangement, beat) : beat);
   if (!resolved) {
     return result;
   }

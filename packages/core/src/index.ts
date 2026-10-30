@@ -58,9 +58,12 @@ export {
   easeInQuad,
   easeOutCubic,
   easeOutQuad,
+  hold,
   lerp,
   linear,
 } from "./easing";
+export { envelopeAt, lastStepAt, nextStepAt, sampleProject } from "./timeEvaluation";
+export type { EnvelopeAtOptions, NextStepHit, StepHit, TimeEvaluationOptions } from "./timeEvaluation";
 export { SEQUENCER_LIMITS } from "./limits";
 export {
   addTrack,

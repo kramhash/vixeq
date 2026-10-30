@@ -163,6 +163,40 @@ const value = beatEnv.sample(engine.getPosition().positionMs); // 0–1
 
 Both implement `Envelope`: `trigger(positionMs, value?)`, `sample(positionMs)`, and `reset()`. Envelope positions are logical transport positions, not wall-clock timestamps.
 
+## Evaluating at a Time
+
+For shaders and offline rendering, read channel values as a pure function of
+the position: the same position always gives the same value, in any order and
+as often as needed (motion-blur sub-samples, a resumed export). No engine or
+`trigger()` calls are involved.
+
+```ts
+import { envelopeAt, hold, lastStepAt, sampleArrangement, sampleProject } from "@vixeq/core";
+
+// A SequenceProject loops forever: any position wraps, negative ones too.
+const values = sampleProject(project, positionMs); // { trackId: 0–1 }
+const gates = sampleProject(project, positionMs, hold); // each step's own value
+
+// An ArrangementProject is sampled by beat; loop wraps it like local loop.
+const arranged = sampleArrangement(song, beat, undefined, undefined, { loop: true });
+
+// The last step that fired on a track, and a pulse that peaks on it.
+const hit = lastStepAt(project, positionMs, "kick"); // { value, positionMs, elapsedMs } | null
+const pulse = envelopeAt(song, positionMs, "kick", { leadMs: 20, decayMs: 120, loop: true });
+```
+
+- `lastStepAt` / `nextStepAt` find the last step at or before, or the first
+  step after, a position whose value is greater than 0. They work on a
+  `SequenceProject` or an `ArrangementProject`, across sections, gaps, and
+  (with `loop`) the loop point. Tracks are named by id.
+- `envelopeAt` rises over `leadMs` before each step, peaks exactly on it
+  (the step's value × `peak`), and falls over `decayMs`. A pulse that peaks on
+  the beat and fades fast reads as in sync; one that starts growing on the
+  beat reads as late, even with correct timing.
+- `SequencerEngine#sampleChannelsAt` returns the same values as
+  `sampleProject` for non-negative positions, wraps past the end of the
+  pattern, and throws a `RangeError` for negative positions.
+
 ## DOM Bindings
 
 Write channel values directly to CSS custom properties (separate `@vixeq/core/dom` subpath):
