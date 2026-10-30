@@ -12,7 +12,7 @@ Vixeq packages are released in lockstep. `@vixeq/core`, `@vixeq/react`, and
 | --- | --- | --- |
 | `0.9.x` | release-readiness | Final pre-1.0 gates, support docs, and migration docs. |
 | `1.0.0-rc.x` | release candidate | Published only after all 0.7-0.9 gates are green. |
-| `1.0.x` | stable | API freeze line after the RC observation period. |
+| `1.0.x` | stable | API freeze line after the RC passes real-consumer validation. |
 | `<0.9` | migration source | Documented for upgrades, but not the active support line. |
 
 ## Runtime Support Matrix
