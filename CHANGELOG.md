@@ -47,8 +47,9 @@
   `@frapx/shader-noise`. Apart from dimming while not playing, its uniforms
   are a pure function of the engine's position, bound with `bindUniforms` and
   built on `envelopeAt` / `lastStepAt`, instead of envelopes excited by step
-  events and decayed in its own animation loop. The picture now stops with playback and follows seeks;
-  while not playing, selecting a step previews the frame at that step's start
+  events and decayed in its own animation loop. The picture now stops with
+  playback and follows seeks; while not playing, selecting a step previews the
+  frame at that step's start
   ([#7](https://github.com/kramhash/vixeq/issues/7)).
 
 ## 1.0.0 - 2026-10-30
