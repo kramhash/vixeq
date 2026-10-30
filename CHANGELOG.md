@@ -12,6 +12,28 @@ integration lab was upgraded from 0.9.0 using only the migration notes, then
 type-checked, built, and exercised in a browser (sequence playback and
 editing, audio-synced Arrangement playback, and shader output).
 
+### Published
+
+- Published `@vixeq/core`, `@vixeq/react`, and `@vixeq/player-react` at
+  `1.0.0` under the `latest` dist-tag, with npm provenance attestations.
+  - [`@vixeq/core@1.0.0`](https://www.npmjs.com/package/@vixeq/core/v/1.0.0)
+  - [`@vixeq/react@1.0.0`](https://www.npmjs.com/package/@vixeq/react/v/1.0.0)
+  - [`@vixeq/player-react@1.0.0`](https://www.npmjs.com/package/@vixeq/player-react/v/1.0.0)
+- Verified release gates before publish: typecheck, build, unit tests,
+  coverage thresholds, API checks (no change from `1.0.0-rc.2`), behavior
+  matrix, packed-package smoke (including the `^1.0.0` peer ranges and every
+  official example built against the packed tarballs), React 18 and
+  TypeScript 5.5 / 7.0 smoke fixtures, browser E2E, and the Publish
+  workflow's dry run and gates (Node 22/24/26, E2E, docs).
+- Verified the provenance attestation: `dist.attestations` is present on all
+  three packages.
+- Verified against clean consumers installing from the npm registry (not
+  local tarballs), on React 19 with TypeScript 6.0, React 18, TypeScript 5.5,
+  and TypeScript 7.0: ESM/CJS imports, Timeline/Arrangement migration APIs,
+  public types, React SSR, and `@vixeq/player-react/styles.css` Vite
+  resolution all pass; `publint` and Are The Types Wrong (`node16`) pass on
+  the registry packages.
+
 ### Upgrading from 0.9.0
 
 `0.9.0` is the previous stable release. The changes since then are listed

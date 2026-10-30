@@ -287,13 +287,13 @@ All public packages use lockstep versions, including prereleases, through these 
 **Theme**: Retire the early-development label and begin explicit semver guarantees.
 
 - [x] Confirm every 0.7–0.9 and RC gate is complete.
-- [ ] Publish `@vixeq/core`, `@vixeq/react`, and `@vixeq/player-react` at the same `1.0.0` version.
+- [x] Publish `@vixeq/core`, `@vixeq/react`, and `@vixeq/player-react` at the same `1.0.0` version.
 - [x] Remove the README and package README early-development and pre-1.0 stability disclaimers.
-- [ ] Confirm the compatibility matrix, semver policy, and support policy still
+- [x] Confirm the compatibility matrix, semver policy, and support policy still
   match the final published `1.0.0` artifacts.
 - [x] Deprecate public APIs with `@deprecated` and migration notes for at least two minor releases; remove them only in the next major release, except for security or correctness emergencies.
-- [ ] Publish through the tag-triggered release workflow hardened in RC2 (all gates, npm provenance, GitHub Release); `1.0.0` must not be the first release to take that path.
-- [ ] Run a post-publish clean-install smoke test.
+- [x] Publish through the tag-triggered release workflow hardened in RC2 (all gates, npm provenance, GitHub Release); `1.0.0` must not be the first release to take that path.
+- [x] Run a post-publish clean-install smoke test.
 
 ---
 
