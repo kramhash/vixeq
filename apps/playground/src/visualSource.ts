@@ -101,7 +101,7 @@ const depthAt = (project: SequenceProject, positionMs: number): number => {
 
 /** Evaluates the visualizer at a position in the pattern, in ms (0 or later). */
 export const evaluateVisual = (project: SequenceProject, positionMs: number): VisualFrame => {
-  const position = Math.max(0, positionMs);
+  let position = Math.max(0, positionMs);
   const stepCount = project.stepCount;
   if (stepCount === 0) {
     return {
@@ -118,6 +118,12 @@ export const evaluateVisual = (project: SequenceProject, positionMs: number): Vi
 
   const stepMs = getStepMs(project);
   const absoluteStep = Math.floor(position / stepMs + STEP_EPSILON);
+  // A position within STEP_EPSILON steps before a step start (e.g. after the
+  // ms -> s -> ms round trip through fx-canvas) is that step's start, for the
+  // envelopes as well as for stepIndex.
+  if (position < absoluteStep * stepMs) {
+    position = absoluteStep * stepMs;
+  }
   const pass = Math.floor(absoluteStep / stepCount);
   const stepIndex = absoluteStep - pass * stepCount;
   const stepFraction = clamp01(position / stepMs - absoluteStep);

@@ -68,6 +68,28 @@ describe("evaluateVisual", () => {
     }
   });
 
+  it("treats a position an ulp before a step start as the step start", () => {
+    // fx-canvas passes the position as seconds; at 119 BPM, step 1's start
+    // comes back from ms -> s -> ms one ulp short of the step.
+    const project = withSteps(createProject({ bpm: 119, stepCount: 16, stepsPerBeat: 4, trackCount: 4 }), 3, [[1, 1]]);
+    const roundTripped = ((1 * getStepMs(project)) / 1000) * 1000;
+    expect(roundTripped).toBeLessThan(getStepMs(project));
+
+    const frame = evaluateVisual(project, roundTripped);
+    expect(frame.stepIndex).toBe(1);
+    expect(frame.colorFlash).toBeCloseTo(0.9);
+    expect(frame.tracks[3]).toBeCloseTo(1);
+
+    for (let bpm = 40; bpm <= 240; bpm += 1) {
+      const everyStep = createProject({ bpm, stepCount: 16, stepsPerBeat: 4, trackCount: 4 });
+      const colored = withSteps(everyStep, 3, Array.from({ length: 16 }, (_, step): [number, number] => [step, 1]));
+      for (let step = 0; step < 16; step += 1) {
+        const atStart = evaluateVisual(colored, ((step * getStepMs(colored)) / 1000) * 1000);
+        expect([bpm, step, atStart.stepIndex, Math.round(atStart.colorFlash * 1e6) / 1e6]).toEqual([bpm, step, step, 0.9]);
+      }
+    }
+  });
+
   it("interpolates complexity between steps instead of jumping", () => {
     const project = withSteps(base(), 2, [[4, 1], [5, 1]]);
     const before = evaluateVisual(project, 3 * 125).complexity;
