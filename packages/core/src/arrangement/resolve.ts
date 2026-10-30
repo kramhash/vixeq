@@ -112,20 +112,36 @@ export const beatAtPosition = (arrangement: ArrangementProject, positionMs: numb
   return beatToMs(arrangement.timing, nextBeat) - positionMs <= POSITION_EPSILON_MS ? nextBeat : beat;
 };
 
+/**
+ * The beat at a transport position, as ArrangementEngine resolves it. With
+ * `loop`, the position wraps in milliseconds into the local loop (transport
+ * position 0 to `durationBeats`), and an ulp below the loop end lands on the
+ * next iteration's start. Without it, a negative position has no beat (null).
+ * Shared by sampleArrangement's loop option and sampleProject.
+ */
+export const beatAtTransportPosition = (
+  arrangement: ArrangementProject,
+  positionMs: number,
+  loop: boolean,
+): number | null => {
+  if (!loop) {
+    return positionMs < 0 ? null : beatAtPosition(arrangement, positionMs);
+  }
+  const loopMs = beatToMs(arrangement.timing, arrangement.durationBeats);
+  const beat = beatAtPosition(arrangement, ((positionMs % loopMs) + loopMs) % loopMs);
+  return beat >= arrangement.durationBeats ? beatAtPosition(arrangement, 0) : beat;
+};
+
 // Wrap in ms, as ArrangementEngine's local loop does: with tempo changes a
 // beat-space modulo would land elsewhere. Beats before 0 extend the first tempo.
 const loopBeat = (arrangement: ArrangementProject, beat: number): number => {
   const { timing } = arrangement;
   const positionMs =
     beat >= 0 ? beatToMs(timing, beat) : timing.startPositionMs + beat * (60_000 / timing.tempos[0].bpm);
-  const loopMs = beatToMs(timing, arrangement.durationBeats);
-  if (positionMs >= 0 && positionMs < loopMs) {
+  if (positionMs >= 0 && positionMs < beatToMs(timing, arrangement.durationBeats)) {
     return beat;
   }
-  const wrapped = beatAtPosition(arrangement, ((positionMs % loopMs) + loopMs) % loopMs);
-  // An ulp below the loop end snaps to the end itself, which is the next
-  // iteration's start.
-  return wrapped >= arrangement.durationBeats ? beatAtPosition(arrangement, 0) : wrapped;
+  return beatAtTransportPosition(arrangement, positionMs, true) as number;
 };
 
 /**

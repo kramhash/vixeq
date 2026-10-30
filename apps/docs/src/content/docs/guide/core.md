@@ -163,8 +163,9 @@ const pulse = envelopeAt(arrangement, positionMs, "kick", { leadMs: 20, decayMs:
 on a track (by id), across sections, gaps, and the loop point. `envelopeAt`
 peaks exactly on each step; a pulse that peaks on the beat and fades fast
 reads as in sync, while one that starts growing on the beat reads as late.
-`sampleArrangement` takes `{ loop: true }` as its fifth argument to wrap like
-local loop.
+`sampleProject` also takes an `ArrangementProject` and a transport position
+(`{ loop: true }` wraps like local loop); `sampleArrangement` is the
+beat-based variant.
 
 ## DOM bindings
 

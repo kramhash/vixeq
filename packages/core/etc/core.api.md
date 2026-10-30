@@ -581,7 +581,7 @@ export const rotateTrackSteps: (project: SequenceProject, trackId: string, offse
 export const sampleArrangement: (arrangement: ArrangementProject, beat: number, easing?: EasingFunction, trackIds?: string[], options?: TimeEvaluationOptions) => Record<string, number>;
 
 // @public
-export const sampleProject: (project: SequenceProject, positionMs: number, easing?: EasingFunction) => Record<string, number>;
+export const sampleProject: (source: SequenceProject | ArrangementProject, positionMs: number, easing?: EasingFunction, options?: TimeEvaluationOptions) => Record<string, number>;
 
 // @public
 export const sectionAtBeat: (arrangement: ArrangementProject, beat: number) => SectionLookup | null;

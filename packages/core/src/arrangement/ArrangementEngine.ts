@@ -14,10 +14,10 @@ import {
   arrangementDurationBeats,
   beatAtPosition,
   resolveArrangementStep,
-  sampleArrangement,
   sectionAtBeat,
   unionTrackIds,
 } from "./resolve";
+import { sampleProject } from "../timeEvaluation";
 import { validateArrangement } from "./project";
 import type {
   ChannelPosition,
@@ -447,7 +447,7 @@ export class ArrangementEngine {
 
     const previousPositionMs = this.getLogicalPositionMs();
     const previousBeat = msToBeat(previousProject.timing, previousPositionMs);
-    const previousChannels = this.sampleArrangementChannels(previousProject, previousPositionMs);
+    const previousChannels = sampleProject(previousProject, previousPositionMs);
     const previousState = this.playbackState;
     const transportPositionMs = this.getTransportPositionMs();
 
@@ -467,7 +467,7 @@ export class ArrangementEngine {
     this.lastDispatchedRawPositionMs = nextPositionMs;
     this.applyTransportSnapshot(this.readTransportSnapshot());
 
-    const channels = this.sampleArrangementChannels(this.arrangement, this.cachedPositionMs);
+    const channels = sampleProject(this.arrangement, this.cachedPositionMs);
     const event: ArrangementProjectEvent = {
       project,
       previousProject,
@@ -531,7 +531,7 @@ export class ArrangementEngine {
    */
   sampleChannels(easing: EasingFunction = linear): Record<string, number> {
     this.assertLive();
-    return this.sampleArrangementChannels(this.arrangement, this.getLogicalPositionMs(), easing);
+    return sampleProject(this.arrangement, this.getLogicalPositionMs(), easing);
   }
 
   /**
@@ -546,7 +546,7 @@ export class ArrangementEngine {
   sampleChannelsAt(positionMs: number, easing: EasingFunction = linear): Record<string, number> {
     this.assertLive();
     assertFiniteNonNegative(positionMs, "positionMs");
-    return this.sampleArrangementChannels(this.arrangement, positionMs, easing);
+    return sampleProject(this.arrangement, positionMs, easing);
   }
 
   private runTransportCommands(
@@ -1316,15 +1316,6 @@ export class ArrangementEngine {
   /** Loop iteration of a raw position; always 0 without Project loop. */
   private getIteration(rawPositionMs: number, looping = this.localLoop): number {
     return looping ? Math.floor(rawPositionMs / this.getDurationMs()) : 0;
-  }
-
-  private sampleArrangementChannels(
-    arrangement: ArrangementProject,
-    positionMs: number,
-    easing: EasingFunction = linear,
-  ): Record<string, number> {
-    const beat = beatAtPosition(arrangement, positionMs);
-    return sampleArrangement(arrangement, beat, easing, unionTrackIds(arrangement));
   }
 
   private getChangedChannelIds(

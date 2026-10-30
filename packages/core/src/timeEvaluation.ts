@@ -1,4 +1,5 @@
 import { lerp, linear, type EasingFunction } from "./easing";
+import { beatAtTransportPosition, sampleArrangement, unionTrackIds } from "./arrangement/resolve";
 import type { ArrangementProject, ArrangementSection } from "./arrangement/types";
 import { clamp01 } from "./smoothing";
 import { beatToMs, msToBeat } from "./timeline/timing";
@@ -84,31 +85,49 @@ const enabledTrack = (project: SequenceProject, trackId: string): Track | undefi
 };
 
 /**
- * Samples every track of a {@link SequenceProject} at a position, as a pure
- * function: no engine, and the same result for the same arguments.
+ * Samples every track at a position, as a pure function: no engine, and the
+ * same result for the same arguments.
  *
- * The pattern loops forever, so any finite position is valid: positions past
- * the last step and negative positions wrap around the pattern.
- * For non-negative positions the result equals
- * `SequencerEngine#sampleChannelsAt`, including at a step's exact start, where
- * `positionMs / stepMs` can round just below the step index and sample the
- * previous step. {@link lastStepAt} decides step boundaries in ms instead, so
- * at that exact position it can already report the new step.
+ * - A `SequenceProject` loops forever, so any finite position is valid:
+ *   positions past the last step and negative positions wrap around the
+ *   pattern. For non-negative positions the result equals
+ *   `SequencerEngine#sampleChannelsAt`, including at a step's exact start,
+ *   where `positionMs / stepMs` can round just below the step index and sample
+ *   the previous step. {@link lastStepAt} decides step boundaries in ms
+ *   instead, so at that exact position it can already report the new step.
+ * - An `ArrangementProject` is sampled at a transport position, with the same
+ *   keys as {@link sampleArrangement} (every pattern's track ids). Without
+ *   `options.loop`, a negative position or one past the end samples 0; with
+ *   it, positions wrap into the local loop, as in `ArrangementEngine` with
+ *   local loop on. For non-negative positions without loop the result equals
+ *   `ArrangementEngine#sampleChannelsAt`. Prefer this to converting with
+ *   `msToBeat` and calling `sampleArrangement`: `msToBeat` clamps negative
+ *   positions and can land an ulp before a step start at odd tempos.
  *
- * @param project - The pattern to sample.
- * @param positionMs - Position in ms from the start of the pattern.
+ * @param source - The pattern or arrangement to sample.
+ * @param positionMs - Position in ms: from the start of the pattern, or the
+ *   arrangement's transport position.
  * @param easing - Easing curve applied to the interpolation phase between
  *   steps. Defaults to {@link linear}; use {@link hold} to keep each step's
  *   own value.
+ * @param options - See {@link TimeEvaluationOptions}.
  * @returns A record of trackId → 0–1 value; disabled tracks sample to 0.
  * @throws RangeError if `positionMs` is not finite.
  */
 export const sampleProject = (
-  project: SequenceProject,
+  source: SequenceProject | ArrangementProject,
   positionMs: number,
   easing: EasingFunction = linear,
+  options: TimeEvaluationOptions = {},
 ): Record<string, number> => {
   assertFinitePosition(positionMs);
+  if (isArrangement(source)) {
+    const ids = unionTrackIds(source);
+    const beat = beatAtTransportPosition(source, positionMs, options.loop ?? false);
+    return sampleArrangement(source, beat ?? -1, easing, ids);
+  }
+
+  const project = source;
   const stepDurationMs = sequenceStepDurationMs(project);
   const stepCount = Math.max(1, project.stepCount);
   const position = positionMs < 0 ? mod(positionMs, stepDurationMs * stepCount) : positionMs;
