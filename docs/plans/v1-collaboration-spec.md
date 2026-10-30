@@ -797,6 +797,10 @@ Codex and Claude must follow these rules when working concurrently:
 
 ### Task table
 
+The table records the 1.0 release work and closes with S1. Work after 1.0 is
+tracked and claimed through GitHub issues (see `AGENTS.md`); rule 2 above
+applies to the rows below only.
+
 Status values: `pending`, `in_progress`, `blocked`, `done`.
 
 | ID | Release | Work item | Depends on | Status | Owner | Primary files |

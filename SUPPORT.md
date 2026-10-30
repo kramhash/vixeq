@@ -82,12 +82,10 @@ on the Node 22 build leg.
 
 ## Semver Policy
 
-Before `1.0.0`, Vixeq may make breaking public API changes in minor releases
-when the change is required to reach the approved 1.0 contract. These changes
-must be documented in `CHANGELOG.md` and accompanied by a migration guide or
-explicit migration notes.
+Before `1.0.0`, breaking changes could ship in minor releases; they are
+documented in `CHANGELOG.md` and the migration guides.
 
-After `1.0.0`:
+From `1.0.0`:
 
 - Patch releases contain bug fixes, documentation corrections, and compatible
   packaging fixes.
