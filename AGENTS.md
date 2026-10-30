@@ -1,19 +1,15 @@
 # Agent Collaboration
 
-Before working on the pre-1.0 redesign, read
-[`docs/plans/v1-collaboration-spec.md`](docs/plans/v1-collaboration-spec.md).
-It is the approved source of truth for Playback v2, Timeline/Arrangement v2,
-release gates, and migration behavior.
+[`docs/plans/v1-collaboration-spec.md`](docs/plans/v1-collaboration-spec.md)
+is the approved contract for the 1.0 API: Playback v2, Timeline/Arrangement
+v2, release gates, and migration behavior. Read it before changing Engine
+behavior, and keep 1.x changes within the semver policy in `SUPPORT.md`.
 
 ## Where work is tracked
 
-- **The 1.0 release work** (RC2, RC3, S1, and the other rows already in the
-  spec's task table) stays in that table until `1.0.0` ships.
-- **New work** (fixes, additions, and requests found after 0.9, including the
-  frapx integration findings) is tracked as GitHub issues. Milestones give the
-  release: `1.0.0-rc.N` for items that must land before that RC (a row in the
-  task table references them), `1.0.0` for items found while validating the RC
-  that must land before the stable publish (S1) without changing public API,
+- **All work** is tracked as GitHub issues. The spec's task table recorded
+  the 1.0 release work and closed with S1; do not add rows to it.
+- Milestones give the release: `1.0.x` for fixes that change no public API,
   `1.1.0`–`1.3.0` for the additive follow-ups in `ROADMAP.md`, and no
   milestone for later.
 - Issue bodies use the headings Problem / What exists / Proposed change /

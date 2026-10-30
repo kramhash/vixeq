@@ -1,7 +1,7 @@
 # Vixeq Support Policy
 
 This policy defines the support, compatibility, and semver rules for the
-pre-1.0 release-readiness line and the 1.0 API freeze.
+1.x stable line.
 
 ## Supported Versions
 
@@ -10,10 +10,9 @@ Vixeq packages are released in lockstep. `@vixeq/core`, `@vixeq/react`, and
 
 | Release line | Status | Notes |
 | --- | --- | --- |
-| `0.9.x` | release-readiness | Final pre-1.0 gates, support docs, and migration docs. |
-| `1.0.0-rc.x` | release candidate | Published only after all 0.7-0.9 gates are green. |
-| `1.0.x` | stable | API freeze line after the RC passes real-consumer validation. |
-| `<0.9` | migration source | Documented for upgrades, but not the active support line. |
+| `1.x` | stable | Active line. Minor releases add API only; see the semver policy below. |
+| `1.0.0-rc.x` | superseded | Release candidates for `1.0.0`; upgrade to `1.x`. |
+| `<=0.9` | migration source | Documented for upgrades (`CHANGELOG.md` "1.0.0" → "Upgrading from 0.9.0"), but not supported. |
 
 ## Runtime Support Matrix
 
@@ -83,12 +82,10 @@ on the Node 22 build leg.
 
 ## Semver Policy
 
-Before `1.0.0`, Vixeq may make breaking public API changes in minor releases
-when the change is required to reach the approved 1.0 contract. These changes
-must be documented in `CHANGELOG.md` and accompanied by a migration guide or
-explicit migration notes.
+Before `1.0.0`, breaking changes could ship in minor releases; they are
+documented in `CHANGELOG.md` and the migration guides.
 
-After `1.0.0`:
+From `1.0.0`:
 
 - Patch releases contain bug fixes, documentation corrections, and compatible
   packaging fixes.
@@ -96,6 +93,9 @@ After `1.0.0`:
 - Major releases are required for breaking public API changes, support-matrix
   removals, export removals, or semantic behavior changes that existing
   consumers cannot adopt without code changes.
+- An API is deprecated (`@deprecated` in its TSDoc, with a migration note in
+  `CHANGELOG.md`) for at least two minor releases before a major release
+  removes it. Security or correctness emergencies are the only exception.
 
 What counts as public API:
 
@@ -141,6 +141,10 @@ The current migration guides are:
 - [`docs/migrations/0.7-playback-v2.md`](./docs/migrations/0.7-playback-v2.md)
 - [`docs/migrations/0.8-timeline-arrangement-v2.md`](./docs/migrations/0.8-timeline-arrangement-v2.md)
 - [`docs/migrations/0.9-react-render-frugal.md`](./docs/migrations/0.9-react-render-frugal.md)
+- [`docs/migrations/1.0-rc2-naming.md`](./docs/migrations/1.0-rc2-naming.md)
+
+To upgrade from 0.9 to 1.0, start from `CHANGELOG.md` "1.0.0" → "Upgrading
+from 0.9.0".
 
 Migration functions reject invalid or ambiguous input instead of silently
 inventing domain meaning. When a required v2 value cannot be derived safely,

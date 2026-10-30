@@ -243,7 +243,7 @@ export function renderPagesIndex(targets = pagesTargets, pagesBase = "") {
         <p class="brand"><span class="brand-mark" aria-hidden="true"></span> Vixeq examples</p>
         <h1 id="page-title">Playback, Timeline, and Arrangement examples</h1>
         <p>
-          Release-readiness builds for the official Vixeq examples. These pages are
+          Builds of the official Vixeq examples. These pages are
           published together so browser checks can exercise the same artifacts users open.
         </p>
       </section>

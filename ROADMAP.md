@@ -12,8 +12,9 @@ Two first-class use cases illustrate the breadth:
 ## Guiding Principles
 
 - **Core stays dependency-free.** `@vixeq/core` will never take a runtime dependency.
-- **Respect backward compatibility.** Before 1.0, breaking changes are
-  documented in `CHANGELOG.md` with a migration note.
+- **Respect backward compatibility.** Since 1.0, breaking changes ship only in
+  a major release, after a deprecation period, with a migration note in
+  `CHANGELOG.md` (see `SUPPORT.md`).
 - **Separation of concerns.** Pure logic (`core`) → hooks (`react`) → GUI (`player-react`). Each layer is independently usable.
 - **Examples over documentation.** A working, runnable example is worth more than prose.
 
@@ -271,13 +272,13 @@ All public packages use lockstep versions, including prereleases, through these 
 - [x] Let callers supply track ids and make generated ids project-local and deterministic, so ids no longer depend on call order (RC1J, issue [#3](https://github.com/kramhash/vixeq/issues/3); moved here from 1.1.0 because generated ids change).
 - [x] Handle a negative `TimingMap.startPositionMs` (beat 1 before the start of the audio) instead of silently clamping it to 0 (RC1K, issue [#4](https://github.com/kramhash/vixeq/issues/4)).
 - [x] Harden the tag-triggered publish workflow before the RC: run every repository gate, publish prereleases under the `next` dist-tag, attach npm provenance, and create a GitHub Release. The RC itself is published through this workflow (RC2).
-- [ ] Freeze all three public package APIs against their committed reports.
-- [ ] Publish all public packages at the same RC version.
-- [ ] Make the official examples consume the packed RC packages rather than workspace source paths for release verification.
-- [ ] Verify fresh installation from npm tarballs, including ESM, CJS, types, exports, and CSS entry points.
-- [ ] Validate the RC in a real consumer: upgrade the frapx integration lab from 0.9 using only the published migration notes, then build it and exercise every page. This replaced the 14-day observation window on 2026-10-30, because the RCs had no outside users who could report defects in that time.
-- [ ] Require zero known blocker or critical defects.
-- [ ] Require the compatibility matrix to remain green. A defect that needs a public API change ships in a new RC, which is validated the same way.
+- [x] Freeze all three public package APIs against their committed reports.
+- [x] Publish all public packages at the same RC version.
+- [x] Make the official examples consume the packed RC packages rather than workspace source paths for release verification.
+- [x] Verify fresh installation from npm tarballs, including ESM, CJS, types, exports, and CSS entry points.
+- [x] Validate the RC in a real consumer: upgrade the frapx integration lab from 0.9 using only the published migration notes, then build it and exercise every page. This replaced the 14-day observation window on 2026-10-30, because the RCs had no outside users who could report defects in that time.
+- [x] Require zero known blocker or critical defects.
+- [x] Require the compatibility matrix to remain green. A defect that needs a public API change ships in a new RC, which is validated the same way.
 
 ---
 
@@ -285,12 +286,12 @@ All public packages use lockstep versions, including prereleases, through these 
 
 **Theme**: Retire the early-development label and begin explicit semver guarantees.
 
-- [ ] Confirm every 0.7–0.9 and RC gate is complete.
+- [x] Confirm every 0.7–0.9 and RC gate is complete.
 - [ ] Publish `@vixeq/core`, `@vixeq/react`, and `@vixeq/player-react` at the same `1.0.0` version.
-- [ ] Remove the README and package README early-development and pre-1.0 stability disclaimers.
+- [x] Remove the README and package README early-development and pre-1.0 stability disclaimers.
 - [ ] Confirm the compatibility matrix, semver policy, and support policy still
   match the final published `1.0.0` artifacts.
-- [ ] Deprecate public APIs with `@deprecated` and migration notes for at least two minor releases; remove them only in the next major release, except for security or correctness emergencies.
+- [x] Deprecate public APIs with `@deprecated` and migration notes for at least two minor releases; remove them only in the next major release, except for security or correctness emergencies.
 - [ ] Publish through the tag-triggered release workflow hardened in RC2 (all gates, npm provenance, GitHub Release); `1.0.0` must not be the first release to take that path.
 - [ ] Run a post-publish clean-install smoke test.
 
@@ -371,4 +372,3 @@ These items are not planned:
 - **MIDI input, MIDI note/trigger output, and MIDI clock** — continuous CC output is planned for 1.3.0 (see above).
 - **DAW-style timeline editing UI**
 - **URL sharing / project serialization beyond JSON export**
-- **Production stability guarantees before 1.0**

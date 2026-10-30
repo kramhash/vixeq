@@ -1,6 +1,6 @@
 {
   "name": "@vixeq/core",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0",
   "type": "module",
   "description": "A UI-agnostic step sequencer engine for 0-1 control values.",
   "license": "MIT",

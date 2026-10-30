@@ -274,8 +274,9 @@ await engine.seekBeat(8); // a seek dispatches no cues
 
 ## Package Status
 
-This package is in the pre-1.0 release-readiness line. It intentionally stays
-UI-agnostic, while React hooks and GUI components live in separate packages.
+This package is stable (`1.x`) and follows the semver policy in the
+repository's `SUPPORT.md`. It stays UI-agnostic, while React hooks and GUI
+components live in separate packages.
 
 The current scope is the engine, immutable project helpers, track transforms,
 validation, presets, smoothing helpers, timeline utilities, envelope

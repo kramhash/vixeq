@@ -1,5 +1,62 @@
 # Changelog
 
+## 1.0.0 - 2026-10-30
+
+First stable release. The API is the same as `1.0.0-rc.2`, and from here
+`@vixeq/core`, `@vixeq/react`, and `@vixeq/player-react` follow the semver
+policy in [`SUPPORT.md`](./SUPPORT.md): breaking changes only in a major
+release, deprecations kept for at least two minor releases.
+
+`1.0.0-rc.2` was validated in a real consumer before promotion: the frapx
+integration lab was upgraded from 0.9.0 using only the migration notes, then
+type-checked, built, and exercised in a browser (sequence playback and
+editing, audio-synced Arrangement playback, and shader output).
+
+### Upgrading from 0.9.0
+
+`0.9.0` is the previous stable release. The changes since then are listed
+under `1.0.0-rc.1` and `1.0.0-rc.2` below; in short:
+
+1. Use Node.js 22 or later and TypeScript 5.5 or later.
+2. Install the three packages side by side
+   (`npm install @vixeq/core @vixeq/react @vixeq/player-react`): `@vixeq/react`
+   and `@vixeq/player-react` now take `@vixeq/core` (and `@vixeq/react`) as
+   peer dependencies.
+3. Apply the renames in the
+   [naming guide](./docs/migrations/1.0-rc2-naming.md). Its "rc.1" names are
+   also the 0.9 names: `useSequencerEngine` → `useSequencer`, transport
+   `seekMs` → `seekPositionMs`, Arrangement `getArrangement` /
+   `setArrangement` / `arrangement` → `getProject` / `setProject` /
+   `project`, and `MutableRefObject` → `ReadonlyRef`. TypeScript reports each
+   call site.
+4. Replace the removed exports listed under `1.0.0-rc.2` → Breaking (for
+   example `clamp01`, `normalizeTempos`).
+5. Generated track ids are now project-local (`track-1`, `track-2`, ...), so
+   two projects built with the same options share ids. If several patterns in
+   one Arrangement must stay separate channels, pass explicit ids
+   (`createProject({ tracks: [{ id: "intro-lead" }] })`). Code that looks
+   tracks up by name is unaffected.
+6. A negative `TimingMap.startPositionMs` is no longer clamped to 0. Drop it
+   to keep the old timing.
+7. Pass every required field to `addTimelineEvent` / `addTimelineTrack`, and
+   change a union event's `type` and `data` together in
+   `updateTimelineEvent`.
+8. Check saved Sequence projects with `validateProject`: one without
+   `stepsPerBeat` is now rejected; repair it with `normalizeProject`.
+
+The Engines also changed behavior in edge cases (listener re-entrancy,
+delayed ticks across loop wraps, `pause` at local end, seeking past local
+end); see Changed and Fixed under both RCs.
+
+### Known caveats
+
+- Browser support follows the locked Playwright browser set recorded in
+  [`SUPPORT.md`](./SUPPORT.md).
+- WebKit and CI Firefox browser E2E do not assert real WebAudio playback
+  start/progression when Linux headless Playwright cannot start or advance
+  `AudioContext.currentTime`.
+- Node.js 20 is not supported for the 1.0 line.
+
 ## 1.0.0-rc.2 - 2026-10-26
 
 Second release candidate for `1.0.0`, with the fixes from the pre-1.0 API
