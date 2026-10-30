@@ -1,5 +1,5 @@
 import { lerp, linear, type EasingFunction } from "../easing";
-import { msToBeat } from "../timeline/timing";
+import { beatToMs, msToBeat } from "../timeline/timing";
 import type { TimeEvaluationOptions } from "../timeEvaluation";
 import type { ArrangementProject, ArrangementSection } from "./types";
 
@@ -86,13 +86,17 @@ export const resolveArrangementStep = (
   return { section: lookup.section, stepIndex, nextStepIndex, phase };
 };
 
+// Wrap in ms, as ArrangementEngine's local loop does: with tempo changes a
+// beat-space modulo would land elsewhere. Beats before 0 extend the first tempo.
 const loopBeat = (arrangement: ArrangementProject, beat: number): number => {
-  if (beat >= 0 && beat < arrangement.durationBeats) {
+  const { timing } = arrangement;
+  const positionMs =
+    beat >= 0 ? beatToMs(timing, beat) : timing.startPositionMs + beat * (60_000 / timing.tempos[0].bpm);
+  const loopMs = beatToMs(timing, arrangement.durationBeats);
+  if (positionMs >= 0 && positionMs < loopMs) {
     return beat;
   }
-  const loopStartBeat = msToBeat(arrangement.timing, 0);
-  const loopBeats = arrangement.durationBeats - loopStartBeat;
-  return loopStartBeat + ((((beat - loopStartBeat) % loopBeats) + loopBeats) % loopBeats);
+  return msToBeat(timing, ((positionMs % loopMs) + loopMs) % loopMs);
 };
 
 /**
@@ -102,10 +106,11 @@ const loopBeat = (arrangement: ArrangementProject, beat: number): number => {
  * set across section boundaries — tracks not in the active pattern (or
  * positions in a gap / past the end) read 0.
  *
- * With `options.loop`, a beat past `durationBeats` or before 0 wraps into the
- * local loop, which starts at transport position 0 (the beat
- * `msToBeat(timing, 0)`) and ends at `durationBeats`, as in `ArrangementEngine`
- * with local loop on.
+ * With `options.loop`, a beat outside the local loop wraps into it, as in
+ * `ArrangementEngine` with local loop on: the loop runs from transport
+ * position 0 to `durationBeats`, and positions wrap in milliseconds, so tempo
+ * changes are respected. With a negative `startPositionMs`, beats before
+ * transport position 0 wrap to the end of the loop.
  */
 export const sampleArrangement = (
   arrangement: ArrangementProject,

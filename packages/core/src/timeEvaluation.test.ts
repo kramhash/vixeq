@@ -5,7 +5,7 @@ import type { ArrangementProject } from "./arrangement/types";
 import { easeOutQuad, hold, linear } from "./easing";
 import { createProject } from "./project";
 import { SequencerEngine } from "./SequencerEngine";
-import { beatToMs } from "./timeline/timing";
+import { beatToMs, msToBeat } from "./timeline/timing";
 import { envelopeAt, lastStepAt, nextStepAt, sampleProject } from "./timeEvaluation";
 import type { SequenceProject } from "./types";
 
@@ -96,6 +96,34 @@ describe("sampleArrangement loop option", () => {
     expect(sampleArrangement(arrangement, 3.75, hold, ids, { loop: true })).toEqual(
       sampleArrangement(arrangement, 3.75, hold, ids),
     );
+  });
+
+  it("wraps in ms like the Engine's local loop when the tempo changes", () => {
+    // 120 BPM for 3 beats, then 60 BPM: durationBeats 6 is 4500 ms.
+    const tempoChange = createArrangement({
+      timing: { tempos: [{ beat: 0, bpm: 120 }, { beat: 3, bpm: 60 }] },
+      durationBeats: 6,
+      patterns: { a: pattern([1, 0.2, 0.4, 0.6]) },
+      sections: [{ id: "a", patternId: "a", startBeat: 0, endBeat: 6 }],
+    });
+    // 4900 ms wraps to 400 ms = beat 0.8 = step 3.
+    const beat = msToBeat(tempoChange.timing, 4900);
+    expect(sampleArrangement(tempoChange, beat, hold, ["kick"], { loop: true })).toEqual({ kick: 0.6 });
+    expect(lastStepAt(tempoChange, 4900, "kick", { loop: true })).toMatchObject({ value: 0.6, positionMs: 4875 });
+  });
+
+  it("wraps beats before transport position 0 to the end of the loop", () => {
+    // Beat 0 is 250 ms before transport 0; the section ends at 750 ms, so the
+    // loop end (2750 ms) is in a gap.
+    const shifted = createArrangement({
+      timing: { bpm: 120, startPositionMs: -250 },
+      durationBeats: 6,
+      patterns: { a: pattern([1, 1, 1, 1]) },
+      sections: [{ id: "a", patternId: "a", startBeat: 0, endBeat: 2 }],
+    });
+    expect(sampleArrangement(shifted, 0.25, hold, ["kick"])).toEqual({ kick: 1 });
+    expect(sampleArrangement(shifted, 0.25, hold, ["kick"], { loop: true })).toEqual({ kick: 0 });
+    expect(sampleArrangement(shifted, -1, hold, ["kick"], { loop: true })).toEqual({ kick: 0 });
   });
 
   it("starts the loop at transport position 0 when startPositionMs is negative", () => {

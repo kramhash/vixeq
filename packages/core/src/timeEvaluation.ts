@@ -90,7 +90,10 @@ const enabledTrack = (project: SequenceProject, trackId: string): Track | undefi
  * The pattern loops forever, so any finite position is valid: positions past
  * the last step and negative positions wrap around the pattern.
  * For non-negative positions the result equals
- * `SequencerEngine#sampleChannelsAt`.
+ * `SequencerEngine#sampleChannelsAt`, including at a step's exact start, where
+ * `positionMs / stepMs` can round just below the step index and sample the
+ * previous step. {@link lastStepAt} decides step boundaries in ms instead, so
+ * at that exact position it can already report the new step.
  *
  * @param project - The pattern to sample.
  * @param positionMs - Position in ms from the start of the pattern.
@@ -165,10 +168,29 @@ type SectionGrid = {
   stepCount: number;
   steps: number;
   stepMs: (step: number) => number;
+  startMs: number;
   endMs: number;
 };
 
-const sectionGrids = (arrangement: ArrangementProject, trackId: string): SectionGrid[] =>
+// Projects are immutable (SUPPORT.md), so the grids can be cached per project
+// and track: per-frame callers then pay for a lookup, not a rebuild.
+const gridCache = new WeakMap<ArrangementProject, Map<string, SectionGrid[]>>();
+
+const sectionGrids = (arrangement: ArrangementProject, trackId: string): SectionGrid[] => {
+  let byTrack = gridCache.get(arrangement);
+  if (!byTrack) {
+    byTrack = new Map();
+    gridCache.set(arrangement, byTrack);
+  }
+  let grids = byTrack.get(trackId);
+  if (!grids) {
+    grids = buildSectionGrids(arrangement, trackId);
+    byTrack.set(trackId, grids);
+  }
+  return grids;
+};
+
+const buildSectionGrids = (arrangement: ArrangementProject, trackId: string): SectionGrid[] =>
   [...arrangement.sections]
     .sort((a, b) => a.startBeat - b.startBeat)
     .flatMap((section) => {
@@ -183,10 +205,23 @@ const sectionGrids = (arrangement: ArrangementProject, trackId: string): Section
           stepCount: Math.max(1, pattern.stepCount),
           steps: Math.ceil((section.endBeat - section.startBeat) * stepsPerBeat - 1e-9),
           stepMs: (step: number) => beatToMs(arrangement.timing, section.startBeat + step / stepsPerBeat),
+          startMs: beatToMs(arrangement.timing, section.startBeat),
           endMs: beatToMs(arrangement.timing, section.endBeat),
         },
       ];
     });
+
+/** The index of the first grid for which `before` is false (grids are in time order). */
+const partition = (grids: SectionGrid[], before: (grid: SectionGrid) => boolean): number => {
+  let low = 0;
+  let high = grids.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (before(grids[middle])) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+};
 
 const stepEndMs = (grid: SectionGrid, step: number): number =>
   step + 1 < grid.steps ? grid.stepMs(step + 1) : grid.endMs;
@@ -213,7 +248,9 @@ const arrangementLastStep = (
   positionMs: number,
   clampToZero: boolean,
 ): GridStep | null => {
-  for (let index = grids.length - 1; index >= 0; index -= 1) {
+  // Sections are sorted and do not overlap: start from the last one that has
+  // begun by `positionMs`.
+  for (let index = partition(grids, (grid) => grid.startMs <= positionMs) - 1; index >= 0; index -= 1) {
     const grid = grids[index];
     if (!grid.track) continue;
     const last = stepAtOrBefore(grid, arrangement, positionMs);
@@ -235,8 +272,9 @@ const arrangementNextStep = (
   positionMs: number,
   clampToZero: boolean,
 ): GridStep | null => {
-  for (const grid of grids) {
-    if (!grid.track || grid.endMs <= positionMs) continue;
+  for (let index = partition(grids, (grid) => grid.endMs <= positionMs); index < grids.length; index += 1) {
+    const grid = grids[index];
+    if (!grid.track) continue;
     let first = Math.max(0, stepAtOrBefore(grid, arrangement, positionMs) + 1);
     // Skip steps that end before transport position 0 before counting a
     // pattern's worth of steps, so the loop-fill after them is still reached.
