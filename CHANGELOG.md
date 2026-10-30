@@ -52,6 +52,16 @@
   frame at that step's start
   ([#7](https://github.com/kramhash/vixeq/issues/7)).
 
+### Fixed
+
+- `@vixeq/core`: at some tempos, `SequencerEngine` resolved a position
+  exactly on a step's start (`k * stepMs`) as the previous step, because
+  `positionMs / stepMs` rounded just below `k`. `sampleChannelsAt` sampled the
+  previous step there, and `seekStep(k)` reported step `k - 1` as the current
+  step and in its step event. Step boundaries are now decided in ms, as
+  `lastStepAt` does, so only positions within an ulp of a step start change
+  ([#53](https://github.com/kramhash/vixeq/issues/53)).
+
 ## 1.0.0 - 2026-10-30
 
 First stable release. The API is the same as `1.0.0-rc.2`, and from here

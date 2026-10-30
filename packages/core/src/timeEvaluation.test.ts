@@ -68,6 +68,28 @@ describe("sampleProject", () => {
     expect(sampleProject(project, 100, linear).kick).toBeCloseTo(0.76);
   });
 
+  it("samples step s at its exact start, as lastStepAt does, at every tempo (#53)", () => {
+    // 16 distinct non-zero values, so hold reveals which step was sampled.
+    const steps = Array.from({ length: 16 }, (_, step) => (step + 1) / 16);
+    for (const stepsPerBeat of [1, 2, 3, 4, 5, 6, 7, 8, 12]) {
+      for (let bpm = 60; bpm <= 180; bpm += 1) {
+        const project = createProject({
+          bpm,
+          stepCount: steps.length,
+          stepsPerBeat,
+          tracks: [{ id: "kick", name: "kick", steps }],
+        });
+        const stepMs = 60_000 / bpm / stepsPerBeat;
+        for (let step = 0; step < steps.length; step += 1) {
+          const positionMs = step * stepMs;
+          expect(sampleProject(project, positionMs, hold).kick).toBe(steps[step]);
+          expect(lastStepAt(project, positionMs, "kick")?.value).toBe(steps[step]);
+          expect(sampleProject(project, positionMs, linear).kick).toBe(steps[step]);
+        }
+      }
+    }
+  });
+
   it("samples disabled tracks to 0 and rejects non-finite positions", () => {
     expect(sampleProject(pattern([1, 1], { enabled: false }), 10)).toEqual({ kick: 0 });
     expect(() => sampleProject(kick, Number.NaN)).toThrow(RangeError);
