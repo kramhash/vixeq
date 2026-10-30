@@ -71,6 +71,12 @@ engine.dispose();
 
 Use `setProject(nextProject)` when your app edits the immutable project while the engine is alive.
 
+`getDurationMs()` / `getDurationBeats()` report the project's length on every
+Engine: local end for `ArrangementEngine` and `TimelineEngine`, and one pass of
+the pattern for `SequencerEngine` (which keeps looping). They follow
+`setProject`, and differ from `transport.getDurationMs()`, which is the media
+length.
+
 ## Audio Sync
 
 Vixeq does not require audio, but browser audio can be used as an optional playback transport.

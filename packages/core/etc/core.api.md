@@ -23,6 +23,8 @@ export class ArrangementEngine {
     constructor(arrangement: ArrangementProject, options?: ArrangementEngineOptions);
     dispose(): void;
     getCurrentSection(): ArrangementSection | null;
+    getDurationBeats(): number;
+    getDurationMs(): number;
     getPlaybackState(): PlaybackState;
     getPosition(): ChannelPosition;
     getProject(): ArrangementProject;
@@ -622,6 +624,8 @@ export class SequencerEngine {
     constructor(project: SequenceProject, options?: SequencerEngineOptions);
     dispose(): void;
     getCurrentStepIndex(): number;
+    getDurationBeats(): number;
+    getDurationMs(): number;
     getPlaybackState(): PlaybackState;
     getPosition(): ChannelPosition;
     getProject(): SequenceProject;
@@ -756,6 +760,8 @@ export type TimelineCueEvent<TEvent extends TimelineEvent = TimelineEvent> = {
 export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     constructor(project: TimelineProject<TEvent>, options?: TimelineEngineOptions<TEvent>);
     dispose(): void;
+    getDurationBeats(): number;
+    getDurationMs(): number;
     getPlaybackState(): PlaybackState;
     getPosition(): ChannelPosition;
     getProject(): TimelineProject<TEvent>;

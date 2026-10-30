@@ -4,6 +4,15 @@
 
 ### Added
 
+- `@vixeq/core`: `getDurationMs()` and `getDurationBeats()` on
+  `SequencerEngine`, `ArrangementEngine`, and `TimelineEngine` report the
+  project's length: local end for Arrangement and Timeline, and one pass of the
+  pattern for the Sequencer, which keeps looping past it. They follow
+  `setProject` and throw `TRANSPORT_DISPOSED` after `dispose()`, like the other
+  Engine methods. This is the project's length, not the media length that
+  `transport.getDurationMs()` reports
+  ([#45](https://github.com/kramhash/vixeq/issues/45)).
+
 - `@vixeq/core`: time-based evaluation for shaders and offline rendering,
   as pure functions of the position
   ([#5](https://github.com/kramhash/vixeq/issues/5)):

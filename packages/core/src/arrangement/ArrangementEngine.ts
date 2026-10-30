@@ -337,7 +337,7 @@ export class ArrangementEngine {
    */
   seekBeat(beat: number): Promise<void> {
     this.assertLive();
-    const durationBeats = this.getDurationBeats();
+    const durationBeats = this.durationBeatsOf();
     if (!Number.isFinite(beat) || beat < 0 || beat > durationBeats) {
       throw new RangeError(`beat must be a finite number from 0 to ${durationBeats}.`);
     }
@@ -427,6 +427,26 @@ export class ArrangementEngine {
     if (this.ownsTransport) {
       this.transport.dispose();
     }
+  }
+
+  /**
+   * Returns the arrangement's length in beats (`durationBeats`): local end,
+   * where playback ends unless local loop is on. Follows `setProject`.
+   */
+  getDurationBeats(): number {
+    this.assertLive();
+    return this.durationBeatsOf();
+  }
+
+  /**
+   * Returns the arrangement's length in ms: the transport position of local
+   * end (`beatToMs(timing, durationBeats)`). This is the arrangement's length,
+   * not the media length that `transport.getDurationMs()` reports. Follows
+   * `setProject`.
+   */
+  getDurationMs(): number {
+    this.assertLive();
+    return this.durationMsOf();
   }
 
   /** Returns the loaded project. */
@@ -775,7 +795,7 @@ export class ArrangementEngine {
 
     if (this.isAtOrPastLocalEnd(positionMs)) {
       this.playbackState = "ended";
-      this.cachedPositionMs = this.getDurationMs();
+      this.cachedPositionMs = this.durationMsOf();
       this.syncCurrentSection(this.cachedPositionMs);
       return;
     }
@@ -811,10 +831,10 @@ export class ArrangementEngine {
       // A listener that re-entrantly seeks, stops, hot-swaps, toggles loop, or
       // disposes has already re-anchored playback (and announced any local end
       // itself); one that pauses has had local end finished by runDispatch.
-      if (!this.runDispatch(() => this.emitDueItems(this.getDurationMs()))) {
+      if (!this.runDispatch(() => this.emitDueItems(this.durationMsOf()))) {
         return;
       }
-      this.cachedPositionMs = this.getDurationMs();
+      this.cachedPositionMs = this.durationMsOf();
       this.playbackState = "ended";
       this.emitSectionForPosition(this.cachedPositionMs, "tick", true);
       // A section listener may re-entrantly seek, stop, or hot-swap to a longer
@@ -864,12 +884,12 @@ export class ArrangementEngine {
     if (this.dispatchGeneration === pause.generation) {
       // Local end was reached without loop; a pause listener that enabled loop
       // since then has left the Engine ended there.
-      this.emitDueItems(this.getDurationMs(), false);
+      this.emitDueItems(this.durationMsOf(), false);
     }
     if (!this.isLocalEndPauseCurrent(pause)) {
       return;
     }
-    this.emitSectionForPosition(this.getDurationMs(), "tick", true);
+    this.emitSectionForPosition(this.durationMsOf(), "tick", true);
     if (!this.isLocalEndPauseCurrent(pause)) {
       return;
     }
@@ -890,13 +910,13 @@ export class ArrangementEngine {
     const fromRawPositionMs = this.lastDispatchedRawPositionMs;
     const transportPositionMs = looping
       ? this.normalizePosition(toRawPositionMs)
-      : Math.min(toRawPositionMs, this.getDurationMs());
+      : Math.min(toRawPositionMs, this.durationMsOf());
 
     if (toRawPositionMs < fromRawPositionMs) {
       return this.emitAfterBackwardMove(toRawPositionMs, transportPositionMs);
     }
 
-    const durationMs = this.getDurationMs();
+    const durationMs = this.durationMsOf();
     // Positions are reported relative to the loop iteration the tick landed
     // in, so steps of earlier iterations have negative scheduled positions.
     const landingOffsetMs = this.getIteration(toRawPositionMs, looping) * durationMs;
@@ -1152,7 +1172,7 @@ export class ArrangementEngine {
   }
 
   private normalizePosition(positionMs: number): number {
-    const durationMs = this.getDurationMs();
+    const durationMs = this.durationMsOf();
     if (this.localLoop && durationMs > 0) {
       return ((positionMs % durationMs) + durationMs) % durationMs;
     }
@@ -1168,7 +1188,7 @@ export class ArrangementEngine {
   }
 
   private isAtOrPastLocalEnd(positionMs: number): boolean {
-    return !this.localLoop && positionMs >= this.getDurationMs();
+    return !this.localLoop && positionMs >= this.durationMsOf();
   }
 
   private resolveAtPosition(positionMs: number, arrangement = this.arrangement): ArrangementStepResolution | null {
@@ -1197,7 +1217,7 @@ export class ArrangementEngine {
    * time. Without loop, local end is exclusive: a step cannot start there.
    */
   private getDueItems(fromRawPositionMs: number, toRawPositionMs: number, looping: boolean): DueItem[] {
-    const durationMs = this.getDurationMs();
+    const durationMs = this.durationMsOf();
     const startIteration = this.getIteration(fromRawPositionMs, looping);
     const endIteration = this.getIteration(toRawPositionMs, looping);
     const items: DueItem[] = [];
@@ -1226,7 +1246,7 @@ export class ArrangementEngine {
     const { timing, sections, patterns } = this.arrangement;
     // Positions before transport 0 (a negative startPositionMs) are never due.
     const isDue = (localMs: number): boolean => localMs >= 0 && localMs > fromLocalMs && localMs <= toLocalMs;
-    const durationBeats = this.getDurationBeats();
+    const durationBeats = this.durationBeatsOf();
 
     // A negative startPositionMs puts beat 0 before transport position 0, so an
     // iteration starts at local 0 inside the arrangement. Like play() from
@@ -1315,7 +1335,7 @@ export class ArrangementEngine {
 
   /** Loop iteration of a raw position; always 0 without Project loop. */
   private getIteration(rawPositionMs: number, looping = this.localLoop): number {
-    return looping ? Math.floor(rawPositionMs / this.getDurationMs()) : 0;
+    return looping ? Math.floor(rawPositionMs / this.durationMsOf()) : 0;
   }
 
   private sampleArrangementChannels(
@@ -1336,12 +1356,12 @@ export class ArrangementEngine {
     );
   }
 
-  private getDurationBeats(arrangement = this.arrangement): number {
+  private durationBeatsOf(arrangement = this.arrangement): number {
     return arrangementDurationBeats(arrangement);
   }
 
-  private getDurationMs(arrangement = this.arrangement): number {
-    return beatToMs(arrangement.timing, this.getDurationBeats(arrangement));
+  private durationMsOf(arrangement = this.arrangement): number {
+    return beatToMs(arrangement.timing, this.durationBeatsOf(arrangement));
   }
 
   private getBpmAtBeat(beat: number): number {

@@ -351,6 +351,26 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     this.rescheduleIfPlaying();
   }
 
+  /**
+   * Returns the project's length in beats (`durationBeats`): local end, where
+   * playback ends unless local loop is on. Follows `setProject`.
+   */
+  getDurationBeats(): number {
+    this.assertLive();
+    return this.project.durationBeats;
+  }
+
+  /**
+   * Returns the project's length in ms: the transport position of local end
+   * (`beatToMs(timing, durationBeats)`). This is the project's length, not the
+   * media length that `transport.getDurationMs()` reports. Follows
+   * `setProject`.
+   */
+  getDurationMs(): number {
+    this.assertLive();
+    return this.durationMsOf();
+  }
+
   /** Returns the loaded project. */
   getProject(): TimelineProject<TEvent> {
     this.assertLive();
@@ -659,13 +679,13 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
 
     if (snapshot.state === "ended") {
       this.playbackState = "ended";
-      this.cachedPositionMs = this.getDurationMs();
+      this.cachedPositionMs = this.durationMsOf();
       return;
     }
 
     if (this.isAtOrPastLocalEnd(rawPositionMs)) {
       this.playbackState = "ended";
-      this.cachedPositionMs = this.getDurationMs();
+      this.cachedPositionMs = this.durationMsOf();
       return;
     }
 
@@ -700,11 +720,11 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
       // A cue listener that re-entrantly seeks, stops, hot-swaps, toggles loop,
       // or disposes has already re-anchored playback (and announced any local
       // end itself); one that pauses has had local end finished by runDispatch.
-      if (!this.runDispatch(() => this.emitDueCues(this.getDurationMs()))) {
+      if (!this.runDispatch(() => this.emitDueCues(this.durationMsOf()))) {
         return;
       }
-      this.cachedPositionMs = this.getDurationMs();
-      this.lastDispatchedRawPositionMs = this.getDurationMs();
+      this.cachedPositionMs = this.durationMsOf();
+      this.lastDispatchedRawPositionMs = this.durationMsOf();
       this.playbackState = "ended";
       this.emitPlayback("ended", "local-end", previousState);
       return;
@@ -746,7 +766,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
    */
   private finishLocalEndPause(pause: LocalEndPause): void {
     if (this.dispatchGeneration === pause.generation) {
-      this.emitDueCues(this.getDurationMs());
+      this.emitDueCues(this.durationMsOf());
     }
     if (this.disposed || this.playbackState !== "ended" || this.endedExits !== pause.endedExits) {
       return;
@@ -758,7 +778,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
   private emitCurrentCues(): boolean {
     const generation = this.dispatchGeneration;
     const rawPositionMs = this.rawPositionFromTransportPosition(this.getTransportPositionMs());
-    const durationMs = this.getDurationMs();
+    const durationMs = this.durationMsOf();
     const iteration = this.localLoop && durationMs > 0 ? Math.floor(rawPositionMs / durationMs) : 0;
     const localPositionMs = this.normalizePosition(rawPositionMs);
     const beat = msToBeat(this.project.timing, localPositionMs);
@@ -792,7 +812,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
       return true;
     }
 
-    const durationMs = this.getDurationMs();
+    const durationMs = this.durationMsOf();
     const dueCues: DueCue<TEvent>[] = [];
     if (!this.localLoop) {
       this.collectDueCues(dueCues, 0, fromRawPositionMs, Math.min(toRawPositionMs, durationMs));
@@ -850,7 +870,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
     fromLocalPositionMs: number,
     toLocalPositionMs: number,
   ): void {
-    const durationMs = this.getDurationMs();
+    const durationMs = this.durationMsOf();
     // Callers keep fromLocalPositionMs <= toLocalPositionMs within the
     // iteration, so this range is never inverted.
     const fromPositionMs = Math.max(0, fromLocalPositionMs);
@@ -982,7 +1002,7 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
   }
 
   private normalizePosition(positionMs: number): number {
-    const durationMs = this.getDurationMs();
+    const durationMs = this.durationMsOf();
     if (this.localLoop && durationMs > 0) {
       return ((positionMs % durationMs) + durationMs) % durationMs;
     }
@@ -997,10 +1017,10 @@ export class TimelineEngine<TEvent extends TimelineEvent = TimelineEvent> {
   }
 
   private isAtOrPastLocalEnd(positionMs: number): boolean {
-    return !this.localLoop && positionMs >= this.getDurationMs();
+    return !this.localLoop && positionMs >= this.durationMsOf();
   }
 
-  private getDurationMs(project = this.project): number {
+  private durationMsOf(project = this.project): number {
     return beatToMs(project.timing, project.durationBeats);
   }
 
