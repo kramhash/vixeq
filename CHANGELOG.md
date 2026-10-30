@@ -4,16 +4,6 @@
 
 ### Added
 
-- `@vixeq/core`: `getDurationMs()` and `getDurationBeats()` on
-  `SequencerEngine`, `ArrangementEngine`, and `TimelineEngine` report where the
-  project ends: for Arrangement and Timeline, local end (`durationBeats`, and
-  its transport position in ms, which includes `startPositionMs`); for the
-  Sequencer, one pass of the pattern, which keeps looping past it. They follow
-  `setProject` and throw `TRANSPORT_DISPOSED` after `dispose()`, like the other
-  Engine methods. This is the project's end, not the media length that
-  `transport.getDurationMs()` reports
-  ([#45](https://github.com/kramhash/vixeq/issues/45)).
-
 - `@vixeq/core`: time-based evaluation for shaders and offline rendering,
   as pure functions of the position
   ([#5](https://github.com/kramhash/vixeq/issues/5)):
@@ -40,6 +30,26 @@
   `PlaybackTransport` contract) makes `ArrangementEngine` sampling throw a
   `RangeError` instead of returning zeros
   ([#47](https://github.com/kramhash/vixeq/issues/47)).
+- `@vixeq/core`: `getDurationMs()` and `getDurationBeats()` on
+  `SequencerEngine`, `ArrangementEngine`, and `TimelineEngine` report where the
+  project ends: for Arrangement and Timeline, local end (`durationBeats`, and
+  its transport position in ms, which includes `startPositionMs`); for the
+  Sequencer, one pass of the pattern, which keeps looping past it. They follow
+  `setProject` and throw `TRANSPORT_DISPOSED` after `dispose()`, like the other
+  Engine methods. This is the project's end, not the media length that
+  `transport.getDurationMs()` reports
+  ([#45](https://github.com/kramhash/vixeq/issues/45)).
+
+### Changed
+
+- Playground (not published): the visualizer runs on `@frapx/fx-canvas` and
+  `@frapx/glsl-noise`, which replace the deprecated `@frapx/shader` and
+  `@frapx/shader-noise`. Its uniforms are a pure function of the engine's
+  position, bound with `bindUniforms` and built on `envelopeAt` /
+  `lastStepAt`, instead of envelopes excited by step events and decayed in its
+  own animation loop. The picture now stops with playback and follows seeks;
+  while not playing, selecting a step previews the frame at that step's start
+  ([#7](https://github.com/kramhash/vixeq/issues/7)).
 
 ## 1.0.0 - 2026-10-30
 

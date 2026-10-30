@@ -1,13 +1,9 @@
-import { createShaderBackground, glsl, type ShaderBackgroundInstance } from "@frapx/shader";
-import { simplex3d } from "@frapx/shader-noise";
+import { createShaderBackground, glsl, type ShaderBackgroundInstance } from "@frapx/fx-canvas";
+import { simplex3d } from "@frapx/glsl-noise";
+import type { SelectedStep } from "@vixeq/player-react";
+import type { SequenceProject, SequencerEngine } from "@vixeq/core";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import {
-  createVisualEnvelope,
-  decayEnvelope,
-  exciteEnvelope,
-  type VisualEnvelopeState,
-} from "./visualEnvelope";
-import type { VisualizerState } from "./visualizerState";
+import { evaluateVisual, getStepMs, type VisualFrame } from "./visualSource";
 
 const fragment = glsl`
 precision highp float;
@@ -159,6 +155,8 @@ const initialUniforms = {
   tracks: [0, 0.5, 0, 0] as [number, number, number, number],
 };
 
+const READOUT_INTERVAL_MS = 100;
+
 function fixto(value: number) {
   return `00${value}`.slice(-2);
 }
@@ -167,21 +165,40 @@ export type VisualizerHandle = {
   capturePng: () => string | null;
 };
 
-export const Visualizer = forwardRef<VisualizerHandle, { state: VisualizerState }>(function Visualizer(
-  { state },
+export type VisualizerProps = {
+  project: SequenceProject;
+  engine: SequencerEngine | null;
+  isPlaying: boolean;
+  selected: SelectedStep | null;
+};
+
+export const Visualizer = forwardRef<VisualizerHandle, VisualizerProps>(function Visualizer(
+  { project, engine, isPlaying, selected },
   ref,
 ) {
   const targetRef = useRef<HTMLDivElement | null>(null);
   const fallbackCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const shaderRef = useRef<ShaderBackgroundInstance<typeof initialUniforms> | null>(null);
-  const stateRef = useRef(state);
-  const envelopeRef = useRef<VisualEnvelopeState>(createVisualEnvelope());
-  const frameRef = useRef(0);
-  const lastFrameTimeRef = useRef(0);
-  const lastReadoutTimeRef = useRef(0);
+  const inputRef = useRef({ project, engine, isPlaying, selected });
+  const lastPositionRef = useRef(0);
+  // Where the visualizer is: the engine's position, or while not playing the
+  // start of the selected step, so that selecting a step previews its frame.
+  const positionMsRef = useRef(() => {
+    const input = inputRef.current;
+    if (!input.isPlaying && input.selected) {
+      return input.selected.stepIndex * getStepMs(input.project);
+    }
+
+    try {
+      lastPositionRef.current = input.engine?.getPosition().positionMs ?? 0;
+    } catch {
+      // The engine was disposed before onEngineChange delivered its replacement.
+    }
+    return lastPositionRef.current;
+  });
   const [status, setStatus] = useState<"shader" | "fallback">("shader");
   const [errorLabel, setErrorLabel] = useState("");
-  const [displayEnvelope, setDisplayEnvelope] = useState<VisualEnvelopeState>(() => createVisualEnvelope());
+  const [frame, setFrame] = useState<VisualFrame>(() => evaluateVisual(project, 0));
 
   useImperativeHandle(
     ref,
@@ -205,55 +222,24 @@ export const Visualizer = forwardRef<VisualizerHandle, { state: VisualizerState 
 
   const readout = useMemo(
     () => ({
-      kick: Math.round(displayEnvelope.energy * 100),
-      depth: Math.round((displayEnvelope.tracks[1] * 2 - 1) * 100),
-      glow: Math.round(displayEnvelope.tracks[2] * 100),
-      color: Math.round(displayEnvelope.colorFlash * 100),
-      complexity: Math.round(displayEnvelope.complexity * 100),
+      kick: Math.round(frame.energy * 100),
+      depth: Math.round((frame.tracks[1] * 2 - 1) * 100),
+      glow: Math.round(frame.tracks[2] * 100),
+      color: Math.round(frame.colorFlash * 100),
+      complexity: Math.round(frame.complexity * 100),
     }),
-    [displayEnvelope],
+    [frame],
   );
 
   useEffect(() => {
-    stateRef.current = state;
-    envelopeRef.current = exciteEnvelope(envelopeRef.current, state);
-  }, [state]);
+    inputRef.current = { project, engine, isPlaying, selected };
+  }, [project, engine, isPlaying, selected]);
 
   useEffect(() => {
-    const renderEnvelope = (timestamp: number) => {
-      const previousTimestamp = lastFrameTimeRef.current || timestamp;
-      const deltaSeconds = Math.min(0.1, Math.max(0, (timestamp - previousTimestamp) / 1000));
-      lastFrameTimeRef.current = timestamp;
-      envelopeRef.current = decayEnvelope(envelopeRef.current, deltaSeconds);
-
-      const visual = stateRef.current;
-      const envelope = envelopeRef.current;
-      if (timestamp - lastReadoutTimeRef.current > 100) {
-        setDisplayEnvelope(envelope);
-        lastReadoutTimeRef.current = timestamp;
-      }
-
-      shaderRef.current?.setUniforms({
-        energy: envelope.energy,
-        accent: envelope.accent,
-        complexity: envelope.complexity,
-        stepPhase: visual.stepPhase,
-        isPlaying: visual.isPlaying ? 1 : 0,
-        colorPhase: envelope.colorPhase,
-        colorFlash: envelope.colorFlash,
-        tracks: envelope.tracks,
-      });
-
-      frameRef.current = requestAnimationFrame(renderEnvelope);
-    };
-
-    envelopeRef.current = exciteEnvelope(envelopeRef.current, stateRef.current);
-    frameRef.current = requestAnimationFrame(renderEnvelope);
-
-    return () => {
-      cancelAnimationFrame(frameRef.current);
-      lastFrameTimeRef.current = 0;
-    };
+    const update = () => setFrame(evaluateVisual(inputRef.current.project, positionMsRef.current()));
+    update();
+    const interval = window.setInterval(update, READOUT_INTERVAL_MS);
+    return () => window.clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -272,6 +258,9 @@ export const Visualizer = forwardRef<VisualizerHandle, { state: VisualizerState 
         width: "100%",
         height: "100%",
       },
+      // u_time is the pattern position, so the picture stops with playback
+      // and follows seeks.
+      timeSource: () => positionMsRef.current() / 1000,
       onReady(instance) {
         shaderRef.current = instance;
         setStatus("shader");
@@ -284,12 +273,28 @@ export const Visualizer = forwardRef<VisualizerHandle, { state: VisualizerState 
     });
 
     shaderRef.current = shader;
+    const unbind = shader.bindUniforms({
+      get(time) {
+        const visual = evaluateVisual(inputRef.current.project, time * 1000);
+        return {
+          energy: visual.energy,
+          accent: visual.accent,
+          complexity: visual.complexity,
+          stepPhase: visual.stepPhase,
+          isPlaying: inputRef.current.isPlaying ? 1 : 0,
+          colorPhase: visual.colorPhase,
+          colorFlash: visual.colorFlash,
+          tracks: visual.tracks,
+        };
+      },
+    });
     shader.ready.catch((error: unknown) => {
       setStatus("fallback");
       setErrorLabel(error instanceof Error ? error.name : "WebGL fallback");
     });
 
     return () => {
+      unbind();
       shader.destroy();
       shaderRef.current = null;
     };
@@ -319,9 +324,9 @@ export const Visualizer = forwardRef<VisualizerHandle, { state: VisualizerState 
         canvas.height = height;
       }
 
-      const visual = stateRef.current;
-      const envelope = envelopeRef.current;
-      const time = performance.now() / 1000;
+      const positionMs = positionMsRef.current();
+      const envelope = evaluateVisual(inputRef.current.project, positionMs);
+      const time = positionMs / 1000;
       context.clearRect(0, 0, width, height);
       context.fillStyle = "#0a1416";
       context.fillRect(0, 0, width, height);
@@ -354,7 +359,7 @@ export const Visualizer = forwardRef<VisualizerHandle, { state: VisualizerState 
         const depthSigned = envelope.tracks[1] * 2 - 1;
         const depthAmount = Math.abs(depthSigned);
         const glow = envelope.tracks[2];
-        const phase = time * (0.12 + depthAmount * 0.42) * (depthSigned === 0 ? 0 : Math.sign(depthSigned)) + index * 0.42 + visual.stepPhase * 0.28;
+        const phase = time * (0.12 + depthAmount * 0.42) * (depthSigned === 0 ? 0 : Math.sign(depthSigned)) + index * 0.42 + envelope.stepPhase * 0.28;
         const orbit = 0.24 - depthAmount * 0.08;
         const x = width * (0.5 + Math.sin(index * 1.9) * orbit);
         const y = height * (0.5 + Math.cos(index * 2.3) * orbit);
@@ -389,10 +394,10 @@ export const Visualizer = forwardRef<VisualizerHandle, { state: VisualizerState 
         <div className="visualizer-overlay">
           <div>
             <h2>Fluid Pulse</h2>
-            <p>{state.isPlaying ? "Live step signal" : "Editing preview"}</p>
+            <p>{isPlaying ? "Live step signal" : "Editing preview"}</p>
           </div>
           <div className="visualizer-metrics value-label">
-            <span>Step {fixto(state.stepIndex + 1)}</span>
+            <span>Step {fixto(frame.stepIndex + 1)}</span>
             <span>Kick {fixto(readout.kick)}</span>
             <span>Depth {readout.depth > 0 ? "+" : readout.depth < 0 ? "" : "~"}{readout.depth}</span>
             <span>Glow {fixto(readout.glow)}</span>
