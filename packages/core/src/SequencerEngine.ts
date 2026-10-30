@@ -1,5 +1,5 @@
 import { browserClock } from "./clock";
-import { linear, lerp, type EasingFunction } from "./easing";
+import { linear, type EasingFunction } from "./easing";
 import {
   createClockTransport,
   PlaybackError,
@@ -8,6 +8,7 @@ import {
   type PlaybackTransport,
   type PlaybackTransportEvent,
 } from "./playbackTransport";
+import { sampleProject } from "./timeEvaluation";
 import { validateProject } from "./validation";
 import type {
   ChannelPosition,
@@ -326,10 +327,10 @@ export class SequencerEngine {
     }
 
     const positionMs = this.getLogicalPositionMs();
-    const previousChannels = this.sampleProjectChannels(previousProject, positionMs);
+    const previousChannels = sampleProject(previousProject, positionMs);
     const preservedBeat = positionMs / this.getMsPerBeat(previousProject);
     const nextPositionMs = preservedBeat * this.getMsPerBeat(project);
-    const channels = this.sampleProjectChannels(project, nextPositionMs);
+    const channels = sampleProject(project, nextPositionMs);
     const changedChannelIds = this.getChangedChannelIds(previousChannels, channels);
 
     this.dispatchGeneration += 1;
@@ -397,7 +398,7 @@ export class SequencerEngine {
    */
   sampleChannels(easing: EasingFunction = linear): Record<string, number> {
     this.assertLive();
-    return this.sampleProjectChannels(this.project, this.getLogicalPositionMs(), easing);
+    return sampleProject(this.project, this.getLogicalPositionMs(), easing);
   }
 
   /**
@@ -414,7 +415,7 @@ export class SequencerEngine {
   sampleChannelsAt(positionMs: number, easing: EasingFunction = linear): Record<string, number> {
     this.assertLive();
     assertFiniteNonNegative(positionMs, "positionMs");
-    return this.sampleProjectChannels(this.project, positionMs, easing);
+    return sampleProject(this.project, positionMs, easing);
   }
 
   private runTransportCommand(
@@ -729,29 +730,6 @@ export class SequencerEngine {
       0,
       this.projectAnchor.projectPositionMs + (transportPositionMs - this.projectAnchor.transportPositionMs),
     );
-  }
-
-  private sampleProjectChannels(
-    project: SequenceProject,
-    positionMs: number,
-    easing: EasingFunction = linear,
-  ): Record<string, number> {
-    const stepDur = this.getStepDurationMs(project);
-    const absoluteStep = this.absoluteStepAt(positionMs, project);
-    const phase = positionMs <= 0 ? 0 : (positionMs % stepDur) / stepDur;
-    const stepCount = Math.max(1, project.stepCount);
-
-    const result: Record<string, number> = {};
-    for (const track of project.tracks) {
-      if (!track.enabled) {
-        result[track.id] = 0;
-        continue;
-      }
-      const idx = ((absoluteStep % stepCount) + stepCount) % stepCount;
-      const nextIdx = (idx + 1) % stepCount;
-      result[track.id] = lerp(track.steps[idx], track.steps[nextIdx], easing(phase));
-    }
-    return result;
   }
 
   private getChangedChannelIds(

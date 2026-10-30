@@ -314,6 +314,17 @@ export type Envelope = {
 };
 
 // @public
+export const envelopeAt: (source: SequenceProject | ArrangementProject, positionMs: number, trackId: string, options?: EnvelopeAtOptions) => number;
+
+// @public
+export type EnvelopeAtOptions = TimeEvaluationOptions & {
+    leadMs?: number;
+    decayMs?: number;
+    curve?: EasingFunction;
+    peak?: number;
+};
+
+// @public
 export const exciteSmoothedValue: (current: number, input: number, config: SmoothingConfig) => number;
 
 // @public
@@ -326,6 +337,9 @@ export const getEventsInBeatRange: (project: TimelineProject, fromBeat: number, 
 export const getNextEvents: (project: TimelineProject, beat: number, count: number, options?: TimelineQueryOptions) => TimelineEvent[];
 
 // @public
+export const hold: EasingFunction;
+
+// @public
 export type JsonObject = {
     [key: string]: JsonValue;
 };
@@ -335,6 +349,9 @@ export type JsonPrimitive = string | number | boolean | null;
 
 // @public
 export type JsonValue = JsonPrimitive | JsonValue[] | JsonObject;
+
+// @public
+export const lastStepAt: (source: SequenceProject | ArrangementProject, positionMs: number, trackId: string, options?: TimeEvaluationOptions) => StepHit | null;
 
 // @public
 export const lerp: (from: number, to: number, t: number) => number;
@@ -381,6 +398,16 @@ export type MissedStepPolicy = "emit" | "skip";
 
 // @public
 export const msToBeat: (timing: TimingMap, ms: number) => number;
+
+// @public
+export const nextStepAt: (source: SequenceProject | ArrangementProject, positionMs: number, trackId: string, options?: TimeEvaluationOptions) => NextStepHit | null;
+
+// @public
+export type NextStepHit = {
+    value: number;
+    positionMs: number;
+    remainingMs: number;
+};
 
 // @public
 export const normalizeArrangement: (input: unknown) => ArrangementProject;
@@ -551,7 +578,10 @@ export type ResolvedArrangementStep = {
 export const rotateTrackSteps: (project: SequenceProject, trackId: string, offset: number) => SequenceProject;
 
 // @public
-export const sampleArrangement: (arrangement: ArrangementProject, beat: number, easing?: EasingFunction, trackIds?: string[]) => Record<string, number>;
+export const sampleArrangement: (arrangement: ArrangementProject, beat: number, easing?: EasingFunction, trackIds?: string[], options?: TimeEvaluationOptions) => Record<string, number>;
+
+// @public
+export const sampleProject: (project: SequenceProject, positionMs: number, easing?: EasingFunction) => Record<string, number>;
 
 // @public
 export const sectionAtBeat: (arrangement: ArrangementProject, beat: number) => SectionLookup | null;
@@ -687,6 +717,13 @@ export type StepEventTrack = {
 };
 
 // @public
+export type StepHit = {
+    value: number;
+    positionMs: number;
+    elapsedMs: number;
+};
+
+// @public
 export type StepValue = number;
 
 // @public
@@ -699,6 +736,11 @@ export type TempoEvent = {
 export type TempoEventV1 = {
     beat: number;
     bpm: number;
+};
+
+// @public
+export type TimeEvaluationOptions = {
+    loop?: boolean;
 };
 
 // @public

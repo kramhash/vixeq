@@ -145,6 +145,27 @@ The update helpers return a new project and throw `TypeError` for an invalid
 result. Type your events with a `TimelineEvent<"flash" | ...>` union, and
 the helpers and the engine keep that type.
 
+## Evaluating at a time
+
+Shaders and offline rendering evaluate a frame at any time, in any order, and
+several times per frame. Read channel values as a pure function of the
+position instead of from engine events:
+
+```ts
+import { envelopeAt, hold, sampleProject } from "@vixeq/core";
+
+const values = sampleProject(project, positionMs); // wraps, negative positions too
+const gates = sampleProject(project, positionMs, hold); // each step's own value
+const pulse = envelopeAt(arrangement, positionMs, "kick", { leadMs: 20, decayMs: 120, loop: true });
+```
+
+`lastStepAt` and `nextStepAt` return the step that last fired, or fires next,
+on a track (by id), across sections, gaps, and the loop point. `envelopeAt`
+peaks exactly on each step; a pulse that peaks on the beat and fades fast
+reads as in sync, while one that starts growing on the beat reads as late.
+`sampleArrangement` takes `{ loop: true }` as its fifth argument to wrap like
+local loop.
+
 ## DOM bindings
 
 Write channel values straight to CSS custom properties, without React

@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `@vixeq/core`: time-based evaluation for shaders and offline rendering,
+  as pure functions of the position
+  ([#5](https://github.com/kramhash/vixeq/issues/5)):
+  - `sampleProject(project, positionMs, easing?)` samples a
+    `SequenceProject` without an engine. Any finite position wraps around the
+    pattern, negative positions included. For non-negative positions it
+    equals `SequencerEngine#sampleChannelsAt`, which now uses it.
+  - `lastStepAt` / `nextStepAt` return the last step at or before, or the
+    first step after, a position whose value is greater than 0, on a track
+    named by id, in a `SequenceProject` or an `ArrangementProject` (across
+    sections, gaps, and with `loop` the loop point).
+  - `envelopeAt` is a trigger envelope evaluated from the position alone. It
+    rises over `leadMs` before each step, peaks on the step, and falls over
+    `decayMs`.
+  - `hold`, an easing that keeps each step's own value for the whole step.
+  - `sampleArrangement` takes `{ loop: true }` as a fifth argument to wrap
+    beats into the local loop.
+
 ## 1.0.0 - 2026-10-30
 
 First stable release. The API is the same as `1.0.0-rc.2`, and from here
