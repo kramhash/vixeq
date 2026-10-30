@@ -1,10 +1,17 @@
 import { SequencePlayer, type SelectedStep } from "@vixeq/player-react";
-import { createProject, normalizeProject, presets, validateProject, type SequenceProject, type StepEvent } from "@vixeq/core";
+import {
+  createProject,
+  normalizeProject,
+  presets,
+  validateProject,
+  type SequenceProject,
+  type SequencerEngine,
+  type StepEvent,
+} from "@vixeq/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Visualizer, type VisualizerHandle } from "./Visualizer";
 import { VixeqLogo } from "./VixeqLogo";
 import { loadStoredProject, saveStoredProject, upgradeLegacyProject, type ProjectStorageLoadResult } from "./projectStorage";
-import { createVisualizerState } from "./visualizerState";
 
 const DEFAULT_TRACK_NAMES = ["Kick / Energy", "Depth / Motion", "Glow / Accent", "Color Shift"];
 
@@ -32,6 +39,7 @@ export function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [selected, setSelected] = useState<SelectedStep | null>(null);
   const [latestEvent, setLatestEvent] = useState<StepEvent | null>(null);
+  const [engine, setEngine] = useState<SequencerEngine | null>(null);
   const [jsonText, setJsonText] = useState("");
   const [importError, setImportError] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -42,16 +50,6 @@ export function App() {
   const visualizerRef = useRef<VisualizerHandle>(null);
 
   const presetEntries = useMemo(() => Object.entries(presets), []);
-  const visualizerState = useMemo(
-    () =>
-      createVisualizerState({
-        project,
-        latestEvent,
-        selected,
-        isPlaying,
-      }),
-    [isPlaying, latestEvent, project, selected],
-  );
 
   useEffect(() => {
     if (initialProject.loadResult.status === "ignored" && !skippedIgnoredStorageSaveRef.current) {
@@ -176,7 +174,7 @@ export function App() {
 
       <section className="workspace">
         <div className="playground-main">
-          <Visualizer ref={visualizerRef} state={visualizerState} />
+          <Visualizer ref={visualizerRef} project={project} engine={engine} isPlaying={isPlaying} selected={selected} />
           <SequencePlayer
             project={project}
             onProjectChange={({ project: nextProject }) => {
@@ -185,6 +183,7 @@ export function App() {
             }}
             onSelectedStepChange={setSelected}
             onStep={setLatestEvent}
+            onEngineChange={setEngine}
             onPlaybackChange={(event) => {
               setIsPlaying(event.snapshot.state === "playing");
             }}

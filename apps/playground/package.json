@@ -10,8 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@frapx/shader": "^0.3.0",
-    "@frapx/shader-noise": "^0.1.0",
+    "@frapx/fx-canvas": "^1.0.0",
+    "@frapx/glsl-noise": "^0.3.0",
     "@vitejs/plugin-react": "^5.0.0",
     "@vixeq/core": "workspace:*",
     "@vixeq/player-react": "workspace:*",

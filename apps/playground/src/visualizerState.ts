@@ -1,34 +1,8 @@
-import type { SequenceProject, StepEvent } from "@vixeq/core";
-
-export type SelectedStep = {
-  trackId: string;
-  stepIndex: number;
-};
-
-export type VisualizerState = {
-  stepIndex: number;
-  stepPhase: number;
-  energy: number;
-  accent: number;
-  complexity: number;
-  tracks: [number, number, number, number];
-  isPlaying: boolean;
-};
+import type { SequenceProject } from "@vixeq/core";
 
 const TRACK_COMPLEXITY_WEIGHTS = [0.55, 0.8, 1.15, 0.65];
 
 export const clamp01 = (value: number): number => Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
-
-const getStepValues = (project: SequenceProject, stepIndex: number): number[] =>
-  project.tracks.map((track) => (track.enabled ? clamp01(track.steps[stepIndex] ?? 0) : 0));
-
-const getSelectedStepIndex = (project: SequenceProject, selected: SelectedStep | null): number => {
-  if (!selected) {
-    return 0;
-  }
-
-  return Math.min(project.stepCount - 1, Math.max(0, selected.stepIndex));
-};
 
 const getWeightedStepActivity = (project: SequenceProject, stepIndex: number): number => {
   const totalWeight = project.tracks.reduce(
@@ -99,30 +73,4 @@ export const getPatternComplexity = (project: SequenceProject, stepIndex = 0): n
   const global = getGlobalComplexity(project);
   const local = getLocalComplexity(project, stepIndex);
   return clamp01(global * 0.65 + local * 0.35);
-};
-
-export const createVisualizerState = (options: {
-  project: SequenceProject;
-  latestEvent: StepEvent | null;
-  selected: SelectedStep | null;
-  isPlaying: boolean;
-}): VisualizerState => {
-  const { project, latestEvent, selected, isPlaying } = options;
-  const stepIndex = isPlaying && latestEvent ? latestEvent.stepIndex : getSelectedStepIndex(project, selected);
-  const values =
-    isPlaying && latestEvent
-      ? latestEvent.tracks.map((track) => clamp01(track.value))
-      : getStepValues(project, stepIndex);
-  const firstFour = [0, 1, 2, 3].map((index) => clamp01(values[index] ?? 0)) as [number, number, number, number];
-  const complexity = getPatternComplexity(project, stepIndex);
-
-  return {
-    stepIndex,
-    stepPhase: project.stepCount > 0 ? stepIndex / project.stepCount : 0,
-    energy: firstFour[0],
-    accent: firstFour[2],
-    complexity,
-    tracks: firstFour,
-    isPlaying,
-  };
 };
