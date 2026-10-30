@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ArrangementEngine } from "./arrangement/ArrangementEngine";
 import { createArrangement } from "./arrangement/project";
 import { sampleArrangement } from "./arrangement/resolve";
 import type { ArrangementProject } from "./arrangement/types";
@@ -71,6 +72,96 @@ describe("sampleProject", () => {
     expect(sampleProject(pattern([1, 1], { enabled: false }), 10)).toEqual({ kick: 0 });
     expect(() => sampleProject(kick, Number.NaN)).toThrow(RangeError);
     expect(() => sampleProject(kick, Number.POSITIVE_INFINITY)).toThrow(RangeError);
+  });
+});
+
+describe("sampleProject on an ArrangementProject", () => {
+  const odd = (bpm: number, startPositionMs = 0) =>
+    createArrangement({
+      timing: { bpm, startPositionMs },
+      durationBeats: 6,
+      patterns: { a: pattern([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]), b: pattern([0.9, 0, 0.3, 0]) },
+      sections: [
+        { id: "a", patternId: "a", startBeat: 0, endBeat: 3 },
+        { id: "b", patternId: "b", startBeat: 4, endBeat: 6 },
+      ],
+    });
+
+  it("equals ArrangementEngine#sampleChannelsAt at non-negative positions without loop", () => {
+    const sources = [
+      odd(120),
+      odd(97),
+      odd(137, -29.3),
+      createArrangement({
+        timing: { tempos: [{ beat: 0, bpm: 120 }, { beat: 3, bpm: 60 }], startPositionMs: 40 },
+        durationBeats: 6,
+        patterns: { a: pattern([1, 0.2, 0.4, 0.6]) },
+        sections: [{ id: "a", patternId: "a", startBeat: 0, endBeat: 6 }],
+      }),
+    ];
+    for (const source of sources) {
+      const engine = new ArrangementEngine(source);
+      const endMs = beatToMs(source.timing, source.durationBeats);
+      for (let i = 0; i < 300; i += 1) {
+        const positionMs = (i * 7919) % Math.ceil(endMs + 500);
+        for (const easing of [linear, hold]) {
+          expect(sampleProject(source, positionMs, easing)).toEqual(engine.sampleChannelsAt(positionMs, easing));
+        }
+      }
+      engine.dispose();
+    }
+  });
+
+  it("samples 0 before transport position 0 and past the end without loop", () => {
+    const source = odd(120, -250);
+    expect(sampleProject(source, -10, hold)).toEqual({ kick: 0 });
+    expect(sampleProject(source, 5000, hold)).toEqual({ kick: 0 });
+  });
+
+  it("wraps like sampleArrangement's loop, negative positions included", () => {
+    for (const source of [odd(120), odd(97), odd(137, -29.3)]) {
+      const loopMs = beatToMs(source.timing, source.durationBeats);
+      for (let i = 0; i < 200; i += 1) {
+        const positionMs = (i * 104.729) % loopMs;
+        const inside = sampleProject(source, positionMs, hold);
+        expect(sampleProject(source, positionMs + 2 * loopMs, hold, { loop: true })).toEqual(inside);
+        expect(sampleProject(source, positionMs - loopMs, hold, { loop: true })).toEqual(inside);
+      }
+    }
+  });
+
+  it("lands on the step at every step start at odd tempos", () => {
+    for (const bpm of [97, 99.7, 137]) {
+      const source = odd(bpm);
+      const loopMs = beatToMs(source.timing, source.durationBeats);
+      for (let step = 0; step < 12; step += 1) {
+        const positionMs = beatToMs(source.timing, step / 4);
+        const expected = sampleArrangement(source, step / 4, hold, ["kick"]);
+        expect(sampleProject(source, positionMs, hold)).toEqual(expected);
+        expect(sampleProject(source, positionMs + loopMs, hold, { loop: true })).toEqual(expected);
+      }
+    }
+  });
+
+  it("returns every pattern's track ids as keys", () => {
+    const mixed = createArrangement({
+      timing: { bpm: 120 },
+      durationBeats: 2,
+      patterns: {
+        a: pattern([1, 0]),
+        b: createProject({ bpm: 120, stepCount: 2, stepsPerBeat: 4, tracks: [{ id: "hat", steps: [0.5, 0.5] }] }),
+      },
+      sections: [
+        { id: "a", patternId: "a", startBeat: 0, endBeat: 1 },
+        { id: "b", patternId: "b", startBeat: 1, endBeat: 2 },
+      ],
+    });
+    expect(sampleProject(mixed, 0, hold)).toEqual({ kick: 1, hat: 0 });
+    expect(sampleProject(mixed, 600, hold)).toEqual({ kick: 0, hat: 0.5 });
+  });
+
+  it("ignores the loop option for a SequenceProject", () => {
+    expect(sampleProject(kick, -125, hold, { loop: false })).toEqual(sampleProject(kick, 875, hold));
   });
 });
 

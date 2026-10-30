@@ -171,14 +171,15 @@ as often as needed (motion-blur sub-samples, a resumed export). No engine or
 `trigger()` calls are involved.
 
 ```ts
-import { envelopeAt, hold, lastStepAt, sampleArrangement, sampleProject } from "@vixeq/core";
+import { envelopeAt, hold, lastStepAt, sampleProject } from "@vixeq/core";
 
 // A SequenceProject loops forever: any position wraps, negative ones too.
 const values = sampleProject(project, positionMs); // { trackId: 0–1 }
 const gates = sampleProject(project, positionMs, hold); // each step's own value
 
-// An ArrangementProject is sampled by beat; loop wraps it like local loop.
-const arranged = sampleArrangement(song, beat, undefined, undefined, { loop: true });
+// An ArrangementProject is sampled at a transport position; loop wraps it
+// like local loop. (sampleArrangement is the beat-based variant.)
+const arranged = sampleProject(song, positionMs, undefined, { loop: true });
 
 // The last step that fired on a track, and a pulse that peaks on it.
 const hit = lastStepAt(project, positionMs, "kick"); // { value, positionMs, elapsedMs } | null
@@ -193,9 +194,14 @@ const pulse = envelopeAt(song, positionMs, "kick", { leadMs: 20, decayMs: 120, l
   (the step's value × `peak`), and falls over `decayMs`. A pulse that peaks on
   the beat and fades fast reads as in sync; one that starts growing on the
   beat reads as late, even with correct timing.
-- `SequencerEngine#sampleChannelsAt` returns the same values as
-  `sampleProject` for non-negative positions, wraps past the end of the
-  pattern, and throws a `RangeError` for negative positions.
+- `SequencerEngine#sampleChannelsAt` and `ArrangementEngine#sampleChannelsAt`
+  return the same values as `sampleProject` for non-negative positions
+  (without loop for an arrangement); the Sequencer wraps past the end of the
+  pattern, and both throw a `RangeError` for negative positions.
+- Sample an arrangement by position with `sampleProject` rather than
+  `sampleArrangement(arrangement, msToBeat(timing, positionMs))`: `msToBeat`
+  clamps negative positions to beat 0 and can land an ulp before a step start
+  at odd tempos, sampling the previous step.
 
 ## DOM Bindings
 
