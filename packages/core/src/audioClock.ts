@@ -1,5 +1,5 @@
 import {
-  createClockTransport,
+  createLatencyClockTransport,
   PlaybackError,
   type PlaybackSnapshot,
   type PlaybackState,
@@ -7,24 +7,48 @@ import {
   type PlaybackTransportBaseOptions,
   type PlaybackTransportEvent,
 } from "./playbackTransport";
+import { browserClock } from "./clock";
 import type { PlaybackClock, Unsubscribe } from "./types";
+
+/**
+ * How far an audio transport's position trails the clock, so that it reports
+ * what the listener hears rather than what has been scheduled.
+ *
+ * - `"output"`: the `AudioContext`'s `baseLatency + outputLatency`, read on
+ *   every query. A value the browser does not report counts as 0.
+ * - a number: a fixed latency in milliseconds (finite, 0 or more).
+ * - a function: called on every query and returns milliseconds; a negative or
+ *   non-finite result counts as 0. Use it for a live calibration offset.
+ *
+ * While playing, the position holds at its start for the latency after `play`
+ * and `seek`, `loop` and `ended` fire when the heard position reaches the
+ * boundary, and the position never moves backward when the latency grows.
+ * Paused, stopped, and ended positions are not shifted.
+ */
+export type LatencyCompensation = "output" | number | (() => number);
 
 /**
  * Options for {@link createMediaElementTransport}. Pass the `audioContext`
  * that processes the element's audio (for example through a
  * `MediaElementAudioSourceNode`) so that `play()` resumes it.
+ * `latencyCompensation: "output"` requires it; it subtracts only the
+ * context's latency, because a browser's `currentTime` may already account for
+ * the element's own output.
  */
 export type MediaElementTransportOptions = PlaybackTransportBaseOptions & {
   audioContext?: AudioContext;
+  latencyCompensation?: LatencyCompensation;
 };
 
 /**
  * Options for {@link createAudioBufferTransport}: the node to connect to
- * (default `audioContext.destination`) and whether to start looping.
+ * (default `audioContext.destination`), whether to start looping, and the
+ * output-latency compensation.
  */
 export type AudioBufferTransportOptions = PlaybackTransportBaseOptions & {
   destination?: AudioNode;
   loop?: boolean;
+  latencyCompensation?: LatencyCompensation;
 };
 
 const MEDIA_EVENTS = [
@@ -83,6 +107,39 @@ const assertBoolean = (value: boolean, name: string): void => {
   }
 };
 
+const toLatencyMs = (value: unknown): number =>
+  typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
+
+/**
+ * Normalizes a {@link LatencyCompensation} option to a reader of milliseconds,
+ * or `null` when compensation is off.
+ */
+const resolveLatencyCompensation = (
+  option: LatencyCompensation | undefined,
+  audioContext: AudioContext | undefined,
+): (() => number) | null => {
+  if (option === undefined) return null;
+  if (option === "output") {
+    if (!audioContext) {
+      throw new TypeError('latencyCompensation "output" requires an audioContext.');
+    }
+    // Missing in browsers without the property, so read them as unknown.
+    const latencies = audioContext as { baseLatency?: unknown; outputLatency?: unknown };
+    return () =>
+      (toLatencyMs(latencies.baseLatency) + toLatencyMs(latencies.outputLatency)) * 1000;
+  }
+  if (typeof option === "number") {
+    if (!Number.isFinite(option) || option < 0) {
+      throw new RangeError("latencyCompensation must be a finite, non-negative number.");
+    }
+    return () => option;
+  }
+  if (typeof option === "function") {
+    return () => toLatencyMs(option());
+  }
+  throw new TypeError('latencyCompensation must be "output", a number, or a function.');
+};
+
 /** Creates a PlaybackTransport backed by a borrowed HTMLMediaElement. */
 export function createMediaElementTransport(
   media: HTMLMediaElement,
@@ -111,6 +168,63 @@ export function createMediaElementTransport(
   let suppressError = false;
   let suppressNextError = false;
   const listeners = new Set<(event: PlaybackTransportEvent) => void>();
+  const latencyMs = resolveLatencyCompensation(
+    options.latencyCompensation,
+    options.audioContext,
+  );
+  // Latency compensation only. The heard position is tracked unwrapped from
+  // the last anchor (play or seek): `rawLoops` counts the element's wraps,
+  // `pendingLoops` the boundaries the heard position crossed but `timeupdate`
+  // has not reported yet. `tail` runs the clock past the element's end.
+  let heardMs = 0;
+  let lastRawMs = 0;
+  let rawLoops = 0;
+  let pendingLoops = 0;
+  let tail: { fromMs: number; startedAtMs: number; timerId: unknown } | null = null;
+
+  /** Returns whether a tail was running. */
+  const cancelTail = (): boolean => {
+    if (!tail) return false;
+    browserClock.clearTimer(tail.timerId);
+    tail = null;
+    return true;
+  };
+
+  const anchorHeard = (positionMs: number): void => {
+    cancelTail();
+    heardMs = positionMs;
+    lastRawMs = positionMs;
+    rawLoops = 0;
+    pendingLoops = 0;
+  };
+
+  const readHeardMs = (compensationMs: number): number => {
+    if (media.seeking) return heardMs;
+    const rawMs = mediaPositionMs(media);
+    // Seeks re-anchor (and reads skip them while seeking), so a drop is a wrap.
+    // Not gated on `loop`: it may lag `media.loop` or change right after a wrap.
+    if (durationMs !== null && rawMs + 0.5 < lastRawMs) rawLoops += 1;
+    lastRawMs = rawMs;
+    const loopMs = durationMs ?? 0;
+    heardMs = Math.max(heardMs, rawMs + rawLoops * loopMs - compensationMs * playbackRate);
+    while (durationMs !== null && heardMs >= durationMs && rawLoops > 0) {
+      heardMs -= durationMs;
+      rawLoops -= 1;
+      pendingLoops += 1;
+    }
+    return durationMs === null ? heardMs : Math.min(durationMs, heardMs);
+  };
+
+  const readPositionMs = (): number => {
+    if (latencyMs === null || state !== "playing") return mediaPositionMs(media);
+    if (tail) {
+      const elapsedMs = browserClock.now() - tail.startedAtMs;
+      return Math.min(durationMs ?? Infinity, tail.fromMs + elapsedMs * playbackRate);
+    }
+    return readHeardMs(latencyMs());
+  };
+
+  anchorHeard(mediaPositionMs(media));
 
   const assertActive = (): void => {
     if (disposed) throw new PlaybackError("TRANSPORT_DISPOSED");
@@ -118,7 +232,7 @@ export function createMediaElementTransport(
 
   const createSnapshot = (): PlaybackSnapshot => ({
     state,
-    positionMs: mediaPositionMs(media),
+    positionMs: readPositionMs(),
     durationMs,
     playbackRate,
     loop,
@@ -148,6 +262,7 @@ export function createMediaElementTransport(
     state = "playing";
     buffering = false;
     lastObservedPositionMs = mediaPositionMs(media);
+    anchorHeard(lastObservedPositionMs);
     if (suppressPlay) {
       suppressPlay = false;
       return;
@@ -166,13 +281,20 @@ export function createMediaElementTransport(
   };
 
   const onSeeking = (): void => {
-    seekPreviousPositionMs = lastObservedPositionMs;
+    // The element already reports the target; the heard position is the last read.
+    seekPreviousPositionMs =
+      latencyMs !== null && state === "playing" && !tail
+        ? Math.min(durationMs ?? Infinity, heardMs)
+        : lastObservedPositionMs;
   };
 
   const onSeeked = (): void => {
+    // A seek in the end tail leaves the element paused there.
+    if (cancelTail()) state = "paused";
     updateStateAfterSeek();
     const positionMs = mediaPositionMs(media);
     lastObservedPositionMs = positionMs;
+    anchorHeard(positionMs);
     if (suppressSeekTargetMs !== null && Math.abs(positionMs - suppressSeekTargetMs) < 0.5) {
       suppressSeekTargetMs = null;
       return;
@@ -219,12 +341,28 @@ export function createMediaElementTransport(
       loop = nextLoop;
       emit({ type: "loopchange", previousLoop, snapshot: createSnapshot() });
     }
-    if (state === "playing" && loop && positionMs + 0.5 < lastObservedPositionMs) {
+    if (latencyMs !== null) {
+      // Report the loops the heard position has crossed, not the element's wrap.
+      if (state === "playing" && !tail) readHeardMs(latencyMs());
+      while (pendingLoops > 0) {
+        pendingLoops -= 1;
+        loopIteration += 1;
+        emit({ type: "loop", iteration: loopIteration, snapshot: createSnapshot() });
+      }
+    } else if (state === "playing" && loop && positionMs + 0.5 < lastObservedPositionMs) {
       loopIteration += 1;
       emit({ type: "loop", iteration: loopIteration, snapshot: createSnapshot() });
     }
     lastObservedPositionMs = positionMs;
   };
+
+  function endPlayback(): void {
+    cancelTail();
+    state = "ended";
+    buffering = false;
+    lastObservedPositionMs = mediaPositionMs(media);
+    emit({ type: "ended", snapshot: createSnapshot() });
+  }
 
   const handlers: Record<(typeof MEDIA_EVENTS)[number], EventListener> = {
     play: onPlay,
@@ -237,10 +375,24 @@ export function createMediaElementTransport(
     playing: () => setBuffering(false),
     timeupdate: onTimeUpdate,
     ended: () => {
-      state = "ended";
-      buffering = false;
-      lastObservedPositionMs = mediaPositionMs(media);
-      emit({ type: "ended", snapshot: createSnapshot() });
+      if (latencyMs !== null && state === "playing" && durationMs !== null && !tail) {
+        // The element has stopped, but its last latency of audio is still
+        // playing: let the clock carry the position to the end.
+        const fromMs = readHeardMs(latencyMs());
+        const remainingMs = durationMs - fromMs;
+        if (remainingMs > 0.5) {
+          tail = {
+            fromMs,
+            startedAtMs: browserClock.now(),
+            timerId: browserClock.setTimer(() => {
+              tail = null;
+              endPlayback();
+            }, remainingMs / playbackRate),
+          };
+          return;
+        }
+      }
+      endPlayback();
     },
     error: () => {
       if (suppressError || suppressNextError) {
@@ -275,7 +427,7 @@ export function createMediaElementTransport(
     },
     getPositionMs(): number {
       assertActive();
-      return mediaPositionMs(media);
+      return readPositionMs();
     },
     getDurationMs(): number | null {
       assertActive();
@@ -320,6 +472,7 @@ export function createMediaElementTransport(
         state = "playing";
         buffering = false;
         lastObservedPositionMs = mediaPositionMs(media);
+        anchorHeard(lastObservedPositionMs);
         emit({ type: "play", snapshot: createSnapshot() });
       });
     },
@@ -327,8 +480,13 @@ export function createMediaElementTransport(
       assertActive();
       return enqueue(() => {
         if (state !== "playing") return;
-        suppressPause = true;
-        media.pause();
+        // In the end tail the element is already paused and sends no event.
+        const inTail = tail !== null;
+        cancelTail();
+        if (!inTail) {
+          suppressPause = true;
+          media.pause();
+        }
         state = "paused";
         buffering = false;
         lastObservedPositionMs = mediaPositionMs(media);
@@ -351,6 +509,7 @@ export function createMediaElementTransport(
         buffering = false;
         loopIteration = 0;
         lastObservedPositionMs = 0;
+        anchorHeard(0);
         emit({ type: "stop", snapshot: createSnapshot() });
       });
     },
@@ -363,11 +522,13 @@ export function createMediaElementTransport(
         throw new RangeError("positionMs must not exceed the playback duration.");
       }
       return enqueue(() => {
-        const previousPositionMs = mediaPositionMs(media);
+        const previousPositionMs = readPositionMs();
+        if (cancelTail()) state = "paused";
         suppressSeekTargetMs = positionMs;
         media.currentTime = positionMs / 1000;
         updateStateAfterSeek();
         lastObservedPositionMs = positionMs;
+        anchorHeard(positionMs);
         emit({ type: "seek", previousPositionMs, snapshot: createSnapshot() });
       });
     },
@@ -406,6 +567,7 @@ export function createMediaElementTransport(
       if (disposed) return;
       const snapshot = createSnapshot();
       disposed = true;
+      cancelTail();
       emit({ type: "dispose", snapshot });
       listeners.clear();
       for (const eventName of MEDIA_EVENTS) {
@@ -424,17 +586,18 @@ export function createAudioBufferTransport(
   const durationMs = buffer.duration * 1000;
   assertFinitePositive(durationMs, "buffer.duration");
   assertBoolean(options.loop ?? false, "loop");
+  const latencyMs = resolveLatencyCompensation(options.latencyCompensation, audioContext);
 
   const clock: PlaybackClock = {
     now: () => audioContext.currentTime * 1000,
     setTimer: (callback, delayMs) => setTimeout(callback, Math.max(0, delayMs)),
     clearTimer: (timerId) => clearTimeout(timerId as ReturnType<typeof setTimeout>),
   };
-  const base = createClockTransport(clock, {
-    durationMs,
-    loop: options.loop,
-    onListenerError: options.onListenerError,
-  });
+  const base = createLatencyClockTransport(
+    clock,
+    { durationMs, loop: options.loop, onListenerError: options.onListenerError },
+    latencyMs ?? (() => 0),
+  );
   const destination = options.destination ?? audioContext.destination;
   let source: AudioBufferSourceNode | null = null;
   let disposed = false;

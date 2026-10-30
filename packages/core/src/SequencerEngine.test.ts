@@ -3,6 +3,7 @@ import { SequencerEngine } from "./SequencerEngine";
 import { createMediaElementTransport } from "./audioClock";
 import {
   createClockTransport,
+  createLatencyClockTransport,
   type PlaybackSnapshot,
   type PlaybackTransport,
   type PlaybackTransportEvent,
@@ -251,6 +252,31 @@ describe("SequencerEngine — Playback v2", () => {
       "tick",
       "loop",
     ]);
+  });
+
+  it("keeps emitting steps across a loop when the transport compensates latency", async () => {
+    const clock = new FakeClock();
+    const transport = createLatencyClockTransport(
+      clock,
+      { durationMs: STEP_MS * 4, loop: true },
+      () => 30,
+    );
+    const project = createProject({ bpm: 120, stepCount: 4, trackCount: 1 });
+    const engine = new SequencerEngine(project, { transport, lookaheadMs: 1000 });
+    const steps: StepEvent[] = [];
+    engine.on("step", (event) => steps.push(event));
+
+    await engine.play();
+    for (let index = 0; index < 8; index += 1) {
+      clock.advance(STEP_MS);
+      await vi.advanceTimersByTimeAsync(STEP_MS);
+    }
+    expect(steps.map((event) => event.stepIndex)).toEqual([0, 1, 2, 3, 0, 1, 2, 3]);
+
+    clock.advance(30);
+    await vi.advanceTimersByTimeAsync(30);
+    expect(steps.map((event) => event.stepIndex)).toEqual([0, 1, 2, 3, 0, 1, 2, 3, 0]);
+    expect(steps.at(-1)?.cause).toBe("loop");
   });
 
   it("PB-EN-002 pauses and resumes without duplicating the current step", async () => {

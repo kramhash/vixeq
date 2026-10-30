@@ -60,7 +60,9 @@ explicitly to synchronize playback to an `HTMLMediaElement`
 (`createAudioBufferTransport`) — see the
 [Audio Sync section of the core guide](../core/#audio-sync). Sharing one
 transport across engines keeps them in lockstep; passing none per engine
-keeps them independent.
+keeps them independent. The audio transports can report the position the
+listener hears rather than the one scheduled, with `latencyCompensation`
+([Output latency](../core/#output-latency)).
 
 ## Reading channels into your app
 

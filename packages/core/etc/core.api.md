@@ -133,6 +133,7 @@ export type ArrangementSectionEvent = {
 export type AudioBufferTransportOptions = PlaybackTransportBaseOptions & {
     destination?: AudioNode;
     loop?: boolean;
+    latencyCompensation?: LatencyCompensation;
 };
 
 // @public
@@ -356,6 +357,9 @@ export type JsonValue = JsonPrimitive | JsonValue[] | JsonObject;
 export const lastStepAt: (source: SequenceProject | ArrangementProject, positionMs: number, trackId: string, options?: TimeEvaluationOptions) => StepHit | null;
 
 // @public
+export type LatencyCompensation = "output" | number | (() => number);
+
+// @public
 export const lerp: (from: number, to: number, t: number) => number;
 
 // @public
@@ -370,6 +374,7 @@ export type ListenerErrorContext = {
 // @public
 export type MediaElementTransportOptions = PlaybackTransportBaseOptions & {
     audioContext?: AudioContext;
+    latencyCompensation?: LatencyCompensation;
 };
 
 // @public

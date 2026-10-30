@@ -182,6 +182,23 @@ export function createClockTransport(
   clock: PlaybackClock,
   options: ClockTransportOptions = {},
 ): PlaybackTransport {
+  return createLatencyClockTransport(clock, options, () => 0);
+}
+
+/**
+ * {@link createClockTransport} whose reported position trails the clock by
+ * `latencyMs()` (read on every query, in clock milliseconds). Playback holds at
+ * its start position for the latency after `play` and `seek`, and `loop` and
+ * `ended` fire when the delayed position reaches the boundary. `pause` settles
+ * at the undelayed position, where the audio stopped. While playing, the
+ * position never moves backward when the latency grows. Internal to the audio
+ * transports; not exported from the package.
+ */
+export function createLatencyClockTransport(
+  clock: PlaybackClock,
+  options: ClockTransportOptions,
+  latencyMs: () => number,
+): PlaybackTransport {
   const durationMs = options.durationMs ?? null;
   if (durationMs !== null) {
     assertFinitePositive(durationMs, "durationMs");
@@ -196,6 +213,9 @@ export function createClockTransport(
   let playbackRate = 1;
   let loop = options.loop ?? false;
   let anchorClockMs = clock.now();
+  // Lowest unwrapped position a playing read may return; keeps the position
+  // from moving backward when the latency grows.
+  let floorPositionMs = 0;
   let boundaryTimerId: unknown;
   let loopIteration = 0;
   let disposed = false;
@@ -214,12 +234,23 @@ export function createClockTransport(
     boundaryTimerId = undefined;
   };
 
+  const readUnwrappedPosition = (now: number, latency: number): number => {
+    const elapsedClockMs = Math.max(0, now - anchorClockMs - latency);
+    return Math.max(floorPositionMs, positionMs + elapsedClockMs * playbackRate);
+  };
+
   const readPlayingPosition = (): number => {
-    const elapsedClockMs = Math.max(0, clock.now() - anchorClockMs);
-    const rawPositionMs = positionMs + elapsedClockMs * playbackRate;
+    const rawPositionMs = readUnwrappedPosition(clock.now(), latencyMs());
+    floorPositionMs = rawPositionMs;
     if (durationMs === null) return rawPositionMs;
     if (loop) return rawPositionMs % durationMs;
     return Math.min(durationMs, rawPositionMs);
+  };
+
+  const anchorAt = (nextPositionMs: number, now: number): void => {
+    positionMs = nextPositionMs;
+    floorPositionMs = nextPositionMs;
+    anchorClockMs = now;
   };
 
   const createSnapshot = (): PlaybackSnapshot => ({
@@ -246,23 +277,35 @@ export function createClockTransport(
     if (state !== "playing" || durationMs === null) return;
 
     const remainingMs = Math.max(0, durationMs - positionMs);
-    boundaryTimerId = clock.setTimer(handleBoundary, remainingMs / playbackRate);
+    const delayMs = anchorClockMs + latencyMs() + remainingMs / playbackRate - clock.now();
+    boundaryTimerId = clock.setTimer(handleBoundary, Math.max(0, delayMs));
   };
 
-  const settlePlayingPosition = (): void => {
+  /**
+   * Folds the elapsed time into `positionMs`. `delayed` uses the latency-delayed
+   * position (boundaries, rate and loop changes); otherwise the undelayed one
+   * (pause). A start hold that has not elapsed is kept. The anchor follows the
+   * true delayed position, not a floor held after the latency grew, and the
+   * floor carries over (less the completed loops) so reads keep holding.
+   */
+  const settlePlayingPosition = (delayed = true): void => {
     const now = clock.now();
-    const elapsedClockMs = Math.max(0, now - anchorClockMs);
+    const latency = delayed ? latencyMs() : 0;
+    const elapsedClockMs = Math.max(0, now - anchorClockMs - latency);
     const rawPositionMs = positionMs + elapsedClockMs * playbackRate;
-    anchorClockMs = now;
+    const floorMs = Math.max(floorPositionMs, rawPositionMs);
+    anchorClockMs = Math.max(anchorClockMs, now - latency);
 
     if (durationMs === null) {
       positionMs = rawPositionMs;
+      floorPositionMs = floorMs;
       return;
     }
 
     if (loop) {
       const completedLoops = Math.floor(rawPositionMs / durationMs);
       positionMs = rawPositionMs % durationMs;
+      floorPositionMs = floorMs - completedLoops * durationMs;
       for (let index = 0; index < completedLoops; index += 1) {
         loopIteration += 1;
         emit({ type: "loop", iteration: loopIteration, snapshot: createSnapshot() });
@@ -279,6 +322,7 @@ export function createClockTransport(
     }
 
     positionMs = rawPositionMs;
+    floorPositionMs = floorMs;
   };
 
   function handleBoundary(): void {
@@ -337,7 +381,7 @@ export function createClockTransport(
           loopIteration = 0;
         }
         state = "playing";
-        anchorClockMs = clock.now();
+        anchorAt(positionMs, clock.now());
         emit({ type: "play", snapshot: createSnapshot() });
         scheduleBoundary();
       });
@@ -347,7 +391,7 @@ export function createClockTransport(
       assertActive();
       return enqueue(() => {
         if (state !== "playing") return;
-        settlePlayingPosition();
+        settlePlayingPosition(false);
         if (state !== "playing") return;
         state = "paused";
         clearBoundaryTimer();
@@ -361,9 +405,8 @@ export function createClockTransport(
         if (state === "stopped" && positionMs === 0) return;
         if (state === "playing") settlePlayingPosition();
         state = "stopped";
-        positionMs = 0;
+        anchorAt(0, clock.now());
         loopIteration = 0;
-        anchorClockMs = clock.now();
         clearBoundaryTimer();
         emit({ type: "stop", snapshot: createSnapshot() });
       });
@@ -380,8 +423,7 @@ export function createClockTransport(
       return enqueue(() => {
         const previousPositionMs = state === "playing" ? readPlayingPosition() : positionMs;
         const previousState = state;
-        positionMs = nextPositionMs;
-        anchorClockMs = clock.now();
+        anchorAt(nextPositionMs, clock.now());
 
         if (previousState === "stopped") {
           state = nextPositionMs === 0 ? "stopped" : "paused";
@@ -403,7 +445,6 @@ export function createClockTransport(
         if (state === "playing") settlePlayingPosition();
         const previousPlaybackRate = playbackRate;
         playbackRate = nextPlaybackRate;
-        anchorClockMs = clock.now();
         emit({ type: "ratechange", previousPlaybackRate, snapshot: createSnapshot() });
         scheduleBoundary();
       });

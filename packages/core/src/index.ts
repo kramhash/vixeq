@@ -37,6 +37,7 @@ export {
 } from "./audioClock";
 export type {
   AudioBufferTransportOptions,
+  LatencyCompensation,
   MediaElementTransportOptions,
 } from "./audioClock";
 export { browserClock } from "./clock";
