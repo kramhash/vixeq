@@ -78,9 +78,16 @@ Deliver:
 
 ### 1.0.0-rc.1 and 1.0.0
 
-Publish an RC only after all 0.7–0.9 gates are green. Keep the RC public for
-at least 14 days with no blocker or critical defects and no public API changes.
-Any public API change starts a new RC observation period.
+Publish an RC only after all 0.7–0.9 gates are green. Promote an RC to
+`1.0.0` once a real consumer has run it: upgrade the frapx integration lab (the
+downstream app built on 0.9 that the frapx integration issues came from) to
+the RC using only the published migration notes, type-check and build it, and
+exercise each of its pages in a browser. A step missing from the migration
+notes is fixed in the docs and does not block promotion. A blocker or critical
+defect, or one that needs a public API change, ships in a new RC, which is
+validated the same way.
+(Until 2026-10-30 this was a 14-day observation window. It was dropped because
+the RCs had no outside users who could report defects in that time.)
 
 Before `1.0.0-rc.1` is published:
 
@@ -751,7 +758,7 @@ Pages publishes an index with at least `/playground/`, `/website-pulse/`, and
 ## 12. Explicit non-goals for 1.0
 
 - Audio generation or synthesis
-- MIDI (continuous CC output is planned after 1.0; see `ROADMAP.md` 1.2.0)
+- MIDI (continuous CC output is planned after 1.0; see `ROADMAP.md` 1.3.0)
 - DAW-style Timeline editor
 - Generic Arrangement/Timeline component in `player-react`
 - Tempo ramps
@@ -835,7 +842,7 @@ Status values: `pending`, `in_progress`, `blocked`, `done`.
 | RC4 | 1.0-rc | API fixes from the pre-1.0 audit (F1–F19) plus npm provenance (#14), tracked by the [`1.0.0-rc.2` milestone](https://github.com/kramhash/vixeq/milestone/4) | RC3 | done | Claude (author), Claude critic (reviewer) | per issue; audit: `docs/reviews/rc2-api-audit-claude.md` |
 | RC5 | 1.0-rc | TSDoc for every public export with API Extractor `ae-undocumented` as an error; check the README and guide code examples against the rc.2 API | RC4 | done | Claude (author), self-review (docs) | `packages/*/src`, `api-extractor.base.json`, READMEs, `apps/docs` |
 | RC6 | 1.0-rc | Publish `1.0.0-rc.2` through the RC2 workflow, confirm the provenance attestation, and run the registry smoke test. If the attestation is missing, fix the workflow and publish `1.0.0-rc.3` (no API change, so the observation period still counts from rc.2) | RC5 | done | Claude (author) | package metadata, `CHANGELOG.md`, `.github/workflows/publish.yml`, release docs |
-| S1 | 1.0 | After the 14-day RC observation window (counted from `1.0.0-rc.2`, or from a later RC that changes public API), remove pre-1.0 disclaimers in the version-bump commit, publish `1.0.0`, and run the post-publish clean-install smoke test (order: release checklist "Stable Promotion Steps") | RC6 | pending | — | package metadata, READMEs, `CHANGELOG.md`, `SUPPORT.md`, `ROADMAP.md`, `AGENTS.md`, `CLAUDE.md` |
+| S1 | 1.0 | After the final RC passes the real-consumer validation in §2 (the frapx integration lab), remove pre-1.0 disclaimers in the version-bump commit, publish `1.0.0`, and run the post-publish clean-install smoke test (order: release checklist "Stable Promotion Steps") | RC6 | pending | — | package metadata, READMEs, `CHANGELOG.md`, `SUPPORT.md`, `ROADMAP.md`, `AGENTS.md`, `CLAUDE.md` |
 | DOC1 | 1.0-rc | Add React rhythm game tutorial | — | done | Codex (author) | `apps/docs/src/content/docs/guide/`, `apps/docs/astro.config.mts` |
 | RC1J | 1.0-rc | Caller-supplied track ids and project-local deterministic id generation (details: issue [#3](https://github.com/kramhash/vixeq/issues/3)) | — | done | Claude (author), Claude critic (reviewer) | `packages/core/src/project.ts`, validation, API report |
 | RC1K | 1.0-rc | Negative `TimingMap.startPositionMs` (details: issue [#4](https://github.com/kramhash/vixeq/issues/4)) | — | done | Claude (author), Claude critic (reviewer) | `packages/core/src/timeline/timing.ts`, Timeline/Arrangement project validation, migration, `TimelineEngine.ts`, `ArrangementEngine.ts`, `docs/behavior/`, `CHANGELOG.md` |

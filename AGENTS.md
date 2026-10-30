@@ -12,10 +12,10 @@ release gates, and migration behavior.
 - **New work** (fixes, additions, and requests found after 0.9, including the
   frapx integration findings) is tracked as GitHub issues. Milestones give the
   release: `1.0.0-rc.N` for items that must land before that RC (a row in the
-  task table references them), `1.0.0` for items found during the RC
-  observation period that must land before the stable publish (S1) without
-  changing public API, `1.1.0` for additive follow-ups, and no milestone for
-  later.
+  task table references them), `1.0.0` for items found while validating the RC
+  that must land before the stable publish (S1) without changing public API,
+  `1.1.0`–`1.3.0` for the additive follow-ups in `ROADMAP.md`, and no
+  milestone for later.
 - Issue bodies use the headings Problem / What exists / Proposed change /
   Tests / Release notes, plus Evidence and Depends on / Order when they apply.
   The cross-repository plan for the frapx integration issues is

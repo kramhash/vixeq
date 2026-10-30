@@ -275,9 +275,9 @@ All public packages use lockstep versions, including prereleases, through these 
 - [ ] Publish all public packages at the same RC version.
 - [ ] Make the official examples consume the packed RC packages rather than workspace source paths for release verification.
 - [ ] Verify fresh installation from npm tarballs, including ESM, CJS, types, exports, and CSS entry points.
-- [ ] Keep the RC public for at least 14 days.
+- [ ] Validate the RC in a real consumer: upgrade the frapx integration lab from 0.9 using only the published migration notes, then build it and exercise every page. This replaced the 14-day observation window on 2026-10-30, because the RCs had no outside users who could report defects in that time.
 - [ ] Require zero known blocker or critical defects.
-- [ ] Require the compatibility matrix to remain green and no public API changes during the RC observation window. Any API change starts a new RC evaluation.
+- [ ] Require the compatibility matrix to remain green. A defect that needs a public API change ships in a new RC, which is validated the same way.
 
 ---
 
@@ -296,28 +296,42 @@ All public packages use lockstep versions, including prereleases, through these 
 
 ---
 
-### 1.1.0 — Channel Sinks
+### 1.1.0 — Time-Based Evaluation
 
-**Theme**: Make the per-frame channel output pluggable and fill the small API
-gaps found in the official examples. Every item is additive; no 1.0 API
-changes.
+**Theme**: Fill the gaps the frapx integration lab found when driving shaders
+and offline rendering from vixeq. Every item is additive; no 1.0 API changes.
+
+- [ ] Pure time-based evaluation for shader and offline rendering: a free-function sampler for a single `SequenceProject`, a "last step at or before" query, envelopes evaluated from position alone (with attack and look-ahead), and a hold easing (issue [#5](https://github.com/kramhash/vixeq/issues/5)).
+- [ ] Output-latency compensation on the audio transports (issue [#6](https://github.com/kramhash/vixeq/issues/6)).
+- [ ] Move the playground visualizer to `@frapx/fx-canvas` with `bindUniforms`, after the pure evaluation API lands (issue [#7](https://github.com/kramhash/vixeq/issues/7)).
+- [ ] Public `getDurationMs()` / `getDurationBeats()` on `SequencerEngine`, `ArrangementEngine`, and `TimelineEngine`.
+
+Caller-supplied track ids moved to 1.0.0-rc.1 (RC1J).
+
+---
+
+### 1.2.0 — Channel Sinks
+
+**Theme**: Make the per-frame channel output pluggable. Every item is additive.
 
 - [ ] `ChannelSink` contract: a target that receives a sampled channel value map each frame.
 - [ ] `animateChannels(source, sinks)` in `@vixeq/core/dom`: the non-React rAF loop that `cycling-workout` currently hand-writes, writing to any number of sinks.
 - [ ] `createElementSink(element, mapping)`: the CSS custom property sink, built on the same contract as `bindChannelsToElement`.
-- [ ] Public `getDurationMs()` / `getDurationBeats()` on `SequencerEngine`, `ArrangementEngine`, and `TimelineEngine`.
-- [ ] Pure time-based evaluation for shader and offline rendering: a free-function sampler for a single `SequenceProject`, a "last step at or before" query, envelopes evaluated from position alone (with attack and look-ahead), and a hold easing (issue [#5](https://github.com/kramhash/vixeq/issues/5)).
-- [ ] Output-latency compensation on the audio transports (issue [#6](https://github.com/kramhash/vixeq/issues/6)).
-- [ ] Move the playground visualizer to `@frapx/fx-canvas` with `bindUniforms`, after the pure evaluation API lands (issue [#7](https://github.com/kramhash/vixeq/issues/7)).
-
-Caller-supplied track ids moved to 1.0.0-rc.1 (RC1J).
 
 The sink contract ships one minor release before the first external sink so
 that MIDI can build on a contract that real usage has already validated.
 
 ---
 
-### 1.2.0 — MIDI CC Output
+### Candidate — Arrangement Editing in `@vixeq/player-react`
+
+Editing an `ArrangementProject` (sections on a beat timeline, with a pattern
+picker) in the player (issue [#2](https://github.com/kramhash/vixeq/issues/2)).
+Its scope and release are decided after 1.1.0 ships.
+
+---
+
+### 1.3.0 — MIDI CC Output
 
 **Theme**: Send channel values to hardware and DAWs as MIDI control changes.
 
@@ -328,7 +342,7 @@ that MIDI can build on a contract that real usage has already validated.
 
 ### Future — OSC Output
 
-OSC output through the same `ChannelSink` contract is a candidate after 1.2.
+OSC output through the same `ChannelSink` contract is a candidate after 1.3.
 Browsers cannot send raw UDP, so it needs a WebSocket-to-UDP bridge; its design
 is deferred until `@vixeq/midi` has shipped.
 
@@ -354,7 +368,7 @@ These tasks run in parallel with the release cycles above:
 These items are not planned:
 
 - **Audio engine** — vixeq does not generate, synthesize, or schedule audio. It follows external audio through `PlaybackTransport`; it does not produce it. Tone.js integration, sample playback APIs, Web Audio graph construction, and MIDI scheduling remain out of scope.
-- **MIDI input, MIDI note/trigger output, and MIDI clock** — continuous CC output is planned for 1.2.0 (see above).
+- **MIDI input, MIDI note/trigger output, and MIDI clock** — continuous CC output is planned for 1.3.0 (see above).
 - **DAW-style timeline editing UI**
 - **URL sharing / project serialization beyond JSON export**
 - **Production stability guarantees before 1.0**
