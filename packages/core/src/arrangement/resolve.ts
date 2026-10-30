@@ -86,6 +86,32 @@ export const resolveArrangementStep = (
   return { section: lookup.section, stepIndex, nextStepIndex, phase };
 };
 
+const POSITION_EPSILON_MS = 1e-9;
+
+/**
+ * The beat at a transport position, snapped up to the next section edge or
+ * step start when that lies within POSITION_EPSILON_MS: an ms-to-beat round
+ * trip can land an ulp below it (at odd tempos, or at transport position 0
+ * when a negative startPositionMs puts a section or step start exactly there).
+ * Shared by ArrangementEngine and the loop option of sampleArrangement.
+ */
+export const beatAtPosition = (arrangement: ArrangementProject, positionMs: number): number => {
+  const beat = msToBeat(arrangement.timing, positionMs);
+  let nextBeat = Number.POSITIVE_INFINITY;
+  for (const section of arrangement.sections) {
+    const pattern = arrangement.patterns[section.patternId];
+    if (!pattern) continue;
+    if (section.startBeat >= beat) {
+      nextBeat = Math.min(nextBeat, section.startBeat);
+    } else if (section.endBeat > beat) {
+      const { stepsPerBeat } = pattern;
+      const stepBeat = section.startBeat + Math.ceil((beat - section.startBeat) * stepsPerBeat) / stepsPerBeat;
+      nextBeat = Math.min(nextBeat, stepBeat, section.endBeat);
+    }
+  }
+  return beatToMs(arrangement.timing, nextBeat) - positionMs <= POSITION_EPSILON_MS ? nextBeat : beat;
+};
+
 // Wrap in ms, as ArrangementEngine's local loop does: with tempo changes a
 // beat-space modulo would land elsewhere. Beats before 0 extend the first tempo.
 const loopBeat = (arrangement: ArrangementProject, beat: number): number => {
@@ -96,7 +122,10 @@ const loopBeat = (arrangement: ArrangementProject, beat: number): number => {
   if (positionMs >= 0 && positionMs < loopMs) {
     return beat;
   }
-  return msToBeat(timing, ((positionMs % loopMs) + loopMs) % loopMs);
+  const wrapped = beatAtPosition(arrangement, ((positionMs % loopMs) + loopMs) % loopMs);
+  // An ulp below the loop end snaps to the end itself, which is the next
+  // iteration's start.
+  return wrapped >= arrangement.durationBeats ? beatAtPosition(arrangement, 0) : wrapped;
 };
 
 /**

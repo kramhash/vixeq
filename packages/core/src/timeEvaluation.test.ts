@@ -112,6 +112,25 @@ describe("sampleArrangement loop option", () => {
     expect(lastStepAt(tempoChange, 4900, "kick", { loop: true })).toMatchObject({ value: 0.6, positionMs: 4875 });
   });
 
+  it("lands on the step a wrapped beat names at odd tempos", () => {
+    for (const bpm of [97, 99.7, 137]) {
+      const odd = createArrangement({
+        timing: { bpm },
+        durationBeats: 6,
+        patterns: { a: pattern([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]) },
+        sections: [{ id: "a", patternId: "a", startBeat: 0, endBeat: 6 }],
+      });
+      for (let iteration = 1; iteration <= 3; iteration += 1) {
+        for (let step = 0; step < 24; step += 1) {
+          const beat = step / 4;
+          expect(sampleArrangement(odd, beat + 6 * iteration, hold, ["kick"], { loop: true })).toEqual(
+            sampleArrangement(odd, beat, hold, ["kick"]),
+          );
+        }
+      }
+    }
+  });
+
   it("wraps beats before transport position 0 to the end of the loop", () => {
     // Beat 0 is 250 ms before transport 0; the section ends at 750 ms, so the
     // loop end (2750 ms) is in a gap.

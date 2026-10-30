@@ -12,6 +12,7 @@ import {
 import { beatToMs, msToBeat } from "../timeline/timing";
 import {
   arrangementDurationBeats,
+  beatAtPosition,
   resolveArrangementStep,
   sampleArrangement,
   sectionAtBeat,
@@ -92,8 +93,6 @@ export type ArrangementEngineOptions = {
   onSection?: ArrangementEventHandler<"section">;
   onListenerError?: (error: unknown, context: ListenerErrorContext) => void;
 };
-
-const POSITION_EPSILON_MS = 1e-9;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -1030,7 +1029,7 @@ export class ArrangementEngine {
   }
 
   private emitSectionForPosition(positionMs: number, cause: StepEventCause, force: boolean): void {
-    const beat = this.beatAtPosition(positionMs);
+    const beat = beatAtPosition(this.arrangement, positionMs);
     const lookup = sectionAtBeat(this.arrangement, beat);
     const section = lookup?.section ?? null;
     const sectionId = section?.id ?? null;
@@ -1076,7 +1075,7 @@ export class ArrangementEngine {
   }
 
   private syncCurrentSection(positionMs: number): void {
-    const beat = this.beatAtPosition(positionMs);
+    const beat = beatAtPosition(this.arrangement, positionMs);
     this.currentSection = sectionAtBeat(this.arrangement, beat)?.section ?? null;
   }
 
@@ -1172,29 +1171,8 @@ export class ArrangementEngine {
     return !this.localLoop && positionMs >= this.getDurationMs();
   }
 
-  /**
-   * The beat at a position, snapped up to the next section edge or step start
-   * when that lies within POSITION_EPSILON_MS: an ms-to-beat round trip can
-   * land an ulp below it (for example at transport position 0 when a negative
-   * startPositionMs puts a section or step start exactly there).
-   */
-  private beatAtPosition(positionMs: number, arrangement = this.arrangement): number {
-    const beat = msToBeat(arrangement.timing, positionMs);
-    let nextBeat = Number.POSITIVE_INFINITY;
-    for (const section of arrangement.sections) {
-      if (section.startBeat >= beat) {
-        nextBeat = Math.min(nextBeat, section.startBeat);
-      } else if (section.endBeat > beat) {
-        const { stepsPerBeat } = arrangement.patterns[section.patternId];
-        const stepBeat = section.startBeat + Math.ceil((beat - section.startBeat) * stepsPerBeat) / stepsPerBeat;
-        nextBeat = Math.min(nextBeat, stepBeat, section.endBeat);
-      }
-    }
-    return beatToMs(arrangement.timing, nextBeat) - positionMs <= POSITION_EPSILON_MS ? nextBeat : beat;
-  }
-
   private resolveAtPosition(positionMs: number, arrangement = this.arrangement): ArrangementStepResolution | null {
-    const beat = this.beatAtPosition(positionMs, arrangement);
+    const beat = beatAtPosition(arrangement, positionMs);
     const resolved = resolveArrangementStep(arrangement, beat);
     if (!resolved) {
       return null;
@@ -1255,7 +1233,7 @@ export class ArrangementEngine {
     // there, its start dispatches the section and the step already under way.
     const startsBeforeTransport = timing.startPositionMs < 0;
     if (startsBeforeTransport && isDue(0)) {
-      const beat = this.beatAtPosition(0);
+      const beat = beatAtPosition(this.arrangement, 0);
       items.push({
         kind: "section",
         rawPositionMs: iterationStartMs,
@@ -1345,7 +1323,7 @@ export class ArrangementEngine {
     positionMs: number,
     easing: EasingFunction = linear,
   ): Record<string, number> {
-    const beat = this.beatAtPosition(positionMs, arrangement);
+    const beat = beatAtPosition(arrangement, positionMs);
     return sampleArrangement(arrangement, beat, easing, unionTrackIds(arrangement));
   }
 
