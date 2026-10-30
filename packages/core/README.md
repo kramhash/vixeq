@@ -122,6 +122,41 @@ await engine.play();
 
 Loop boundaries are handled by `AudioBufferSourceNode.loop`. The transport creates a new one-shot source only when playback starts or when seeking during playback.
 
+### Output latency
+
+The audio transports report the position the audio clock has scheduled, which
+is ahead of what the listener hears by the output latency: about 20 ms on
+built-in speakers and far more over Bluetooth. Pass `latencyCompensation` to
+report the heard position instead:
+
+```ts
+const transport = createAudioBufferTransport(ctx, buffer, {
+  loop: true,
+  latencyCompensation: "output",
+});
+```
+
+- `"output"` subtracts the context's `baseLatency + outputLatency`, read on
+  every query. A browser that does not report them counts as 0, and some
+  under-report Bluetooth output.
+- A number is a fixed latency in ms.
+- A function is called on every query and returns ms, for a live calibration
+  offset: `() => (ctx.baseLatency + ctx.outputLatency) * 1000 + offset.ms`.
+
+For `createMediaElementTransport`, `"output"` needs the `audioContext` option
+and subtracts only that context's latency: a browser's `currentTime` may
+already account for the element's own output.
+
+With compensation on, playback holds at its start position for the latency
+after `play()` and seeks, `loop` and `ended` fire when the heard position
+reaches the boundary (so engines dispatch steps in time with the sound), and
+the position never moves backward when a live latency grows. Paused, stopped,
+and ended positions are not shifted. It is off by default.
+
+Drive visuals by reading the position every frame. Do not align a free-running
+clock once at `play()`: the audio clock may start advancing after `play()`
+resolves.
+
 ## Project Helpers
 
 ```ts

@@ -3,6 +3,7 @@ import type { PlaybackTransportEvent } from "./playbackTransport";
 import {
   createAudioBufferTransport,
   createMediaElementTransport,
+  type AudioBufferTransportOptions,
 } from "./audioClock";
 
 type Listener = EventListener;
@@ -51,6 +52,8 @@ class FakeMedia {
 
 class FakeAudioContext {
   currentTime = 0;
+  baseLatency: number | undefined = undefined;
+  outputLatency: number | undefined = undefined;
   resume = vi.fn(async () => {});
   destination = {} as AudioDestinationNode;
   sources: FakeAudioBufferSource[] = [];
@@ -545,5 +548,259 @@ describe("createAudioBufferTransport", () => {
     expect(context.sources[0]?.disconnect).toHaveBeenCalledOnce();
     expect("close" in context).toBe(false);
     expect(() => transport.play()).toThrowError(expect.objectContaining({ code: "TRANSPORT_DISPOSED" }));
+  });
+});
+
+describe("latencyCompensation", () => {
+  const bufferTransport = (
+    context: FakeAudioContext,
+    latencyCompensation: AudioBufferTransportOptions["latencyCompensation"],
+    loop = false,
+  ) =>
+    createAudioBufferTransport(
+      context as unknown as AudioContext,
+      new FakeAudioBuffer() as unknown as AudioBuffer,
+      { latencyCompensation, loop },
+    );
+
+  it("validates the option when the transport is created", () => {
+    const context = new FakeAudioContext();
+    expect(() => bufferTransport(context, -1)).toThrow(RangeError);
+    expect(() => bufferTransport(context, Number.NaN)).toThrow(RangeError);
+    expect(() => bufferTransport(context, Number.POSITIVE_INFINITY)).toThrow(RangeError);
+    expect(() =>
+      bufferTransport(context, "auto" as unknown as AudioBufferTransportOptions["latencyCompensation"]),
+    ).toThrow(TypeError);
+    expect(() =>
+      createMediaElementTransport(new FakeMedia() as unknown as HTMLMediaElement, {
+        latencyCompensation: "output",
+      }),
+    ).toThrow(TypeError);
+  });
+
+  it("leaves the position unshifted when the option is off", async () => {
+    const context = new FakeAudioContext();
+    context.baseLatency = 0.005;
+    context.outputLatency = 0.015;
+    const transport = bufferTransport(context, undefined);
+    await transport.play();
+    context.currentTime = 0.01;
+
+    expect(transport.getPositionMs()).toBe(10);
+  });
+
+  it("holds at the start for the latency, then trails the clock", async () => {
+    const context = new FakeAudioContext();
+    const transport = bufferTransport(context, 20);
+    await transport.play();
+
+    context.currentTime = 0.01;
+    expect(transport.getPositionMs()).toBe(0);
+    context.currentTime = 0.5;
+    expect(transport.getPositionMs()).toBe(480);
+    expect(transport.getSnapshot().positionMs).toBe(480);
+  });
+
+  it('reads "output" from the context on every query and treats missing values as 0', async () => {
+    const context = new FakeAudioContext();
+    const transport = bufferTransport(context, "output");
+    await transport.play();
+    context.currentTime = 0.5;
+
+    expect(transport.getPositionMs()).toBe(500);
+    context.baseLatency = 0.005;
+    context.outputLatency = 0.015;
+    expect(transport.getPositionMs()).toBe(500);
+    context.currentTime = 0.6;
+    expect(transport.getPositionMs()).toBeCloseTo(580);
+  });
+
+  it("holds at a seek target and reports the heard position as previousPositionMs", async () => {
+    const context = new FakeAudioContext();
+    const transport = bufferTransport(context, 100);
+    const events: PlaybackTransportEvent[] = [];
+    transport.subscribe((event) => events.push(event));
+    await transport.play();
+    context.currentTime = 0.5;
+
+    await transport.seekPositionMs(1000);
+    context.currentTime = 0.55;
+
+    expect(events.at(-1)).toMatchObject({ type: "seek", previousPositionMs: 400 });
+    expect(transport.getPositionMs()).toBe(1000);
+    context.currentTime = 0.65;
+    expect(transport.getPositionMs()).toBeCloseTo(1050);
+  });
+
+  it("pauses at the undelayed position and resumes the source there", async () => {
+    const context = new FakeAudioContext();
+    const transport = bufferTransport(context, 100);
+    await transport.play();
+    context.currentTime = 0.75;
+    expect(transport.getPositionMs()).toBe(650);
+
+    await transport.pause();
+
+    expect(transport.getPositionMs()).toBe(750);
+    await transport.play();
+    expect(context.sources[1]?.start).toHaveBeenCalledWith(0, 0.75);
+  });
+
+  it("shows the end of each loop and fires loop when the heard position wraps", async () => {
+    vi.useFakeTimers();
+    const context = new FakeAudioContext();
+    const transport = bufferTransport(context, 100, true);
+    const events: PlaybackTransportEvent[] = [];
+    transport.subscribe((event) => events.push(event));
+    await transport.play();
+
+    context.currentTime = 2.05;
+    await vi.advanceTimersByTimeAsync(2050);
+    expect(eventTypes(events)).toEqual(["play"]);
+    expect(transport.getPositionMs()).toBeCloseTo(1950);
+
+    context.currentTime = 2.15;
+    await vi.advanceTimersByTimeAsync(100);
+    expect(eventTypes(events)).toEqual(["play", "loop"]);
+    expect(transport.getPositionMs()).toBeCloseTo(50);
+    transport.dispose();
+    vi.useRealTimers();
+  });
+
+  it("fires ended when the heard position reaches the end", async () => {
+    vi.useFakeTimers();
+    const context = new FakeAudioContext();
+    const transport = bufferTransport(context, 100);
+    const events: PlaybackTransportEvent[] = [];
+    transport.subscribe((event) => events.push(event));
+    await transport.play();
+
+    context.currentTime = 2.05;
+    await vi.advanceTimersByTimeAsync(2050);
+    expect(eventTypes(events)).toEqual(["play"]);
+    expect(transport.getSnapshot()).toMatchObject({ state: "playing" });
+    expect(transport.getPositionMs()).toBeCloseTo(1950);
+
+    context.currentTime = 2.1;
+    await vi.advanceTimersByTimeAsync(50);
+    expect(eventTypes(events)).toEqual(["play", "ended"]);
+    expect(transport.getSnapshot()).toMatchObject({ state: "ended", positionMs: 2000 });
+    transport.dispose();
+    vi.useRealTimers();
+  });
+
+  it("does not move backward when a live latency grows, and jumps when it shrinks", async () => {
+    const context = new FakeAudioContext();
+    let latencyMs = 20;
+    const transport = bufferTransport(context, () => latencyMs);
+    await transport.play();
+    context.currentTime = 0.5;
+    expect(transport.getPositionMs()).toBe(480);
+
+    latencyMs = 100;
+    expect(transport.getPositionMs()).toBe(480);
+    context.currentTime = 0.55;
+    expect(transport.getPositionMs()).toBe(480);
+    context.currentTime = 0.6;
+    expect(transport.getPositionMs()).toBeCloseTo(500);
+
+    latencyMs = 0;
+    expect(transport.getPositionMs()).toBeCloseTo(600);
+  });
+
+  it("treats a negative or non-finite live latency as 0", async () => {
+    const context = new FakeAudioContext();
+    let latencyMs = -5;
+    const transport = bufferTransport(context, () => latencyMs);
+    await transport.play();
+    context.currentTime = 0.5;
+
+    expect(transport.getPositionMs()).toBe(500);
+    latencyMs = Number.NaN;
+    context.currentTime = 0.6;
+    expect(transport.getPositionMs()).toBeCloseTo(600);
+  });
+
+  describe("media element", () => {
+    const mediaTransport = (media: FakeMedia, latencyCompensation: number) =>
+      createMediaElementTransport(media as unknown as HTMLMediaElement, { latencyCompensation });
+
+    it("holds at the start, trails the element, and pauses at the element position", async () => {
+      const media = new FakeMedia();
+      const transport = mediaTransport(media, 100);
+      await transport.play();
+
+      media.currentTime = 0.05;
+      expect(transport.getPositionMs()).toBe(0);
+      media.currentTime = 0.5;
+      expect(transport.getPositionMs()).toBe(400);
+
+      await transport.pause();
+      expect(transport.getPositionMs()).toBe(500);
+    });
+
+    it('subtracts the audioContext latency for "output"', async () => {
+      const media = new FakeMedia();
+      const context = new FakeAudioContext();
+      context.baseLatency = 0.005;
+      context.outputLatency = 0.015;
+      const transport = createMediaElementTransport(media as unknown as HTMLMediaElement, {
+        audioContext: context as unknown as AudioContext,
+        latencyCompensation: "output",
+      });
+      await transport.play();
+      media.currentTime = 0.5;
+
+      expect(transport.getPositionMs()).toBeCloseTo(480);
+    });
+
+    it("reports a loop when the heard position wraps, not the element", async () => {
+      const media = new FakeMedia();
+      const transport = mediaTransport(media, 100);
+      const events: PlaybackTransportEvent[] = [];
+      transport.subscribe((event) => events.push(event));
+      await transport.setLoop(true);
+      await transport.play();
+
+      media.currentTime = 1.95;
+      media.dispatch("timeupdate");
+      expect(transport.getPositionMs()).toBe(1850);
+
+      media.currentTime = 0.05;
+      media.dispatch("timeupdate");
+      expect(eventTypes(events)).toEqual(["loopchange", "play"]);
+      expect(transport.getPositionMs()).toBe(1950);
+
+      media.currentTime = 0.15;
+      media.dispatch("timeupdate");
+      expect(eventTypes(events)).toEqual(["loopchange", "play", "loop"]);
+      expect(events.at(-1)).toMatchObject({ iteration: 1 });
+      expect(transport.getPositionMs()).toBeCloseTo(50);
+    });
+
+    it("runs the clock through the end tail before firing ended", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+      const media = new FakeMedia();
+      const transport = mediaTransport(media, 100);
+      const events: PlaybackTransportEvent[] = [];
+      transport.subscribe((event) => events.push(event));
+      await transport.play();
+
+      media.currentTime = 2;
+      media.paused = true;
+      media.ended = true;
+      media.dispatch("ended");
+      expect(eventTypes(events)).toEqual(["play"]);
+      expect(transport.getPositionMs()).toBe(1900);
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(transport.getPositionMs()).toBe(1950);
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(eventTypes(events)).toEqual(["play", "ended"]);
+      expect(transport.getSnapshot()).toMatchObject({ state: "ended", positionMs: 2000 });
+      transport.dispose();
+      vi.useRealTimers();
+    });
   });
 });

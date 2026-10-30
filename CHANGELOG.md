@@ -4,6 +4,19 @@
 
 ### Added
 
+- `@vixeq/core`: `latencyCompensation` on `createAudioBufferTransport` and
+  `createMediaElementTransport` reports the position the listener hears
+  instead of the one the audio clock has scheduled
+  ([#6](https://github.com/kramhash/vixeq/issues/6)). It takes `"output"`
+  (the `AudioContext`'s `baseLatency + outputLatency`, read on every query;
+  the media-element transport needs its `audioContext` option for it), a
+  fixed number of ms, or a function returning ms on every query. While
+  playing, the position holds at its start for the latency after `play` and
+  `seek`, `loop` and `ended` fire when the heard position reaches the
+  boundary, and the position never moves backward when the latency grows.
+  Paused, stopped, and ended positions are not shifted. Off by default; the
+  new `LatencyCompensation` type is exported.
+
 - `@vixeq/core`: time-based evaluation for shaders and offline rendering,
   as pure functions of the position
   ([#5](https://github.com/kramhash/vixeq/issues/5)):

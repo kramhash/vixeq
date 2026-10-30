@@ -91,6 +91,28 @@ For seamless loops, decode the file and use an `AudioBufferSourceNode`
 transport instead — see `createAudioBufferTransport` in the
 [API reference](../../api/vixeq/core/index/functions/createaudiobuffertransport/).
 
+### Output latency
+
+The audio transports report the position the audio clock has scheduled, which
+runs ahead of what the listener hears by the output latency (about 20 ms on
+built-in speakers, far more over Bluetooth). Pass `latencyCompensation` to
+either transport to report the heard position:
+
+```ts
+const transport = createAudioBufferTransport(ctx, buffer, {
+  latencyCompensation: "output",
+});
+```
+
+- `"output"` reads the context's `baseLatency + outputLatency` on every query.
+  The media-element transport needs its `audioContext` option for it.
+- A number is a fixed latency in ms.
+- A function returns ms on every query, for a live calibration offset.
+
+Playback then holds at its start for the latency after `play()` and seeks, and
+`loop` and `ended` fire when the heard position reaches the boundary. Read the
+position every frame rather than aligning a clock once at `play()`.
+
 ## Arrangement
 
 Play multiple patterns on a shared, tempo-mapped beat timeline — see

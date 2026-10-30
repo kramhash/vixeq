@@ -303,7 +303,7 @@ All public packages use lockstep versions, including prereleases, through these 
 and offline rendering from vixeq. Every item is additive; no 1.0 API changes.
 
 - [ ] Pure time-based evaluation for shader and offline rendering: a free-function sampler for a single `SequenceProject`, a "last step at or before" query, envelopes evaluated from position alone (with attack and look-ahead), and a hold easing (issue [#5](https://github.com/kramhash/vixeq/issues/5)).
-- [ ] Output-latency compensation on the audio transports (issue [#6](https://github.com/kramhash/vixeq/issues/6)).
+- [x] Output-latency compensation on the audio transports (issue [#6](https://github.com/kramhash/vixeq/issues/6)).
 - [ ] Move the playground visualizer to `@frapx/fx-canvas` with `bindUniforms`, after the pure evaluation API lands (issue [#7](https://github.com/kramhash/vixeq/issues/7)).
 - [ ] Public `getDurationMs()` / `getDurationBeats()` on `SequencerEngine`, `ArrangementEngine`, and `TimelineEngine`.
 
