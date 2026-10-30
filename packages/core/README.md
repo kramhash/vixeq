@@ -71,11 +71,13 @@ engine.dispose();
 
 Use `setProject(nextProject)` when your app edits the immutable project while the engine is alive.
 
-`getDurationMs()` / `getDurationBeats()` report the project's length on every
-Engine: local end for `ArrangementEngine` and `TimelineEngine`, and one pass of
-the pattern for `SequencerEngine` (which keeps looping). They follow
-`setProject`, and differ from `transport.getDurationMs()`, which is the media
-length.
+`getDurationMs()` / `getDurationBeats()` report where the project ends on every
+Engine. For `ArrangementEngine` and `TimelineEngine` that is local end:
+`durationBeats`, and its transport position in ms
+(`beatToMs(timing, durationBeats)`, which includes `startPositionMs`), where
+`getPosition().positionMs` stops at `ended`. For `SequencerEngine` it is one
+pass of the pattern, which keeps looping. They follow `setProject`, and differ
+from `transport.getDurationMs()`, which is the media length.
 
 ## Audio Sync
 
