@@ -357,6 +357,27 @@ export class SequencerEngine {
     this.rescheduleIfPlaying();
   }
 
+  /**
+   * Returns the length of one pass of the pattern in beats
+   * (`stepCount / stepsPerBeat`). The Engine does not stop there: the pattern
+   * loops forever. Follows `setProject`.
+   */
+  getDurationBeats(): number {
+    this.assertLive();
+    return this.project.stepCount / this.project.stepsPerBeat;
+  }
+
+  /**
+   * Returns the length of one pass of the pattern in ms at the project's
+   * `bpm`. The Engine does not stop there: the pattern loops forever. This is
+   * the pattern's length, not the media length that `transport.getDurationMs()`
+   * reports. Follows `setProject`, including a BPM change.
+   */
+  getDurationMs(): number {
+    this.assertLive();
+    return this.getDurationBeats() * this.getMsPerBeat(this.project);
+  }
+
   /** Returns the loaded project. */
   getProject(): SequenceProject {
     this.assertLive();
