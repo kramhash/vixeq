@@ -1,10 +1,8 @@
 # Claude Project Instructions
 
 Follow [`AGENTS.md`](AGENTS.md) for repository collaboration rules, including
-where work is tracked (the spec's task table for the 1.0 release, GitHub issues
-for new work).
+where work is tracked (GitHub issues).
 
-The approved pre-1.0 source of truth is
+The approved contract for the 1.0 API is
 [`docs/plans/v1-collaboration-spec.md`](docs/plans/v1-collaboration-spec.md).
-Read it before claiming or implementing any 0.7–1.0 work item, and before
-working on an issue in the `1.0.0-rc.1` milestone.
+Read it before changing Engine behavior or public API.

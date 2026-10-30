@@ -67,8 +67,8 @@ Release and upgrade references:
 
 - [Support policy](./SUPPORT.md) for Node, React, TypeScript, browser,
   package, and semver support targets.
-- [Migration guide index](./docs/migrations/README.md) for breaking pre-1.0
-  changes.
+- [Migration guide index](./docs/migrations/README.md) for breaking changes
+  before 1.0 (upgrading from 0.9: `CHANGELOG.md` "1.0.0").
 - [0.9 release checklist](./docs/release/0.9-release-checklist.md) for the
   release-readiness stable publish.
 - [1.0 release checklist](./docs/release/1.0-release-checklist.md) for RC and
@@ -78,8 +78,8 @@ Release and upgrade references:
 
 ## Package Status
 
-This project is in the pre-1.0 release-readiness line. The package surface is
-intentionally split by responsibility:
+The packages are stable (`1.x`) and follow the semver policy in
+[SUPPORT.md](./SUPPORT.md). The package surface is split by responsibility:
 
 - `@vixeq/core`: UI-agnostic sequencer engine, immutable project helpers, validation, timeline utilities, and presets.
 - `@vixeq/react`: React hooks for driving the core engine without any GUI.
@@ -89,7 +89,7 @@ The playground app lives in `apps/playground` and demonstrates the package stack
 
 ## Current Scope
 
-The current release line is focused on proving the engine and package boundaries:
+The 1.x packages cover:
 
 - deterministic step playback for `0.0` to `1.0` control values
 - immutable project helpers and validation
