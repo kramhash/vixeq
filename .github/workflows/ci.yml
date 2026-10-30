@@ -123,6 +123,44 @@ jobs:
       - name: Run browser E2E
         run: pnpm test:e2e
 
+  audio-to-sequence:
+    # The private Python CLI in tools/audio-to-sequence: its own tests, plus a
+    # contract test that runs its output through @vixeq/core's validators.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/audio-to-sequence
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies
+        working-directory: .
+        run: pnpm install --frozen-lockfile
+
+      - name: Build core
+        working-directory: .
+        run: pnpm --filter @vixeq/core build
+
+      - name: Test (with contract)
+        env:
+          VIXEQ_CONTRACT: "1"
+        run: uv run --locked pytest
+
   docs:
     # Builds the Starlight docs site so broken internal links/anchors (e.g. a
     # mistyped guide path or a generated API route mismatch) fail CI instead

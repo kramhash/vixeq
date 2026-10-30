@@ -354,6 +354,7 @@ is deferred until `@vixeq/midi` has shipped.
 These tasks run in parallel with the release cycles above:
 
 - **Update `README.md`**: list the current examples and keep the scope, package status, and exclusions aligned with shipped behavior.
+- **`tools/audio-to-sequence`**: a private Python CLI that converts an audio file into per-band loudness step values as an `ArrangementProject`. It analyzes audio offline and ships nothing in `@vixeq/*`, so it does not conflict with the "Audio engine" exclusion below.
 - **Preset expansion**: add more named presets to `presets.ts` (e.g., triplet, waltz, slow pulse, burst). Started with a `default` preset; the named rhythmic variants are still open.
 - **Docs site (`apps/docs`)** ✓: an Astro/Starlight + TypeDoc reference site, published to
   `/docs/` alongside the playground. TSDoc comments in `packages/*/src` are now the
