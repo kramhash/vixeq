@@ -284,23 +284,28 @@ export function createLatencyClockTransport(
   /**
    * Folds the elapsed time into `positionMs`. `delayed` uses the latency-delayed
    * position (boundaries, rate and loop changes); otherwise the undelayed one
-   * (pause). A start hold that has not elapsed is kept.
+   * (pause). A start hold that has not elapsed is kept. The anchor follows the
+   * true delayed position, not a floor held after the latency grew, and the
+   * floor carries over (less the completed loops) so reads keep holding.
    */
   const settlePlayingPosition = (delayed = true): void => {
     const now = clock.now();
     const latency = delayed ? latencyMs() : 0;
-    const rawPositionMs = readUnwrappedPosition(now, latency);
-    floorPositionMs = 0;
+    const elapsedClockMs = Math.max(0, now - anchorClockMs - latency);
+    const rawPositionMs = positionMs + elapsedClockMs * playbackRate;
+    const floorMs = Math.max(floorPositionMs, rawPositionMs);
     anchorClockMs = Math.max(anchorClockMs, now - latency);
 
     if (durationMs === null) {
       positionMs = rawPositionMs;
+      floorPositionMs = floorMs;
       return;
     }
 
     if (loop) {
       const completedLoops = Math.floor(rawPositionMs / durationMs);
       positionMs = rawPositionMs % durationMs;
+      floorPositionMs = floorMs - completedLoops * durationMs;
       for (let index = 0; index < completedLoops; index += 1) {
         loopIteration += 1;
         emit({ type: "loop", iteration: loopIteration, snapshot: createSnapshot() });
@@ -317,6 +322,7 @@ export function createLatencyClockTransport(
     }
 
     positionMs = rawPositionMs;
+    floorPositionMs = floorMs;
   };
 
   function handleBoundary(): void {

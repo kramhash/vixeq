@@ -182,10 +182,12 @@ export function createMediaElementTransport(
   let pendingLoops = 0;
   let tail: { fromMs: number; startedAtMs: number; timerId: unknown } | null = null;
 
-  const cancelTail = (): void => {
-    if (!tail) return;
+  /** Returns whether a tail was running. */
+  const cancelTail = (): boolean => {
+    if (!tail) return false;
     browserClock.clearTimer(tail.timerId);
     tail = null;
+    return true;
   };
 
   const anchorHeard = (positionMs: number): void => {
@@ -199,11 +201,13 @@ export function createMediaElementTransport(
   const readHeardMs = (compensationMs: number): number => {
     if (media.seeking) return heardMs;
     const rawMs = mediaPositionMs(media);
-    if (loop && durationMs !== null && rawMs + 0.5 < lastRawMs) rawLoops += 1;
+    // Seeks re-anchor (and reads skip them while seeking), so a drop is a wrap.
+    // Not gated on `loop`: it may lag `media.loop` or change right after a wrap.
+    if (durationMs !== null && rawMs + 0.5 < lastRawMs) rawLoops += 1;
     lastRawMs = rawMs;
     const loopMs = durationMs ?? 0;
     heardMs = Math.max(heardMs, rawMs + rawLoops * loopMs - compensationMs * playbackRate);
-    while (loop && durationMs !== null && heardMs >= durationMs && rawLoops > 0) {
+    while (durationMs !== null && heardMs >= durationMs && rawLoops > 0) {
       heardMs -= durationMs;
       rawLoops -= 1;
       pendingLoops += 1;
@@ -285,6 +289,8 @@ export function createMediaElementTransport(
   };
 
   const onSeeked = (): void => {
+    // A seek in the end tail leaves the element paused there.
+    if (cancelTail()) state = "paused";
     updateStateAfterSeek();
     const positionMs = mediaPositionMs(media);
     lastObservedPositionMs = positionMs;
@@ -517,6 +523,7 @@ export function createMediaElementTransport(
       }
       return enqueue(() => {
         const previousPositionMs = readPositionMs();
+        if (cancelTail()) state = "paused";
         suppressSeekTargetMs = positionMs;
         media.currentTime = positionMs / 1000;
         updateStateAfterSeek();

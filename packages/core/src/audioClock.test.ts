@@ -721,6 +721,53 @@ describe("latencyCompensation", () => {
     expect(transport.getPositionMs()).toBeCloseTo(600);
   });
 
+  it("keeps tracking the heard position when a settle lands in a hold after the latency grew", async () => {
+    const context = new FakeAudioContext();
+    let latencyMs = 20;
+    const transport = bufferTransport(context, () => latencyMs);
+    await transport.play();
+    context.currentTime = 1;
+    expect(transport.getPositionMs()).toBe(980);
+
+    latencyMs = 100;
+    context.currentTime = 1.01;
+    expect(transport.getPositionMs()).toBe(980);
+    await transport.setLoop(true);
+    context.currentTime = 1.05;
+    expect(transport.getPositionMs()).toBe(980);
+
+    context.currentTime = 2;
+    expect(transport.getPositionMs()).toBeCloseTo(1900);
+  });
+
+  it("fires loop at the heard boundary when the latency grows just before it", async () => {
+    vi.useFakeTimers();
+    const context = new FakeAudioContext();
+    let latencyMs = 20;
+    const transport = bufferTransport(context, () => latencyMs, true);
+    const events: PlaybackTransportEvent[] = [];
+    transport.subscribe((event) => events.push(event));
+    await transport.play();
+
+    context.currentTime = 2.01;
+    await vi.advanceTimersByTimeAsync(2010);
+    expect(transport.getPositionMs()).toBeCloseTo(1990);
+
+    latencyMs = 100;
+    context.currentTime = 2.02;
+    await vi.advanceTimersByTimeAsync(10);
+    expect(eventTypes(events)).toEqual(["play"]);
+    expect(transport.getPositionMs()).toBeCloseTo(1990);
+
+    context.currentTime = 2.1;
+    await vi.advanceTimersByTimeAsync(80);
+    expect(eventTypes(events)).toEqual(["play", "loop"]);
+    context.currentTime = 2.2;
+    expect(transport.getPositionMs()).toBeCloseTo(100);
+    transport.dispose();
+    vi.useRealTimers();
+  });
+
   describe("media element", () => {
     const mediaTransport = (media: FakeMedia, latencyCompensation: number) =>
       createMediaElementTransport(media as unknown as HTMLMediaElement, { latencyCompensation });
@@ -801,6 +848,66 @@ describe("latencyCompensation", () => {
       expect(transport.getSnapshot()).toMatchObject({ state: "ended", positionMs: 2000 });
       transport.dispose();
       vi.useRealTimers();
+    });
+
+    it("pauses at the target of a seek during the end tail", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+      const media = new FakeMedia();
+      const transport = mediaTransport(media, 100);
+      const events: PlaybackTransportEvent[] = [];
+      transport.subscribe((event) => events.push(event));
+      await transport.play();
+      media.currentTime = 2;
+      media.paused = true;
+      media.ended = true;
+      media.dispatch("ended");
+      await vi.advanceTimersByTimeAsync(30);
+
+      await transport.seekPositionMs(500);
+      media.ended = false;
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(transport.getSnapshot()).toMatchObject({ state: "paused", positionMs: 500 });
+      expect(eventTypes(events)).toEqual(["play", "seek"]);
+      transport.dispose();
+      vi.useRealTimers();
+    });
+
+    it("keeps following the element when loop is turned off right after a wrap", async () => {
+      const media = new FakeMedia();
+      const transport = mediaTransport(media, 100);
+      await transport.setLoop(true);
+      await transport.play();
+      media.currentTime = 1.95;
+      expect(transport.getPositionMs()).toBe(1850);
+      media.currentTime = 0.02;
+      expect(transport.getPositionMs()).toBeCloseTo(1920);
+
+      await transport.setLoop(false);
+      media.currentTime = 0.5;
+
+      expect(transport.getPositionMs()).toBeCloseTo(400);
+    });
+
+    it("counts a wrap read before timeupdate picks up a direct media.loop change", () => {
+      const media = new FakeMedia();
+      const transport = mediaTransport(media, 100);
+      const events: PlaybackTransportEvent[] = [];
+      transport.subscribe((event) => events.push(event));
+      media.paused = false;
+      media.dispatch("play");
+      media.loop = true;
+      media.currentTime = 1.95;
+      expect(transport.getPositionMs()).toBe(1850);
+      media.currentTime = 0.02;
+      expect(transport.getPositionMs()).toBeCloseTo(1920);
+
+      media.dispatch("timeupdate");
+      media.currentTime = 0.5;
+
+      expect(transport.getPositionMs()).toBeCloseTo(400);
+      media.dispatch("timeupdate");
+      expect(eventTypes(events)).toEqual(["play", "loopchange", "loop"]);
     });
   });
 });
