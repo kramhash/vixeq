@@ -8,7 +8,7 @@ import {
   type PlaybackTransportEvent,
 } from "./playbackTransport";
 import { createProject, renameTrack, setProjectBpm, setStepValue, setTrackEnabled } from "./project";
-import { easeOutQuad } from "./easing";
+import { easeOutQuad, hold } from "./easing";
 import type { EnginePlaybackEvent, PlaybackClock, ProjectEvent, SequenceProject, StepEvent } from "./types";
 
 class FakeClock implements PlaybackClock {
@@ -373,6 +373,31 @@ describe("SequencerEngine — Playback v2", () => {
     await engine.play();
     clock.advance(STEP_MS / 2);
     expect(engine.sampleChannels()[trackId]).toBeCloseTo(0.5);
+  });
+
+  it("lands on step k at k * stepMs at every tempo, for seeks and sampling alike (#53)", async () => {
+    const steps = Array.from({ length: 16 }, (_, step) => (step + 1) / 16);
+    for (const stepsPerBeat of [1, 3, 4, 7]) {
+      for (let bpm = 60; bpm <= 180; bpm += 1) {
+        const project = createProject({
+          bpm,
+          stepCount: steps.length,
+          stepsPerBeat,
+          tracks: [{ id: "kick", name: "kick", steps }],
+        });
+        const stepMs = 60_000 / bpm / stepsPerBeat;
+        const engine = new SequencerEngine(project, { transport: buildTransport().transport });
+        const seeks: StepEvent[] = [];
+        engine.on("step", (event) => seeks.push(event));
+        for (let step = 0; step < steps.length; step += 1) {
+          expect(engine.sampleChannelsAt(step * stepMs, hold)).toEqual({ kick: steps[step] });
+          await engine.seekStep(step);
+          expect(engine.getCurrentStepIndex()).toBe(step);
+          expect(seeks.at(-1)?.stepIndex).toBe(step);
+        }
+        engine.dispose();
+      }
+    }
   });
 
   it("validates pure sampling positions", () => {

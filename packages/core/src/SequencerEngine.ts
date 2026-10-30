@@ -8,7 +8,7 @@ import {
   type PlaybackTransport,
   type PlaybackTransportEvent,
 } from "./playbackTransport";
-import { sampleProject } from "./timeEvaluation";
+import { sampleProject, sequenceStepAt } from "./timeEvaluation";
 import { validateProject } from "./validation";
 import type {
   ChannelPosition,
@@ -763,7 +763,7 @@ export class SequencerEngine {
   }
 
   private absoluteStepAt(positionMs: number, project = this.project): number {
-    return Math.max(0, Math.floor(positionMs / this.getStepDurationMs(project)));
+    return Math.max(0, sequenceStepAt(this.getStepDurationMs(project), positionMs));
   }
 
   private stepIndexAt(positionMs: number): number {

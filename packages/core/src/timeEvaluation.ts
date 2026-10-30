@@ -79,6 +79,18 @@ const isArrangement = (source: SequenceProject | ArrangementProject): source is 
 
 const sequenceStepDurationMs = (project: SequenceProject): number => 60_000 / project.bpm / project.stepsPerBeat;
 
+/**
+ * The absolute step under way at `positionMs` on a grid of `stepMs`: step `k`
+ * starts at `k * stepMs`. `positionMs / stepMs` can round just below `k` at
+ * that exact position, so the boundary is decided in ms.
+ */
+export const sequenceStepAt = (stepMs: number, positionMs: number): number => {
+  let step = Math.floor(positionMs / stepMs);
+  if ((step + 1) * stepMs <= positionMs) step += 1;
+  if (step * stepMs > positionMs) step -= 1;
+  return step;
+};
+
 const enabledTrack = (project: SequenceProject, trackId: string): Track | undefined => {
   const track = project.tracks.find((candidate) => candidate.id === trackId);
   return track?.enabled ? track : undefined;
@@ -91,10 +103,8 @@ const enabledTrack = (project: SequenceProject, trackId: string): Track | undefi
  * - A `SequenceProject` loops forever, so any finite position is valid:
  *   positions past the last step and negative positions wrap around the
  *   pattern. For non-negative positions the result equals
- *   `SequencerEngine#sampleChannelsAt`, including at a step's exact start,
- *   where `positionMs / stepMs` can round just below the step index and sample
- *   the previous step. {@link lastStepAt} decides step boundaries in ms
- *   instead, so at that exact position it can already report the new step.
+ *   `SequencerEngine#sampleChannelsAt`. Step boundaries are decided in ms, as
+ *   in {@link lastStepAt}, so at a step's exact start both report that step.
  * - An `ArrangementProject` is sampled at a transport position, with the same
  *   keys as {@link sampleArrangement} (every pattern's track ids). Without
  *   `options.loop`, a negative position or one past the end samples 0; with
@@ -132,8 +142,8 @@ export const sampleProject = (
   const stepDurationMs = sequenceStepDurationMs(project);
   const stepCount = Math.max(1, project.stepCount);
   const position = positionMs < 0 ? mod(positionMs, stepDurationMs * stepCount) : positionMs;
-  const absoluteStep = Math.max(0, Math.floor(position / stepDurationMs));
-  const phase = position <= 0 ? 0 : (position % stepDurationMs) / stepDurationMs;
+  const absoluteStep = Math.max(0, sequenceStepAt(stepDurationMs, position));
+  const phase = clamp01((position - absoluteStep * stepDurationMs) / stepDurationMs);
   const index = absoluteStep % stepCount;
   const nextIndex = (index + 1) % stepCount;
 
@@ -147,9 +157,7 @@ export const sampleProject = (
 const sequenceLastStep = (project: SequenceProject, track: Track, positionMs: number): GridStep | null => {
   const stepDurationMs = sequenceStepDurationMs(project);
   const stepCount = Math.max(1, project.stepCount);
-  let step = Math.floor(positionMs / stepDurationMs);
-  if ((step + 1) * stepDurationMs <= positionMs) step += 1;
-  if (step * stepDurationMs > positionMs) step -= 1;
+  const step = sequenceStepAt(stepDurationMs, positionMs);
 
   for (let back = 0; back < stepCount; back += 1) {
     const value = track.steps[mod(step - back, stepCount)];
@@ -163,9 +171,7 @@ const sequenceLastStep = (project: SequenceProject, track: Track, positionMs: nu
 const sequenceNextStep = (project: SequenceProject, track: Track, positionMs: number): GridStep | null => {
   const stepDurationMs = sequenceStepDurationMs(project);
   const stepCount = Math.max(1, project.stepCount);
-  let step = Math.floor(positionMs / stepDurationMs) + 1;
-  if ((step - 1) * stepDurationMs > positionMs) step -= 1;
-  if (step * stepDurationMs <= positionMs) step += 1;
+  const step = sequenceStepAt(stepDurationMs, positionMs) + 1;
 
   for (let ahead = 0; ahead < stepCount; ahead += 1) {
     const value = track.steps[mod(step + ahead, stepCount)];
