@@ -26,7 +26,10 @@
   and snaps step starts like `ArrangementEngine`, which avoids converting
   with `msToBeat` (which clamps negative positions and can land an ulp before
   a step start at odd tempos). `ArrangementEngine#sampleChannelsAt` now uses
-  it ([#47](https://github.com/kramhash/vixeq/issues/47)).
+  it, so a transport that reports a non-finite position (outside the
+  `PlaybackTransport` contract) makes `ArrangementEngine` sampling throw a
+  `RangeError` instead of returning zeros
+  ([#47](https://github.com/kramhash/vixeq/issues/47)).
 
 ## 1.0.0 - 2026-10-30
 

@@ -99,7 +99,8 @@ const enabledTrack = (project: SequenceProject, trackId: string): Track | undefi
  *   keys as {@link sampleArrangement} (every pattern's track ids). Without
  *   `options.loop`, a negative position or one past the end samples 0; with
  *   it, positions wrap into the local loop, as in `ArrangementEngine` with
- *   local loop on. For non-negative positions without loop the result equals
+ *   local loop on, except that a position less than 1e-9 ms before the loop
+ *   end samples the next iteration's start (the Engine samples 0 there). For non-negative positions without loop the result equals
  *   `ArrangementEngine#sampleChannelsAt`. Prefer this to converting with
  *   `msToBeat` and calling `sampleArrangement`: `msToBeat` clamps negative
  *   positions and can land an ulp before a step start at odd tempos.
